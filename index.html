@@ -875,6 +875,7 @@ async function init(){
   const t = new Date();
   viewYear = t.getFullYear();
   viewMonth = t.getMonth();
+  selectedDate = todayKey();
   renderDow();
   wireUI();
   await loadState();
