@@ -18,12 +18,13 @@ async function readBody(request) {
 }
 
 async function getState(db) {
-  const [people, away, comments, events, rsvps] = await Promise.all([
+  const [people, away, comments, events, rsvps, personTags] = await Promise.all([
     db.prepare('SELECT id, name, color, phone, email FROM people').all(),
     db.prepare('SELECT person_id, date FROM away_days').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
     db.prepare('SELECT id, date, title, time, description FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
+    db.prepare('SELECT person_id, tag FROM person_tags').all(),
   ]);
 
   const awayMap = {};
@@ -52,7 +53,12 @@ async function getState(db) {
     (rsvpsMap[row.event_id] ??= {})[row.person_id] = row.status;
   }
 
-  return { people: people.results, away: awayMap, comments: commentsMap, events: eventsMap, rsvps: rsvpsMap };
+  const tagsMap = {};
+  for (const row of personTags.results) {
+    (tagsMap[row.person_id] ??= []).push(row.tag);
+  }
+
+  return { people: people.results, away: awayMap, comments: commentsMap, events: eventsMap, rsvps: rsvpsMap, tags: tagsMap };
 }
 
 async function upsertPerson(db, body) {
@@ -117,6 +123,22 @@ async function createEvent(db, body) {
   return json({ event: { id, date, title, time, desc } });
 }
 
+const VALID_TAGS = ['healthy', 'sick', 'injured', 'cross_training'];
+
+async function toggleTag(db, body) {
+  const personId = str(body?.personId, 100);
+  const tag = str(body?.tag, 30);
+  if (!personId || !VALID_TAGS.includes(tag)) return json({ error: 'Missing personId or invalid tag' }, 400);
+
+  const existing = await db.prepare('SELECT 1 FROM person_tags WHERE person_id = ? AND tag = ?').bind(personId, tag).first();
+  if (existing) {
+    await db.prepare('DELETE FROM person_tags WHERE person_id = ? AND tag = ?').bind(personId, tag).run();
+    return json({ active: false });
+  }
+  await db.prepare('INSERT INTO person_tags (person_id, tag) VALUES (?, ?)').bind(personId, tag).run();
+  return json({ active: true });
+}
+
 async function saveRsvp(db, body) {
   const eventId = str(body?.eventId, 100);
   const personId = str(body?.personId, 100);
@@ -152,6 +174,7 @@ export default {
         if (pathname === '/api/comment') return await saveComment(env.DB, body);
         if (pathname === '/api/events') return await createEvent(env.DB, body);
         if (pathname === '/api/rsvp') return await saveRsvp(env.DB, body);
+        if (pathname === '/api/tags/toggle') return await toggleTag(env.DB, body);
       }
     } catch (err) {
       console.error(err);

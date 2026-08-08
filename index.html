@@ -82,6 +82,24 @@
   /* identity, inside calendar card */
   .identity-block{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
   .who-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+
+  .tag-row{display:none;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .tag-row.show{display:flex;}
+  .tag-btn{
+    display:inline-flex;align-items:center;gap:6px;
+    height:32px;padding:0 12px;
+    border-radius:var(--r-control);
+    border:1px solid var(--line);
+    background:#fff;color:var(--ink);
+    font-size:12px;font-weight:600;
+    cursor:pointer;
+  }
+  .tag-btn svg{width:15px;height:15px;flex-shrink:0;display:block;}
+  .tag-btn.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+
+  .person-tags{display:inline-flex;gap:4px;flex-shrink:0;}
+  .tag-icon{display:inline-flex;width:13px;height:13px;flex-shrink:0;}
+  .tag-icon svg{width:100%;height:100%;display:block;}
   select, input[type=text], input[type=time], textarea{
     font-family:'Inter',sans-serif;
     font-size:14px;
@@ -255,6 +273,15 @@
   .rsvp-summary .grp.avail{color:var(--green);}
   .rsvp-summary .grp.unavail{color:var(--red);}
 
+  .event-actions{display:flex;gap:6px;margin:8px 0 0 12px;flex-wrap:wrap;}
+  .contact-btn{
+    height:28px;padding:0 12px;
+    font-size:11px;font-weight:600;
+    border-radius:7px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);
+    cursor:pointer;
+  }
+
   .roster-line{
     display:flex;align-items:flex-start;gap:8px;padding:8px 0;
     border-bottom:1px solid var(--line);font-size:13.5px;
@@ -312,6 +339,7 @@
         </select>
         <button class="ghost" id="newPersonBtn">+ New person</button>
       </div>
+      <div class="tag-row" id="tagRow"></div>
       <div id="newPersonRow">
         <input type="text" id="newPersonName" placeholder="Your name">
         <div class="color-pick-row">
@@ -400,12 +428,51 @@ let away = {};
 let comments = {};
 let events = {};
 let rsvps = {};
+let tags = {};
 let activePersonId = null;
 let viewYear, viewMonth;
 let selectedDate = null;
 let editMode = false;
 
 const $ = id => document.getElementById(id);
+
+const TAG_ICONS = {
+  healthy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9.25"/>
+    <circle cx="8.7" cy="10.2" r="1.15" fill="currentColor" stroke="none"/>
+    <circle cx="15.3" cy="10.2" r="1.15" fill="currentColor" stroke="none"/>
+    <path d="M7.8 14.3c1.05 1.55 2.6 2.4 4.2 2.4s3.15-.85 4.2-2.4"/>
+  </svg>`,
+  sick: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12.5 14.1V5.3a2 2 0 1 0-4 0v8.8a4.1 4.1 0 1 0 4 0Z"/>
+    <circle cx="10.5" cy="17.3" r="1.1" fill="currentColor" stroke="none"/>
+    <line x1="12.5" y1="7.6" x2="14.6" y2="7.6"/>
+    <line x1="12.5" y1="10.6" x2="14.6" y2="10.6"/>
+  </svg>`,
+  injured: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <circle cx="3.4" cy="7.6" r="2.5"/>
+    <circle cx="3.4" cy="16.4" r="2.5"/>
+    <rect x="3.4" y="9.6" width="7.2" height="4.8"/>
+    <circle cx="20.6" cy="7.6" r="2.5"/>
+    <circle cx="20.6" cy="16.4" r="2.5"/>
+    <rect x="13.4" y="9.6" width="7.2" height="4.8"/>
+    <path d="M10.6 9.6 L13.4 14.4 M13.4 9.6 L10.6 14.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+  </svg>`,
+  cross_training: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="5.5" cy="17" r="3.3"/>
+    <circle cx="18.5" cy="17" r="3.3"/>
+    <path d="M5.5 17 L8.5 8 L15 8 L11.5 14 L5.5 17"/>
+    <path d="M15 8 L18.5 17"/>
+    <path d="M13.6 6.6 L16.4 6.6"/>
+  </svg>`,
+};
+
+const TAG_DEFS = [
+  { key: 'healthy', label: 'Healthy' },
+  { key: 'sick', label: 'Sick' },
+  { key: 'injured', label: 'Injured' },
+  { key: 'cross_training', label: 'Cross-training' },
+];
 
 function pad(n){return n<10?'0'+n:''+n;}
 function keyOf(y,m,d){return `${y}-${pad(m+1)}-${pad(d)}`;}
@@ -420,9 +487,10 @@ async function loadState(){
     comments = data.comments || {};
     events = data.events || {};
     rsvps = data.rsvps || {};
+    tags = data.tags || {};
   }catch(e){
     console.error('Load failed, starting empty', e);
-    people = []; away = {}; comments = {}; events = {}; rsvps = {};
+    people = []; away = {}; comments = {}; events = {}; rsvps = {}; tags = {};
   }
 }
 
@@ -460,6 +528,10 @@ async function saveRsvpRemote(eventId, personId, status){
   await apiPost('/api/rsvp', { eventId, personId, status });
 }
 
+async function toggleTagRemote(personId, tag){
+  await apiPost('/api/tags/toggle', { personId, tag });
+}
+
 function isAway(personId, dateKey){ return (away[personId] || []).includes(dateKey); }
 
 function toggleAway(personId, dateKey){
@@ -473,6 +545,46 @@ function escapeHtml(s){
   return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function personTagsHtml(personId){
+  const mine = tags[personId] || [];
+  if(!mine.length) return '';
+  const icons = TAG_DEFS.filter(t => mine.includes(t.key))
+    .map(t => `<span class="tag-icon" title="${escapeHtml(t.label)}">${TAG_ICONS[t.key]}</span>`)
+    .join('');
+  return `<span class="person-tags">${icons}</span>`;
+}
+
+function renderTagRow(){
+  const row = $('tagRow');
+  if(!activePersonId){
+    row.classList.remove('show');
+    row.innerHTML = '';
+    return;
+  }
+  row.classList.add('show');
+  const mine = tags[activePersonId] || [];
+  row.innerHTML = TAG_DEFS.map(t => `
+    <button type="button" class="tag-btn ${mine.includes(t.key) ? 'active' : ''}" data-tag="${t.key}">
+      ${TAG_ICONS[t.key]}<span>${t.label}</span>
+    </button>
+  `).join('');
+  row.querySelectorAll('.tag-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> toggleTag(btn.dataset.tag));
+  });
+}
+
+async function toggleTag(tag){
+  if(!activePersonId) return;
+  if(!tags[activePersonId]) tags[activePersonId] = [];
+  const idx = tags[activePersonId].indexOf(tag);
+  if(idx >= 0) tags[activePersonId].splice(idx, 1);
+  else tags[activePersonId].push(tag);
+  await toggleTagRemote(activePersonId, tag);
+  renderTagRow();
+  renderPersonSelect();
+  renderDayDetail();
+}
+
 function renderPersonSelect(){
   const sel = $('personSelect');
   sel.innerHTML = '<option value="">Select your name…</option>' +
@@ -480,7 +592,7 @@ function renderPersonSelect(){
   const chip = $('activeChip');
   if(activePersonId){
     const p = people.find(x=>x.id===activePersonId);
-    chip.innerHTML = p ? `<span class="active-chip"><span class="dot" style="background:${p.color}"></span>${escapeHtml(p.name)}</span>` : '';
+    chip.innerHTML = p ? `<span class="active-chip"><span class="dot" style="background:${p.color}"></span>${escapeHtml(p.name)}${personTagsHtml(p.id)}</span>` : '';
   } else {
     chip.innerHTML = '';
   }
@@ -648,14 +760,18 @@ function renderEvents(){
           <span class="event-time">${escapeHtml(ev.time)}</span>
         </div>
         ${ev.desc ? `<div class="event-desc">${escapeHtml(ev.desc)}</div>` : ''}
-        <div style="display:flex; gap:6px; margin:8px 0 0 12px; flex-wrap:wrap;">
+        ${activePersonId ? `<div style="display:flex; gap:6px; margin:8px 0 0 12px; flex-wrap:wrap;">
           <button class="rsvp-btn ${status}" data-event="${ev.id}" style="margin:0;">${rsvpLabel[status]}</button>
           <button class="rsvp-btn share-btn" data-share="${ev.id}" style="margin:0; background:#e1eef3; color:#1c6b8a;">↗ Share to WhatsApp</button>
-        </div>
+        </div>` : ''}
         ${(availNames.length || unavailNames.length) ? `<div class="rsvp-summary">
           ${availNames.length ? `<div class="grp avail">✓ Available: <b>${availNames.map(escapeHtml).join(', ')}</b></div>` : ''}
           ${unavailNames.length ? `<div class="grp unavail">✕ Unavailable: <b>${unavailNames.map(escapeHtml).join(', ')}</b></div>` : ''}
         </div>` : ''}
+        <div class="event-actions">
+          <button class="contact-btn" data-email="${ev.id}">Email attendees</button>
+          <button class="contact-btn" data-text="${ev.id}">Text attendees</button>
+        </div>
       </div>
     `;
     }).join('');
@@ -668,6 +784,18 @@ function renderEvents(){
         if(ev) shareEventToWhatsApp(ev);
       });
     });
+    $('eventsList').querySelectorAll('.contact-btn[data-email]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const ev = list.find(e=>e.id===btn.dataset.email);
+        if(ev) emailAttendees(ev);
+      });
+    });
+    $('eventsList').querySelectorAll('.contact-btn[data-text]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const ev = list.find(e=>e.id===btn.dataset.text);
+        if(ev) textAttendees(ev);
+      });
+    });
   }
 }
 
@@ -675,6 +803,37 @@ function shareEventToWhatsApp(ev){
   const msg = `New Event Posted: ${ev.title}${ev.time ? ' — ' + ev.time : ''}\n${window.location.href}`;
   const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
+}
+
+function formatEventDate(dateKey){
+  const d = new Date(dateKey + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function attendeesFor(ev){
+  const evRsvps = rsvps[ev.id] || {};
+  return people.filter(p => evRsvps[p.id] === 'available');
+}
+
+function emailAttendees(ev){
+  const emails = attendeesFor(ev).map(p => p.email).filter(Boolean);
+  if(!emails.length){
+    alert("No one has RSVP'd as available yet, so there's no one to email.");
+    return;
+  }
+  const subject = `${ev.title}${ev.time ? ' — ' + ev.time : ''}`;
+  const body = `Reminder: ${ev.title} on ${formatEventDate(ev.date)}${ev.time ? ' at ' + ev.time : ''}.${ev.desc ? '\n\n' + ev.desc : ''}`;
+  window.location.href = `mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function textAttendees(ev){
+  const phones = attendeesFor(ev).map(p => (p.phone || '').replace(/[^\d+]/g, '')).filter(Boolean);
+  if(!phones.length){
+    alert("No one has RSVP'd as available yet, so there's no one to text.");
+    return;
+  }
+  const body = `${ev.title}${ev.time ? ' at ' + ev.time : ''} on ${formatEventDate(ev.date)}.${ev.desc ? ' ' + ev.desc : ''}`;
+  window.location.href = `sms:${phones.join(',')}?&body=${encodeURIComponent(body)}`;
 }
 
 async function addEvent(){
@@ -716,6 +875,7 @@ function renderDayDetail(){
           <div class="roster-main">
             <span class="dot" style="background:${p.color}"></span>
             <span class="roster-name">${escapeHtml(p.name)}</span>
+            ${personTagsHtml(p.id)}
             <span class="status ${away_?'unavailable':'available'} ${mine?'clickable':''}" data-person="${p.id}">${away_?'Unavailable':'Available'}</span>
           </div>
           ${note ? `<div class="comment-text">"${escapeHtml(note)}"</div>` : ''}
@@ -767,6 +927,9 @@ function renderCopyString(){
 
 function renderAll(){
   renderPersonSelect();
+  renderTagRow();
+  $('editModeBtn').style.display = activePersonId ? '' : 'none';
+  if(!activePersonId && editMode) setEditMode(false);
   renderCalendar();
   renderDayDetail();
 }
