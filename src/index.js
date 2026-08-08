@@ -123,7 +123,7 @@ async function createEvent(db, body) {
   return json({ event: { id, date, title, time, desc } });
 }
 
-const VALID_TAGS = ['healthy', 'sick', 'injured', 'cross_training'];
+const VALID_TAGS = ['sick', 'injured', 'cross_training'];
 
 async function toggleTag(db, body) {
   const personId = str(body?.personId, 100);

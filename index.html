@@ -437,12 +437,6 @@ let editMode = false;
 const $ = id => document.getElementById(id);
 
 const TAG_ICONS = {
-  healthy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="12" cy="12" r="9.25"/>
-    <circle cx="8.7" cy="10.2" r="1.15" fill="currentColor" stroke="none"/>
-    <circle cx="15.3" cy="10.2" r="1.15" fill="currentColor" stroke="none"/>
-    <path d="M7.8 14.3c1.05 1.55 2.6 2.4 4.2 2.4s3.15-.85 4.2-2.4"/>
-  </svg>`,
   sick: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12.5 14.1V5.3a2 2 0 1 0-4 0v8.8a4.1 4.1 0 1 0 4 0Z"/>
     <circle cx="10.5" cy="17.3" r="1.1" fill="currentColor" stroke="none"/>
@@ -450,13 +444,13 @@ const TAG_ICONS = {
     <line x1="12.5" y1="10.6" x2="14.6" y2="10.6"/>
   </svg>`,
   injured: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-    <circle cx="3.4" cy="7.6" r="2.5"/>
-    <circle cx="3.4" cy="16.4" r="2.5"/>
-    <rect x="3.4" y="9.6" width="7.2" height="4.8"/>
-    <circle cx="20.6" cy="7.6" r="2.5"/>
-    <circle cx="20.6" cy="16.4" r="2.5"/>
-    <rect x="13.4" y="9.6" width="7.2" height="4.8"/>
-    <path d="M10.6 9.6 L13.4 14.4 M13.4 9.6 L10.6 14.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+    <circle cx="3.4" cy="8.1" r="2.5"/>
+    <circle cx="3.4" cy="16.9" r="2.5"/>
+    <rect x="3.4" y="10.5" width="6.4" height="4.6"/>
+    <circle cx="20.6" cy="7.1" r="2.5"/>
+    <circle cx="20.6" cy="15.9" r="2.5"/>
+    <rect x="14.6" y="9.1" width="6.4" height="4.6"/>
+    <path d="M9.8 10.5 L14.6 13.7 M9.8 15.1 L14.6 9.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/>
   </svg>`,
   cross_training: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="5.5" cy="17" r="3.3"/>
@@ -468,7 +462,6 @@ const TAG_ICONS = {
 };
 
 const TAG_DEFS = [
-  { key: 'healthy', label: 'Healthy' },
   { key: 'sick', label: 'Sick' },
   { key: 'injured', label: 'Injured' },
   { key: 'cross_training', label: 'Cross-training' },
@@ -929,6 +922,7 @@ function renderAll(){
   renderPersonSelect();
   renderTagRow();
   $('editModeBtn').style.display = activePersonId ? '' : 'none';
+  $('newPersonBtn').style.display = activePersonId ? 'none' : '';
   if(!activePersonId && editMode) setEditMode(false);
   renderCalendar();
   renderDayDetail();
