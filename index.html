@@ -300,17 +300,6 @@
     cursor:pointer;
   }
 
-  .avatar-btn{
-    width:28px;height:28px;padding:0;flex-shrink:0;
-    border-radius:50%;border:1px solid var(--ink);
-    background:var(--ink);color:#fff;
-    font-family:'Space Mono',monospace;font-size:10px;font-weight:700;
-    letter-spacing:0.2px;
-    display:inline-flex;align-items:center;justify-content:center;
-    cursor:pointer;
-  }
-  .avatar-btn:active{transform:scale(0.94);}
-
   .roster-line{
     display:flex;align-items:flex-start;gap:8px;padding:8px 0;
     border-bottom:1px solid var(--line);font-size:13.5px;
@@ -908,7 +897,7 @@ async function cycleRsvp(eventId){
   renderEvents();
 }
 
-const rsvpLabel = {unknown:'Unknown', available:'Available', unavailable:'Unavailable'};
+const rsvpLabel = {unknown:'Unknown', available:'Coming', unavailable:'Not coming'};
 
 function renderEvents(){
   const list = events[selectedDate] || [];
@@ -939,12 +928,11 @@ function renderEvents(){
           <button class="rsvp-btn share-btn" data-share="${ev.id}" style="margin:0; background:#e1eef3; color:#1c6b8a;">↗ Share to WhatsApp</button>
         </div>` : ''}
         ${(availNames.length || unavailNames.length) ? `<div class="rsvp-summary">
-          ${availNames.length ? `<div class="grp avail">✓ Available: <b>${availNames.map(escapeHtml).join(', ')}</b></div>` : ''}
-          ${unavailNames.length ? `<div class="grp unavail">✕ Unavailable: <b>${unavailNames.map(escapeHtml).join(', ')}</b></div>` : ''}
+          ${availNames.length ? `<div class="grp avail">✓ Coming: <b>${availNames.map(escapeHtml).join(', ')}</b></div>` : ''}
+          ${unavailNames.length ? `<div class="grp unavail">✕ Not coming: <b>${unavailNames.map(escapeHtml).join(', ')}</b></div>` : ''}
         </div>` : ''}
         <div class="event-actions">
-          <button class="avatar-btn" data-coach="${ev.id}" title="Email Coach Johnson">CJ</button>
-          <button class="avatar-btn" data-team="${ev.id}" title="Email the whole team">TM</button>
+          <button class="contact-btn" data-email="${ev.id}">Email attendees</button>
           <button class="contact-btn" data-text="${ev.id}">Text attendees</button>
         </div>
       </div>
@@ -959,16 +947,10 @@ function renderEvents(){
         if(ev) shareEventToWhatsApp(ev);
       });
     });
-    $('eventsList').querySelectorAll('.avatar-btn[data-coach]').forEach(btn=>{
+    $('eventsList').querySelectorAll('.contact-btn[data-email]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const ev = list.find(e=>e.id===btn.dataset.coach);
-        if(ev) emailCoach(ev);
-      });
-    });
-    $('eventsList').querySelectorAll('.avatar-btn[data-team]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const ev = list.find(e=>e.id===btn.dataset.team);
-        if(ev) emailTeam(ev);
+        const ev = list.find(e=>e.id===btn.dataset.email);
+        if(ev) emailAttendees(ev);
       });
     });
     $('eventsList').querySelectorAll('.contact-btn[data-text]').forEach(btn=>{
@@ -1020,10 +1002,20 @@ function emailTeam(ev){
   sendMailto(emails.join(','), subject, body);
 }
 
+function emailAttendees(ev){
+  const emails = attendeesFor(ev).map(p => p.email).filter(Boolean);
+  if(!emails.length){
+    alert("No one has RSVP'd as coming yet, so there's no one to email.");
+    return;
+  }
+  const { subject, body } = eventReminderText(ev);
+  sendMailto(emails.join(','), subject, body);
+}
+
 function textAttendees(ev){
   const phones = attendeesFor(ev).map(p => (p.phone || '').replace(/[^\d+]/g, '')).filter(Boolean);
   if(!phones.length){
-    alert("No one has RSVP'd as available yet, so there's no one to text.");
+    alert("No one has RSVP'd as coming yet, so there's no one to text.");
     return;
   }
   const body = `${ev.title}${ev.time ? ' at ' + ev.time : ''} on ${formatEventDate(ev.date)}.${ev.desc ? ' ' + ev.desc : ''}`;
@@ -1043,7 +1035,6 @@ async function addEvent(){
   $('eventFormRow').classList.remove('show');
   renderEvents();
   renderCalendar();
-  shareEventToWhatsApp(newEv);
 }
 
 function renderDayDetail(){
