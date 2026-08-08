@@ -1,0 +1,11 @@
+node_modules
+.git
+.wrangler
+.dev.vars
+.gitignore
+.assetsignore
+package.json
+package-lock.json
+wrangler.jsonc
+src
+migrations
