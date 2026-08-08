@@ -18,13 +18,14 @@ async function readBody(request) {
 }
 
 async function getState(db) {
-  const [people, away, comments, events, rsvps, personTags] = await Promise.all([
+  const [people, away, comments, events, rsvps, personTags, posts] = await Promise.all([
     db.prepare('SELECT id, name, color, phone, email FROM people').all(),
     db.prepare('SELECT person_id, date FROM away_days').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
     db.prepare('SELECT id, date, title, time, description FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
     db.prepare('SELECT person_id, tag FROM person_tags').all(),
+    db.prepare('SELECT id, person_id, text, created_at FROM posts').all(),
   ]);
 
   const awayMap = {};
@@ -58,7 +59,22 @@ async function getState(db) {
     (tagsMap[row.person_id] ??= []).push(row.tag);
   }
 
-  return { people: people.results, away: awayMap, comments: commentsMap, events: eventsMap, rsvps: rsvpsMap, tags: tagsMap };
+  const postsList = posts.results.map(row => ({
+    id: row.id,
+    personId: row.person_id,
+    text: row.text,
+    createdAt: row.created_at,
+  }));
+
+  return {
+    people: people.results,
+    away: awayMap,
+    comments: commentsMap,
+    events: eventsMap,
+    rsvps: rsvpsMap,
+    tags: tagsMap,
+    posts: postsList,
+  };
 }
 
 async function upsertPerson(db, body) {
@@ -139,6 +155,56 @@ async function toggleTag(db, body) {
   return json({ active: true });
 }
 
+async function createPost(db, body) {
+  const personId = str(body?.personId, 100);
+  const text = str(body?.text, 2000);
+  if (!personId || !text) return json({ error: 'Missing personId or text' }, 400);
+
+  const id = 'post_' + crypto.randomUUID();
+  const createdAt = Date.now();
+  await db.prepare(
+    'INSERT INTO posts (id, person_id, text, created_at) VALUES (?, ?, ?, ?)'
+  ).bind(id, personId, text, createdAt).run();
+
+  return json({ post: { id, personId, text, createdAt } });
+}
+
+async function deletePerson(db, body) {
+  const personId = str(body?.personId, 100);
+  if (!personId) return json({ error: 'Missing personId' }, 400);
+
+  await db.batch([
+    db.prepare('DELETE FROM away_days WHERE person_id = ?').bind(personId),
+    db.prepare('DELETE FROM comments WHERE person_id = ?').bind(personId),
+    db.prepare('DELETE FROM rsvps WHERE person_id = ?').bind(personId),
+    db.prepare('DELETE FROM person_tags WHERE person_id = ?').bind(personId),
+    db.prepare('UPDATE posts SET person_id = NULL WHERE person_id = ?').bind(personId),
+    db.prepare('DELETE FROM people WHERE id = ?').bind(personId),
+  ]);
+
+  return json({ ok: true });
+}
+
+async function deletePost(db, body) {
+  const postId = str(body?.postId, 100);
+  if (!postId) return json({ error: 'Missing postId' }, 400);
+
+  await db.prepare('DELETE FROM posts WHERE id = ?').bind(postId).run();
+  return json({ ok: true });
+}
+
+async function deleteEvent(db, body) {
+  const eventId = str(body?.eventId, 100);
+  if (!eventId) return json({ error: 'Missing eventId' }, 400);
+
+  await db.batch([
+    db.prepare('DELETE FROM rsvps WHERE event_id = ?').bind(eventId),
+    db.prepare('DELETE FROM events WHERE id = ?').bind(eventId),
+  ]);
+
+  return json({ ok: true });
+}
+
 async function saveRsvp(db, body) {
   const eventId = str(body?.eventId, 100);
   const personId = str(body?.personId, 100);
@@ -175,6 +241,10 @@ export default {
         if (pathname === '/api/events') return await createEvent(env.DB, body);
         if (pathname === '/api/rsvp') return await saveRsvp(env.DB, body);
         if (pathname === '/api/tags/toggle') return await toggleTag(env.DB, body);
+        if (pathname === '/api/posts') return await createPost(env.DB, body);
+        if (pathname === '/api/people/delete') return await deletePerson(env.DB, body);
+        if (pathname === '/api/posts/delete') return await deletePost(env.DB, body);
+        if (pathname === '/api/events/delete') return await deleteEvent(env.DB, body);
       }
     } catch (err) {
       console.error(err);
