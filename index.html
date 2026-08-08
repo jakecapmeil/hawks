@@ -853,7 +853,7 @@ function attendeesFor(ev){
 
 function eventReminderText(ev){
   if(!ev){
-    return { subject: 'Hawks Calendar', body: `${window.location.href}` };
+    return { subject: 'Hawks Calendar', body: `\n\n${window.location.href}` };
   }
   const subject = `${ev.title}${ev.time ? ' — ' + ev.time : ''}`;
   const body = `Reminder: ${ev.title} on ${formatEventDate(ev.date)}${ev.time ? ' at ' + ev.time : ''}.${ev.desc ? '\n\n' + ev.desc : ''}\n\n${window.location.href}`;
