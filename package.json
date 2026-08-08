@@ -1,0 +1,13 @@
+{
+  "name": "hawks-calendar",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate:remote": "wrangler d1 migrations apply hawks_calendar_db --remote",
+    "migrate:local": "wrangler d1 migrations apply hawks_calendar_db --local"
+  },
+  "devDependencies": {
+    "wrangler": "^4.120.0"
+  }
+}

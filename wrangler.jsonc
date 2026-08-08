@@ -1,0 +1,19 @@
+{
+  "name": "hawks",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-07",
+  "assets": {
+    "directory": "./public"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hawks_calendar_db",
+      "database_id": "d6113858-5300-4eba-b24f-f2bfa4ced06c",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
