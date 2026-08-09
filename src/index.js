@@ -22,10 +22,10 @@ async function getState(db) {
     db.prepare('SELECT id, name, color, phone, email FROM people').all(),
     db.prepare('SELECT person_id, date FROM away_days').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
-    db.prepare('SELECT id, date, title, time, description FROM events').all(),
+    db.prepare('SELECT id, date, title, time, description, type FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
     db.prepare('SELECT person_id, tag FROM person_tags').all(),
-    db.prepare('SELECT id, person_id, text, created_at FROM posts').all(),
+    db.prepare('SELECT id, person_id, text, header, created_at FROM posts').all(),
   ]);
 
   const awayMap = {};
@@ -46,6 +46,7 @@ async function getState(db) {
       title: row.title,
       time: row.time,
       desc: row.description,
+      type: row.type,
     });
   }
 
@@ -63,6 +64,7 @@ async function getState(db) {
     id: row.id,
     personId: row.person_id,
     text: row.text,
+    header: row.header || '',
     createdAt: row.created_at,
   }));
 
@@ -124,19 +126,22 @@ async function saveComment(db, body) {
   return json({ ok: true });
 }
 
+const VALID_EVENT_TYPES = ['practice', 'meet', 'other'];
+
 async function createEvent(db, body) {
   const date = str(body?.date, 20);
   const title = str(body?.title, 200);
   const time = str(body?.time, 40);
   const desc = str(body?.desc, 2000);
+  const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
   if (!date || !title) return json({ error: 'Missing date or title' }, 400);
 
   const id = 'e_' + crypto.randomUUID();
   await db.prepare(
-    'INSERT INTO events (id, date, title, time, description) VALUES (?, ?, ?, ?, ?)'
-  ).bind(id, date, title, time, desc).run();
+    'INSERT INTO events (id, date, title, time, description, type) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(id, date, title, time, desc, type).run();
 
-  return json({ event: { id, date, title, time, desc } });
+  return json({ event: { id, date, title, time, desc, type } });
 }
 
 const VALID_TAGS = ['sick', 'injured', 'cross_training'];
@@ -158,15 +163,16 @@ async function toggleTag(db, body) {
 async function createPost(db, body) {
   const personId = str(body?.personId, 100);
   const text = str(body?.text, 2000);
+  const header = str(body?.header, 80);
   if (!personId || !text) return json({ error: 'Missing personId or text' }, 400);
 
   const id = 'post_' + crypto.randomUUID();
   const createdAt = Date.now();
   await db.prepare(
-    'INSERT INTO posts (id, person_id, text, created_at) VALUES (?, ?, ?, ?)'
-  ).bind(id, personId, text, createdAt).run();
+    'INSERT INTO posts (id, person_id, text, header, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, personId, text, header, createdAt).run();
 
-  return json({ post: { id, personId, text, createdAt } });
+  return json({ post: { id, personId, text, header, createdAt } });
 }
 
 async function deletePerson(db, body) {
