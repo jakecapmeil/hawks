@@ -678,6 +678,11 @@
   <button type="button" data-event-share-action="team">Email the team</button>
 </div>
 
+<div class="share-menu pop-menu" id="attendeesContactMenu">
+  <button type="button" data-attendees-contact-action="email">Email attendees</button>
+  <button type="button" data-attendees-contact-action="text">Text attendees</button>
+</div>
+
 <div class="modal-overlay" id="adminModalOverlay">
   <div class="modal-box">
     <div class="modal-head">
@@ -712,6 +717,7 @@ let posts = [];
 let expandedPostIds = new Set();
 let shareMenuPostId = null;
 let shareMenuEventId = null;
+let contactMenuEventId = null;
 let secretTapCount = 0;
 let secretTapTimer = null;
 let activePersonId = null;
@@ -1097,8 +1103,7 @@ function renderEvents(){
           <button class="rsvp-btn ${status}" data-event="${ev.id}">${rsvpLabel[status]}</button>
           <button class="rsvp-btn share-btn" data-share="${ev.id}">Share${DD_CHEVRON}</button>
           ` : ''}
-          <button class="rsvp-btn info-btn" data-email="${ev.id}">Email attendees</button>
-          <button class="rsvp-btn info-btn" data-text="${ev.id}">Text attendees</button>
+          <button class="rsvp-btn info-btn" data-contact="${ev.id}">Contact attendees${DD_CHEVRON}</button>
         </div>
         ${(availNames.length || unavailNames.length) ? `<div class="rsvp-summary">
           ${availNames.length ? `<div class="grp avail">✓ Coming: <b>${availNames.map(escapeHtml).join(', ')}</b></div>` : ''}
@@ -1116,16 +1121,10 @@ function renderEvents(){
         openEventShareMenu(btn, btn.dataset.share);
       });
     });
-    $('eventsList').querySelectorAll('.info-btn[data-email]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const ev = list.find(e=>e.id===btn.dataset.email);
-        if(ev) emailAttendees(ev);
-      });
-    });
-    $('eventsList').querySelectorAll('.info-btn[data-text]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const ev = list.find(e=>e.id===btn.dataset.text);
-        if(ev) textAttendees(ev);
+    $('eventsList').querySelectorAll('.info-btn[data-contact]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        openContactMenu(btn, btn.dataset.contact);
       });
     });
   }
@@ -1162,6 +1161,20 @@ function openEventShareMenu(btn, eventId){
 function closeEventShareMenu(){
   $('eventShareMenu').classList.remove('show');
   shareMenuEventId = null;
+}
+
+function openContactMenu(btn, eventId){
+  contactMenuEventId = eventId;
+  const menu = $('attendeesContactMenu');
+  const rect = btn.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.left = `${Math.max(8, rect.right - 190)}px`;
+  menu.classList.add('show');
+}
+
+function closeContactMenu(){
+  $('attendeesContactMenu').classList.remove('show');
+  contactMenuEventId = null;
 }
 
 function formatEventDate(dateKey){
@@ -1727,6 +1740,22 @@ function wireUI(){
   document.addEventListener('click', e=>{
     if(!$('eventShareMenu').contains(e.target) && !e.target.closest('.share-btn')){
       closeEventShareMenu();
+    }
+  });
+
+  $('attendeesContactMenu').querySelector('[data-attendees-contact-action="email"]').addEventListener('click', ()=>{
+    const ev = findEventById(contactMenuEventId);
+    closeContactMenu();
+    if(ev) emailAttendees(ev);
+  });
+  $('attendeesContactMenu').querySelector('[data-attendees-contact-action="text"]').addEventListener('click', ()=>{
+    const ev = findEventById(contactMenuEventId);
+    closeContactMenu();
+    if(ev) textAttendees(ev);
+  });
+  document.addEventListener('click', e=>{
+    if(!$('attendeesContactMenu').contains(e.target) && !e.target.closest('.info-btn')){
+      closeContactMenu();
     }
   });
 
