@@ -299,7 +299,7 @@
   /* day menu */
   #dayDetail{display:none;}
   #dayDetail.show{display:block;}
-  #dayDetail h3{
+  #dayDetail h3, .card-title{
     font-family:'Archivo',sans-serif;font-weight:800;
     font-size:18px;margin:0 0 12px;letter-spacing:-0.2px;
   }
@@ -582,7 +582,7 @@
   </div>
 
   <div class="card" id="postCard">
-    <div class="section-label" style="margin-top:0;">Posts</div>
+    <div class="card-title">Posts</div>
     <div class="post-composer" id="postComposer">
       <input type="text" id="postHeaderInput" placeholder="Header (optional)" maxlength="80">
       <div class="post-composer-row">
@@ -1099,10 +1099,8 @@ function renderEvents(){
         </div>
         ${ev.desc ? `<div class="event-desc">${escapeHtml(ev.desc)}</div>` : ''}
         <div class="event-actions">
-          ${isRealPerson() ? `
-          <button class="rsvp-btn ${status}" data-event="${ev.id}">${rsvpLabel[status]}</button>
+          ${isRealPerson() ? `<button class="rsvp-btn ${status}" data-event="${ev.id}">${rsvpLabel[status]}</button>` : ''}
           <button class="rsvp-btn share-btn" data-share="${ev.id}">Share${DD_CHEVRON}</button>
-          ` : ''}
           <button class="rsvp-btn info-btn" data-contact="${ev.id}">Contact attendees${DD_CHEVRON}</button>
         </div>
         ${(availNames.length || unavailNames.length) ? `<div class="rsvp-summary">
