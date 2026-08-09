@@ -199,6 +199,21 @@ async function deletePost(db, body) {
   return json({ ok: true });
 }
 
+async function updateEvent(db, body) {
+  const eventId = str(body?.eventId, 100);
+  const title = str(body?.title, 200);
+  const time = str(body?.time, 40);
+  const desc = str(body?.desc, 2000);
+  const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
+  if (!eventId || !title) return json({ error: 'Missing eventId or title' }, 400);
+
+  await db.prepare(
+    'UPDATE events SET title = ?, time = ?, description = ?, type = ? WHERE id = ?'
+  ).bind(title, time, desc, type, eventId).run();
+
+  return json({ ok: true });
+}
+
 async function deleteEvent(db, body) {
   const eventId = str(body?.eventId, 100);
   if (!eventId) return json({ error: 'Missing eventId' }, 400);
@@ -250,6 +265,7 @@ export default {
         if (pathname === '/api/posts') return await createPost(env.DB, body);
         if (pathname === '/api/people/delete') return await deletePerson(env.DB, body);
         if (pathname === '/api/posts/delete') return await deletePost(env.DB, body);
+        if (pathname === '/api/events/update') return await updateEvent(env.DB, body);
         if (pathname === '/api/events/delete') return await deleteEvent(env.DB, body);
       }
     } catch (err) {

@@ -498,9 +498,18 @@
   .admin-section-label:first-child{margin-top:0;}
   .admin-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);}
   .admin-row:last-child{border-bottom:none;}
+  .admin-row.editing{align-items:stretch;padding:10px 0;}
   .admin-row-main{flex:1;min-width:0;}
   .admin-row-title{font-weight:600;font-size:13.5px;}
   .admin-row-sub{font-size:11.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .admin-edit-form{display:flex;flex-direction:column;gap:8px;flex:1;min-width:0;}
+  .admin-edit-form input[type=text]{width:100%;}
+  .admin-edit-btn{
+    flex-shrink:0;height:28px;padding:0 10px;font-size:11px;font-weight:600;
+    border-radius:var(--r-pill);border:1px solid var(--line);
+    background:#fff;color:var(--ink);cursor:pointer;
+  }
+  .admin-edit-btn:hover{background:var(--bg);}
   .admin-delete-btn{
     flex-shrink:0;height:28px;padding:0 10px;font-size:11px;font-weight:600;
     border-radius:var(--r-pill);border:1px solid var(--red);
@@ -754,6 +763,8 @@ const EVENT_TYPES = {
 };
 const EVENT_TYPE_KEYS = Object.keys(EVENT_TYPES);
 let selectedEventType = 'practice';
+let editingEventId = null;
+let adminEventType = 'practice';
 
 function pad(n){return n<10?'0'+n:''+n;}
 function keyOf(y,m,d){return `${y}-${pad(m+1)}-${pad(d)}`;}
@@ -804,6 +815,10 @@ async function saveCommentRemote(dateKey, personId, text){
 
 async function createEventRemote(dateKey, title, time, desc, type){
   return await apiPost('/api/events', { date: dateKey, title, time, desc, type });
+}
+
+async function updateEventRemote(eventId, title, time, desc, type){
+  return await apiPost('/api/events/update', { eventId, title, time, desc, type });
 }
 
 async function saveRsvpRemote(eventId, personId, status){
@@ -1223,6 +1238,24 @@ function renderEventTypePicker(){
   });
 }
 
+function setAdminEventType(type){
+  if(!EVENT_TYPES[type]) return;
+  adminEventType = type;
+  renderAdminEventTypePicker();
+}
+
+function renderAdminEventTypePicker(){
+  const picker = $('adminEditTypePicker');
+  if(!picker) return;
+  const idx = EVENT_TYPE_KEYS.indexOf(adminEventType);
+  $('adminEditTypeSlider').style.transform = `translateX(${idx * 100}%)`;
+  $('adminEditTypeSlider').style.background = EVENT_TYPES[adminEventType].color;
+  picker.querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.type === adminEventType);
+    btn.onclick = ()=> setAdminEventType(btn.dataset.type);
+  });
+}
+
 async function addEvent(){
   const title = $('eventTitle').value.trim();
   const time = $('eventTime').value.trim();
@@ -1478,6 +1511,29 @@ function renderAdminModal(){
   const allEvents = Object.values(events).flat().sort((a, b) => a.date.localeCompare(b.date));
   const eventsHtml = allEvents.length
     ? allEvents.map(ev => {
+      if(ev.id === editingEventId){
+        return `
+      <div class="admin-row editing">
+        <div class="admin-edit-form">
+          <input type="text" id="adminEditTitle" value="${escapeHtml(ev.title)}" placeholder="Event title">
+          <input type="text" id="adminEditTime" value="${escapeHtml(ev.time)}" placeholder="Time (e.g. 4:00 PM)">
+          <textarea id="adminEditDesc" placeholder="Details">${escapeHtml(ev.desc)}</textarea>
+          <div>
+            <div class="event-type-label">Event type</div>
+            <div class="event-type-picker" id="adminEditTypePicker">
+              <div class="event-type-slider" id="adminEditTypeSlider"></div>
+              <button type="button" class="event-type-opt" data-type="practice">Practice</button>
+              <button type="button" class="event-type-opt" data-type="meet">Meet</button>
+              <button type="button" class="event-type-opt" data-type="other">Other</button>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button type="button" data-save-event="${ev.id}">Save</button>
+            <button type="button" class="ghost" data-cancel-event-edit="1">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+      }
       const et = EVENT_TYPES[ev.type] || EVENT_TYPES.practice;
       return `
       <div class="admin-row">
@@ -1486,6 +1542,7 @@ function renderAdminModal(){
           <div class="admin-row-title">${escapeHtml(ev.title)}</div>
           <div class="admin-row-sub">${formatEventDate(ev.date)}${ev.time ? ' · ' + escapeHtml(ev.time) : ''}</div>
         </div>
+        <button type="button" class="admin-edit-btn" data-edit-event="${ev.id}">Edit</button>
         <button type="button" class="admin-delete-btn" data-delete-event="${ev.id}">Delete</button>
       </div>`;
     }).join('')
@@ -1536,6 +1593,38 @@ function renderAdminModal(){
       renderCalendar();
     });
   });
+  $('adminModalList').querySelectorAll('[data-edit-event]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ev = findEventById(btn.dataset.editEvent);
+      if(!ev) return;
+      editingEventId = ev.id;
+      adminEventType = ev.type || 'practice';
+      renderAdminModal();
+    });
+  });
+  $('adminModalList').querySelectorAll('[data-cancel-event-edit]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editingEventId = null;
+      renderAdminModal();
+    });
+  });
+  $('adminModalList').querySelectorAll('[data-save-event]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.saveEvent;
+      const title = $('adminEditTitle').value.trim();
+      const time = $('adminEditTime').value.trim();
+      const desc = $('adminEditDesc').value.trim();
+      if(!title){ $('adminEditTitle').focus(); return; }
+      await updateEventRemote(id, title, time, desc, adminEventType);
+      const ev = findEventById(id);
+      if(ev){ ev.title = title; ev.time = time; ev.desc = desc; ev.type = adminEventType; }
+      editingEventId = null;
+      renderAdminModal();
+      renderEvents();
+      renderCalendar();
+    });
+  });
+  if(editingEventId) renderAdminEventTypePicker();
 }
 
 async function submitPost(){
@@ -1579,9 +1668,13 @@ function wireUI(){
   });
   $('closeAdminModal').addEventListener('click', ()=>{
     $('adminModalOverlay').classList.remove('show');
+    editingEventId = null;
   });
   $('adminModalOverlay').addEventListener('click', e=>{
-    if(e.target === $('adminModalOverlay')) $('adminModalOverlay').classList.remove('show');
+    if(e.target === $('adminModalOverlay')){
+      $('adminModalOverlay').classList.remove('show');
+      editingEventId = null;
+    }
   });
 
   $('submitPostBtn').addEventListener('click', submitPost);
