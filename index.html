@@ -22,6 +22,8 @@
     --green-bg:#dcf3e4;
     --red:#c23b3b;
     --red-bg:#fbe3e3;
+    --info:#1c6b8a;
+    --info-bg:#e1eef3;
     --practice:#e0a415;
     --practice-bg:#faf0d2;
     --meet:#7a4fae;
@@ -378,6 +380,7 @@
   .rsvp-btn.available{background:var(--green-bg);color:var(--green);}
   .rsvp-btn.unavailable{background:var(--red-bg);color:var(--red);}
   .rsvp-btn.share-btn{background:var(--gold-bg);color:var(--gold-ink);}
+  .rsvp-btn.info-btn{background:var(--info-bg);color:var(--info);}
   .rsvp-btn .rsvp-chevron{width:11px;height:11px;flex-shrink:0;}
 
   .rsvp-summary{margin:8px 0 0 12px;display:flex;flex-direction:column;gap:3px;}
@@ -387,14 +390,7 @@
   .rsvp-summary .grp.unavail{color:var(--red);}
 
   .event-actions{display:flex;gap:6px;margin:8px 0 0 12px;flex-wrap:wrap;}
-  .contact-btn{
-    height:28px;padding:0 12px;
-    font-size:11px;font-weight:600;
-    border-radius:var(--r-pill);border:1px solid var(--line);
-    background:#fff;color:var(--ink);
-    cursor:pointer;
-  }
-  .contact-btn:hover{background:var(--bg);}
+  .event-actions .rsvp-btn{margin:0;}
 
   .roster-line{
     display:flex;align-items:flex-start;gap:8px;padding:8px 0;
@@ -1096,18 +1092,18 @@ function renderEvents(){
           <span class="event-time">${escapeHtml(ev.time)}</span>
         </div>
         ${ev.desc ? `<div class="event-desc">${escapeHtml(ev.desc)}</div>` : ''}
-        ${isRealPerson() ? `<div style="display:flex; gap:6px; margin:8px 0 0 12px; flex-wrap:wrap;">
-          <button class="rsvp-btn ${status}" data-event="${ev.id}" style="margin:0;">${rsvpLabel[status]}</button>
-          <button class="rsvp-btn share-btn" data-share="${ev.id}" style="margin:0;">Share${DD_CHEVRON}</button>
-        </div>` : ''}
+        <div class="event-actions">
+          ${isRealPerson() ? `
+          <button class="rsvp-btn ${status}" data-event="${ev.id}">${rsvpLabel[status]}</button>
+          <button class="rsvp-btn share-btn" data-share="${ev.id}">Share${DD_CHEVRON}</button>
+          ` : ''}
+          <button class="rsvp-btn info-btn" data-email="${ev.id}">Email attendees</button>
+          <button class="rsvp-btn info-btn" data-text="${ev.id}">Text attendees</button>
+        </div>
         ${(availNames.length || unavailNames.length) ? `<div class="rsvp-summary">
           ${availNames.length ? `<div class="grp avail">✓ Coming: <b>${availNames.map(escapeHtml).join(', ')}</b></div>` : ''}
           ${unavailNames.length ? `<div class="grp unavail">✕ Not coming: <b>${unavailNames.map(escapeHtml).join(', ')}</b></div>` : ''}
         </div>` : ''}
-        <div class="event-actions">
-          <button class="contact-btn" data-email="${ev.id}">Email attendees</button>
-          <button class="contact-btn" data-text="${ev.id}">Text attendees</button>
-        </div>
       </div>
     `;
     }).join('');
@@ -1120,13 +1116,13 @@ function renderEvents(){
         openEventShareMenu(btn, btn.dataset.share);
       });
     });
-    $('eventsList').querySelectorAll('.contact-btn[data-email]').forEach(btn=>{
+    $('eventsList').querySelectorAll('.info-btn[data-email]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const ev = list.find(e=>e.id===btn.dataset.email);
         if(ev) emailAttendees(ev);
       });
     });
-    $('eventsList').querySelectorAll('.contact-btn[data-text]').forEach(btn=>{
+    $('eventsList').querySelectorAll('.info-btn[data-text]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const ev = list.find(e=>e.id===btn.dataset.text);
         if(ev) textAttendees(ev);
