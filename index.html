@@ -31,6 +31,15 @@
     --other:#241934;
     --other-bg:#e5e1e8;
     --muted-bg:#e7e1d8;
+    /* Matches the vendored body-muscles library's own INTENSITY_COLORS[5]/[8]
+       and its neutral fill (see vendor/body-muscles/), so the legend, the
+       team-status pills, and the body map itself all agree on what
+       "sore"/"pain"/"OK" look like instead of drifting to different hexes. */
+    --sore:#f97316;
+    --sore-bg:#fde9d7;
+    --pain:#dc2626;
+    --pain-bg:#fbe0e0;
+    --bodymap-grey:#94a3b8;
     --r-card:14px;
     --r-control:10px;
     --r-pill:7px;
@@ -125,19 +134,16 @@
   .identity-block{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
   .who-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 
-  .tag-row{display:none;flex-wrap:wrap;gap:8px;margin-top:12px;}
-  .tag-row.show{display:flex;}
-  .tag-btn{
-    display:inline-flex;align-items:center;gap:6px;
-    height:32px;padding:0 12px;
+  .page-tabs{display:flex;gap:8px;margin-bottom:14px;}
+  .page-tab{
+    flex:1;height:40px;
     border-radius:var(--r-control);
     border:1px solid var(--line);
-    background:#fff;color:var(--ink);
-    font-size:12px;font-weight:600;
-    cursor:pointer;
+    background:#fff;color:var(--ink-soft);
+    font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;
+    letter-spacing:0.3px;cursor:pointer;
   }
-  .tag-btn svg{width:15px;height:15px;flex-shrink:0;display:block;}
-  .tag-btn.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+  .page-tab.active{background:var(--ink);border-color:var(--ink);color:#fff;}
 
   .person-tags{display:inline-flex;gap:4px;flex-shrink:0;}
   .tag-icon{display:inline-flex;width:13px;height:13px;flex-shrink:0;}
@@ -262,10 +268,12 @@
   .edit-banner{
     display:none;background:var(--green-bg);color:var(--green);
     border:1px solid var(--green);border-radius:var(--r-control);
-    padding:0 10px;height:var(--btn-h);font-size:12.5px;font-weight:600;
+    padding:8px 10px;font-size:12.5px;font-weight:600;
     margin-bottom:10px;align-items:center;justify-content:space-between;gap:8px;
+    flex-wrap:wrap;
   }
   .edit-banner.show{display:flex;}
+  .edit-banner-actions{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;}
   .edit-banner button{
     height:28px;padding:0 10px;font-size:11.5px;border-radius:var(--r-pill);
     background:#fff;color:var(--green);border:1px solid var(--green);
@@ -355,9 +363,9 @@
     color:var(--ink-soft);cursor:pointer;
     transition:color .2s ease;
   }
-  .event-type-opt.active[data-type="practice"]{color:var(--ink);}
-  .event-type-opt.active[data-type="meet"],
-  .event-type-opt.active[data-type="other"]{color:#fff;}
+  .event-type-opt.active{color:#fff;}
+  .event-type-opt.active[data-type="practice"],
+  .event-type-opt.active[data-type="running"]{color:var(--ink);}
   .event-type-label{
     font-size:10px;font-family:'Space Mono',monospace;text-transform:uppercase;
     letter-spacing:1.5px;color:var(--ink-soft);margin-bottom:2px;
@@ -513,6 +521,53 @@
   }
   .admin-delete-btn:hover{background:var(--red);color:#fff;}
   .admin-empty{font-size:12.5px;color:var(--ink-soft);}
+
+  /* body map — dark "phone mockup" panel, muscular silhouette, Strava-style */
+  .bodymap-panel{
+    background:linear-gradient(180deg,#1a1720,#100e14);
+    border-radius:20px;
+    padding:20px 14px 16px;
+    display:flex;flex-direction:column;align-items:center;gap:14px;
+  }
+  #bodyMapMount{width:100%;display:flex;justify-content:center;}
+  #bodyMapMount .body-chart-container{padding:0 !important;}
+
+  .bodymap-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;}
+  .bm-chip{
+    display:inline-flex;align-items:center;gap:6px;
+    height:26px;padding:0 6px 0 11px;border-radius:13px;
+    background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);
+    color:#f0a15c;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;
+    white-space:nowrap;
+  }
+  .bm-chip.pain{color:#ff8163;}
+  .bm-chip-x{
+    width:16px;height:16px;padding:0;border-radius:50%;flex-shrink:0;
+    background:rgba(255,255,255,0.14);border:none;color:#fff;
+    font-size:9px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .bm-chip-more{
+    color:rgba(255,255,255,0.55);background:transparent;
+    border:1px dashed rgba(255,255,255,0.22);padding:0 11px;
+  }
+
+  .bodymap-flip-btn{
+    display:inline-flex;align-items:center;gap:7px;
+    height:34px;padding:0 18px;border-radius:17px;
+    background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
+    color:#fff;font-family:'Inter',sans-serif;font-weight:600;font-size:12.5px;cursor:pointer;
+  }
+  .bodymap-flip-btn:active{transform:scale(0.97);}
+  .bodymap-flip-btn svg{width:14px;height:14px;flex-shrink:0;}
+
+  .bodymap-legend{
+    display:flex;gap:14px;justify-content:center;flex-wrap:wrap;
+    margin-top:12px;font-size:11.5px;color:var(--ink-soft);
+  }
+  .bodymap-legend .swatch{
+    display:inline-block;width:10px;height:10px;border-radius:3px;
+    margin-right:5px;vertical-align:middle;
+  }
 </style>
 </head>
 <body>
@@ -548,7 +603,6 @@
         </div>
         <button class="ghost" id="newPersonBtn">+ New person</button>
       </div>
-      <div class="tag-row" id="tagRow"></div>
       <div id="newPersonRow">
         <input type="text" id="newPersonName" placeholder="Your name">
         <div class="color-pick-row">
@@ -581,6 +635,12 @@
     </div>
   </div>
 
+  <div class="page-tabs">
+    <button type="button" class="page-tab active" id="pageTabCalendar">CALENDAR</button>
+    <button type="button" class="page-tab" id="pageTabBody">BODY</button>
+  </div>
+
+  <div id="pageCalendar">
   <div class="card" id="postCard">
     <div class="card-title">Posts</div>
     <div class="post-composer" id="postComposer">
@@ -608,7 +668,11 @@
       </div>
       <div class="edit-banner" id="editBanner">
         <span>Tap days to toggle your availability</span>
-        <button id="doneEditBtn">Done</button>
+        <div class="edit-banner-actions">
+          <button type="button" id="alwaysFreeBtn">Always free</button>
+          <button type="button" id="neverFreeBtn">Never free</button>
+          <button id="doneEditBtn">Done</button>
+        </div>
       </div>
       <div class="grid" id="dowRow"></div>
       <div class="grid" id="calGrid" style="margin-top:4px;"></div>
@@ -643,6 +707,8 @@
     <div class="section-label">Availability</div>
     <div id="detailList"></div>
 
+    <div class="section-label">Notes</div>
+    <div id="notesList"></div>
     <div class="note-form" id="noteForm" style="display:none;">
       <textarea id="dayNote" placeholder="Add a note about your availability (optional)"></textarea>
       <button id="saveNoteBtn">Save note</button>
@@ -651,6 +717,51 @@
     <div class="copy-row">
       <textarea id="copyString" readonly rows="1"></textarea>
       <button id="copyBtn">Copy</button>
+    </div>
+  </div>
+  </div>
+
+  <div id="pageBody" style="display:none;">
+    <div class="card">
+      <div class="card-title">How do you feel?</div>
+      <div class="event-type-picker" id="healthPicker">
+        <div class="event-type-slider" id="healthSlider"></div>
+        <button type="button" class="event-type-opt" data-type="healthy">Healthy</button>
+        <button type="button" class="event-type-opt" data-type="injured">Injured</button>
+        <button type="button" class="event-type-opt" data-type="sick">Sick</button>
+      </div>
+
+      <div class="card-title" style="margin-top:18px;">Training status</div>
+      <div class="event-type-picker" id="trainingPicker">
+        <div class="event-type-slider" id="trainingSlider"></div>
+        <button type="button" class="event-type-opt" data-type="resting">Resting</button>
+        <button type="button" class="event-type-opt" data-type="running">Running</button>
+        <button type="button" class="event-type-opt" data-type="crosstraining">Cross-train</button>
+      </div>
+      <div class="hint" id="bodyStatusHint" style="margin-top:10px;">Select your name above to update your status.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Body map</div>
+      <div class="bodymap-panel">
+        <div id="bodyMapMount"></div>
+        <div class="bodymap-chips" id="bodyMapChips"></div>
+        <button type="button" class="bodymap-flip-btn" id="bodyMapFlipBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1 21 6l-4 3.9"/><path d="M3 12.6v-2a4 4 0 0 1 4-4h14"/><path d="M7 21.9 3 18l4-3.9"/><path d="M21 11.4v2a4 4 0 0 1-4 4H3"/></svg>
+          <span id="bodyMapFlipLabel">Front</span>
+        </button>
+      </div>
+      <div class="bodymap-legend">
+        <span><span class="swatch" style="background:var(--bodymap-grey);"></span>OK</span>
+        <span><span class="swatch" style="background:var(--sore);"></span>Sore</span>
+        <span><span class="swatch" style="background:var(--pain);"></span>Pain</span>
+      </div>
+      <div class="hint" id="bodyMapHint" style="margin-top:10px;">Tap a body part to mark it — tap again to cycle sore → pain → clear.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Team status</div>
+      <div id="teamStatusList"></div>
     </div>
   </div>
 
@@ -693,6 +804,8 @@
   </div>
 </div>
 
+<!-- Body Muscles — Apache-2.0, self-hosted (vendor/body-muscles/): https://github.com/vulovix/body-muscles -->
+<script src="/vendor/body-muscles/body-muscles.umd.min.js"></script>
 <script>
 const DOW = ['S','M','T','W','T','F','S'];
 const COACH_EMAIL = 'ronj.flash@gmail.com';
@@ -708,11 +821,11 @@ const SHARE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const DD_CHEVRON = `<svg class="rsvp-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
 
 let people = [];
-let away = {};
+let overrides = {};
 let comments = {};
 let events = {};
 let rsvps = {};
-let tags = {};
+let bodyMarks = {};
 let posts = [];
 let expandedPostIds = new Set();
 let shareMenuPostId = null;
@@ -724,6 +837,8 @@ let activePersonId = null;
 let viewYear, viewMonth;
 let selectedDate = null;
 let editMode = false;
+let currentPage = 'calendar';
+let bodyMapView = 'front';
 
 const $ = id => document.getElementById(id);
 
@@ -752,11 +867,29 @@ const TAG_ICONS = {
   </svg>`,
 };
 
-const TAG_DEFS = [
-  { key: 'sick', label: 'Sick' },
-  { key: 'injured', label: 'Injured' },
-  { key: 'cross_training', label: 'Cross-training' },
-];
+const HEALTH_STATES = {
+  healthy: { label: 'Healthy', color: 'var(--green)', bg: 'var(--green-bg)' },
+  injured: { label: 'Injured', color: 'var(--red)', bg: 'var(--red-bg)' },
+  sick:    { label: 'Sick',    color: 'var(--info)', bg: 'var(--info-bg)' },
+};
+const HEALTH_KEYS = Object.keys(HEALTH_STATES);
+
+const TRAINING_STATES = {
+  resting:       { label: 'Resting',        color: 'var(--other)',    bg: 'var(--other-bg)' },
+  running:       { label: 'Running',        color: 'var(--practice)', bg: 'var(--practice-bg)' },
+  crosstraining: { label: 'Cross-training', color: 'var(--meet)',     bg: 'var(--meet-bg)' },
+};
+const TRAINING_KEYS = Object.keys(TRAINING_STATES);
+
+// Real anatomy comes from the vendored body-muscles library (Apache-2.0,
+// vendor/body-muscles/) instead of a hand-drawn silhouette — see BodyChart
+// setup further down. Build a part-id -> display-name lookup from its data.
+const BODY_PART_LABELS = {};
+if (window.BodyMuscles) {
+  BodyMuscles.MUSCLE_MAP.forEach(m => { BODY_PART_LABELS[m.id] = m.name; });
+}
+const BODY_SORE_INTENSITY = 5;
+const BODY_PAIN_INTENSITY = 8;
 
 const EVENT_TYPES = {
   practice: { label: 'Practice', color: 'var(--practice)', bg: 'var(--practice-bg)', text: 'var(--ink)' },
@@ -777,15 +910,15 @@ async function loadState(){
     const res = await fetch('/api/state');
     const data = await res.json();
     people = data.people || [];
-    away = data.away || {};
+    overrides = data.overrides || {};
     comments = data.comments || {};
     events = data.events || {};
     rsvps = data.rsvps || {};
-    tags = data.tags || {};
+    bodyMarks = data.body || {};
     posts = data.posts || [];
   }catch(e){
     console.error('Load failed, starting empty', e);
-    people = []; away = {}; comments = {}; events = {}; rsvps = {}; tags = {}; posts = [];
+    people = []; overrides = {}; comments = {}; events = {}; rsvps = {}; bodyMarks = {}; posts = [];
   }
 }
 
@@ -807,8 +940,24 @@ async function savePerson(person){
   await apiPost('/api/people', person);
 }
 
-async function toggleAwayRemote(personId, dateKey){
-  await apiPost('/api/away/toggle', { personId, date: dateKey });
+async function toggleAvailabilityRemote(personId, dateKey){
+  await apiPost('/api/availability/toggle', { personId, date: dateKey });
+}
+
+async function setDefaultStatusRemote(personId, status){
+  await apiPost('/api/people/default-status', { personId, status });
+}
+
+async function setHealthStatusRemote(personId, status){
+  await apiPost('/api/people/health-status', { personId, status });
+}
+
+async function setTrainingStatusRemote(personId, status){
+  await apiPost('/api/people/training-status', { personId, status });
+}
+
+async function toggleBodyMarkRemote(personId, part){
+  return await apiPost('/api/body/toggle', { personId, part });
 }
 
 async function saveCommentRemote(dateKey, personId, text){
@@ -827,21 +976,28 @@ async function saveRsvpRemote(eventId, personId, status){
   await apiPost('/api/rsvp', { eventId, personId, status });
 }
 
-async function toggleTagRemote(personId, tag){
-  await apiPost('/api/tags/toggle', { personId, tag });
-}
-
 async function createPostRemote(personId, text, header){
   return await apiPost('/api/posts', { personId, text, header });
 }
 
-function isAway(personId, dateKey){ return (away[personId] || []).includes(dateKey); }
+function effectiveStatus(personId, dateKey){
+  const p = people.find(x=>x.id===personId);
+  const def = p ? p.default_status : 'available';
+  const ov = overrides[personId] && overrides[personId][dateKey];
+  return ov || def;
+}
 
-function toggleAway(personId, dateKey){
-  if(!away[personId]) away[personId] = [];
-  const idx = away[personId].indexOf(dateKey);
-  if(idx >= 0) away[personId].splice(idx,1);
-  else away[personId].push(dateKey);
+function isAvailable(personId, dateKey){ return effectiveStatus(personId, dateKey) === 'available'; }
+
+function toggleAvailabilityLocal(personId, dateKey){
+  const p = people.find(x=>x.id===personId);
+  const def = p ? p.default_status : 'available';
+  const current = effectiveStatus(personId, dateKey);
+  const next = current === 'available' ? 'unavailable' : 'available';
+  if(!overrides[personId]) overrides[personId] = {};
+  if(next === def) delete overrides[personId][dateKey];
+  else overrides[personId][dateKey] = next;
+  return next;
 }
 
 function escapeHtml(s){
@@ -849,43 +1005,14 @@ function escapeHtml(s){
 }
 
 function personTagsHtml(personId){
-  const mine = tags[personId] || [];
-  if(!mine.length) return '';
-  const icons = TAG_DEFS.filter(t => mine.includes(t.key))
-    .map(t => `<span class="tag-icon" title="${escapeHtml(t.label)}">${TAG_ICONS[t.key]}</span>`)
-    .join('');
-  return `<span class="person-tags">${icons}</span>`;
-}
-
-function renderTagRow(){
-  const row = $('tagRow');
-  if(!activePersonId || activePersonId === COACH_ID){
-    row.classList.remove('show');
-    row.innerHTML = '';
-    return;
-  }
-  row.classList.add('show');
-  const mine = tags[activePersonId] || [];
-  row.innerHTML = TAG_DEFS.map(t => `
-    <button type="button" class="tag-btn ${mine.includes(t.key) ? 'active' : ''}" data-tag="${t.key}">
-      ${TAG_ICONS[t.key]}<span>${t.label}</span>
-    </button>
-  `).join('');
-  row.querySelectorAll('.tag-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=> toggleTag(btn.dataset.tag));
-  });
-}
-
-async function toggleTag(tag){
-  if(!activePersonId) return;
-  if(!tags[activePersonId]) tags[activePersonId] = [];
-  const idx = tags[activePersonId].indexOf(tag);
-  if(idx >= 0) tags[activePersonId].splice(idx, 1);
-  else tags[activePersonId].push(tag);
-  await toggleTagRemote(activePersonId, tag);
-  renderTagRow();
-  renderPersonSelect();
-  renderDayDetail();
+  const p = people.find(x=>x.id===personId);
+  if(!p) return '';
+  const icons = [];
+  if(p.health_status === 'sick') icons.push(`<span class="tag-icon" title="Sick">${TAG_ICONS.sick}</span>`);
+  if(p.health_status === 'injured') icons.push(`<span class="tag-icon" title="Injured">${TAG_ICONS.injured}</span>`);
+  if(p.training_status === 'crosstraining') icons.push(`<span class="tag-icon" title="Cross-training">${TAG_ICONS.cross_training}</span>`);
+  if(!icons.length) return '';
+  return `<span class="person-tags">${icons.join('')}</span>`;
 }
 
 function closePersonDropdown(){
@@ -948,7 +1075,10 @@ async function addPerson(name){
     name,
     color: $('colorPicker').value,
     phone,
-    email
+    email,
+    default_status: 'available',
+    health_status: 'healthy',
+    training_status: 'resting',
   };
   people.push(p);
   activePersonId = p.id;
@@ -1002,11 +1132,11 @@ function renderCalendar(){
 
   for(let d=1; d<=daysInMonth; d++){
     const dk = keyOf(viewYear, viewMonth, d);
-    const availablePeople = people.filter(p => !isAway(p.id, dk));
+    const availablePeople = people.filter(p => isAvailable(p.id, dk));
     let cls = 'day';
     if(dk === todayKey()) cls += ' today';
     if(dk === selectedDate) cls += ' selected';
-    if(activePersonId && isAway(activePersonId, dk)) cls += ' you-away';
+    if(activePersonId && !isAvailable(activePersonId, dk)) cls += ' you-away';
     if(editMode) cls += ' edit-target';
     const dayEvents = events[dk] || [];
     const typesPresent = EVENT_TYPE_KEYS.filter(t => dayEvents.some(ev => (ev.type || 'practice') === t));
@@ -1031,8 +1161,8 @@ function onDayClick(dateKey){
       alert('Select your name first so we know whose availability to change.');
       return;
     }
-    toggleAway(activePersonId, dateKey);
-    toggleAwayRemote(activePersonId, dateKey);
+    toggleAvailabilityLocal(activePersonId, dateKey);
+    toggleAvailabilityRemote(activePersonId, dateKey);
     renderCalendar();
     if(selectedDate === dateKey) renderDayDetail();
     return;
@@ -1048,6 +1178,15 @@ function setEditMode(on){
   $('editModeBtn').textContent = on ? 'Editing…' : 'Edit Availability';
   $('editBanner').classList.toggle('show', on);
   renderCalendar();
+}
+
+async function setDefaultStatus(status){
+  if(!activePersonId) return;
+  const p = people.find(x=>x.id===activePersonId);
+  if(p) p.default_status = status;
+  await setDefaultStatusRemote(activePersonId, status);
+  renderCalendar();
+  renderDayDetail();
 }
 
 function getRsvp(eventId){
@@ -1292,10 +1431,8 @@ function renderDayDetail(){
   if(people.length === 0){
     $('detailList').innerHTML = '<div class="empty-note">No one on the roster yet — add your name above.</div>';
   } else {
-    const dayComments = comments[selectedDate] || {};
     $('detailList').innerHTML = people.map(p=>{
-      const away_ = isAway(p.id, selectedDate);
-      const note = dayComments[p.id];
+      const away_ = !isAvailable(p.id, selectedDate);
       const mine = p.id === activePersonId;
       return `<div class="roster-line">
         <div style="flex:1; min-width:0;">
@@ -1305,7 +1442,6 @@ function renderDayDetail(){
             ${personTagsHtml(p.id)}
             <span class="status ${away_?'unavailable':'available'} ${mine?'clickable':''}" data-person="${p.id}">${away_?'Unavailable':'Available'}</span>
           </div>
-          ${note ? `<div class="comment-text">"${escapeHtml(note)}"</div>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -1314,14 +1450,16 @@ function renderDayDetail(){
       const tag = $('detailList').querySelector(`.status.clickable[data-person="${activePersonId}"]`);
       if(tag){
         tag.addEventListener('click', async ()=>{
-          toggleAway(activePersonId, selectedDate);
-          await toggleAwayRemote(activePersonId, selectedDate);
+          toggleAvailabilityLocal(activePersonId, selectedDate);
+          await toggleAvailabilityRemote(activePersonId, selectedDate);
           renderDayDetail();
           renderCalendar();
         });
       }
     }
   }
+
+  renderNotes();
 
   const noteForm = $('noteForm');
   if(isRealPerson()){
@@ -1344,8 +1482,26 @@ async function saveNote(){
   renderDayDetail();
 }
 
+function renderNotes(){
+  const dayComments = comments[selectedDate] || {};
+  const entries = Object.keys(dayComments)
+    .map(pid => ({ text: dayComments[pid], person: people.find(p=>p.id===pid) }))
+    .filter(e => e.person && e.text);
+  $('notesList').innerHTML = entries.length
+    ? entries.map(e => `<div class="roster-line">
+        <div style="flex:1; min-width:0;">
+          <div class="roster-main">
+            <span class="dot" style="background:${e.person.color}"></span>
+            <span class="roster-name">${escapeHtml(e.person.name)}</span>
+          </div>
+          <div class="comment-text">"${escapeHtml(e.text)}"</div>
+        </div>
+      </div>`).join('')
+    : '<div class="empty-note">No notes for this day yet.</div>';
+}
+
 function renderCopyString(){
-  const present = people.filter(p => !isAway(p.id, selectedDate)).map(p=>p.name);
+  const present = people.filter(p => isAvailable(p.id, selectedDate)).map(p=>p.name);
   const str = present.length
     ? `Those available are: ${present.join(', ')}`
     : `Those available are: no one on the roster yet`;
@@ -1649,9 +1805,196 @@ async function submitPost(){
   renderPosts();
 }
 
+function setPage(page){
+  currentPage = page;
+  $('pageTabCalendar').classList.toggle('active', page === 'calendar');
+  $('pageTabBody').classList.toggle('active', page === 'body');
+  $('pageCalendar').style.display = page === 'calendar' ? '' : 'none';
+  $('pageBody').style.display = page === 'body' ? '' : 'none';
+}
+
+function currentHealthStatus(){
+  const p = people.find(x=>x.id===activePersonId);
+  return p ? p.health_status : 'healthy';
+}
+
+function currentTrainingStatus(){
+  const p = people.find(x=>x.id===activePersonId);
+  return p ? p.training_status : 'resting';
+}
+
+function renderHealthPicker(){
+  const status = isRealPerson() ? currentHealthStatus() : 'healthy';
+  const idx = HEALTH_KEYS.indexOf(status);
+  $('healthSlider').style.transform = `translateX(${idx * 100}%)`;
+  $('healthSlider').style.background = HEALTH_STATES[status].color;
+  $('healthPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.type === status);
+  });
+}
+
+function renderTrainingPicker(){
+  const status = isRealPerson() ? currentTrainingStatus() : 'resting';
+  const idx = TRAINING_KEYS.indexOf(status);
+  $('trainingSlider').style.transform = `translateX(${idx * 100}%)`;
+  $('trainingSlider').style.background = TRAINING_STATES[status].color;
+  $('trainingPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.type === status);
+  });
+}
+
+async function setHealth(status){
+  if(!isRealPerson()){
+    alert('Select your name first so we know whose status to change.');
+    return;
+  }
+  const p = people.find(x=>x.id===activePersonId);
+  if(p) p.health_status = status;
+  await setHealthStatusRemote(activePersonId, status);
+  renderHealthPicker();
+  renderPersonSelect();
+  renderDayDetail();
+  renderTeamStatus();
+}
+
+async function setTraining(status){
+  if(!isRealPerson()){
+    alert('Select your name first so we know whose status to change.');
+    return;
+  }
+  const p = people.find(x=>x.id===activePersonId);
+  if(p) p.training_status = status;
+  await setTrainingStatusRemote(activePersonId, status);
+  renderTrainingPicker();
+  renderPersonSelect();
+  renderDayDetail();
+  renderTeamStatus();
+}
+
+let bodyChart = null;
+
+function buildBodyChartState(){
+  const marks = isRealPerson() ? (bodyMarks[activePersonId] || {}) : {};
+  const state = {};
+  Object.keys(marks).forEach(part => {
+    const intensity = marks[part] === 'pain' ? BODY_PAIN_INTENSITY : BODY_SORE_INTENSITY;
+    state[part] = { intensity, selected: true };
+  });
+  return state;
+}
+
+function renderBodyMap(){
+  if(!window.BodyMuscles){
+    console.error('body-muscles library failed to load; body map unavailable.');
+    return;
+  }
+  $('bodyMapFlipLabel').textContent = bodyMapView === 'front' ? 'Front' : 'Back';
+  const view = bodyMapView === 'front' ? BodyMuscles.ViewSide.FRONT : BodyMuscles.ViewSide.BACK;
+  const bodyState = buildBodyChartState();
+
+  if(!bodyChart){
+    bodyChart = new BodyMuscles.BodyChart($('bodyMapMount'), {
+      view,
+      bodyState,
+      ariaLabel: 'Body map',
+      onMuscleClick: (id) => onBodyPartClick(id),
+    });
+  } else {
+    bodyChart.update({ view, bodyState });
+  }
+  $('bodyMapHint').style.display = isRealPerson() ? 'none' : 'block';
+  renderBodyChips();
+}
+
+function renderBodyChips(){
+  const wrap = $('bodyMapChips');
+  const marks = isRealPerson() ? (bodyMarks[activePersonId] || {}) : {};
+  const entries = Object.keys(marks).map(part => ({ part, status: marks[part] }));
+  if(!entries.length){ wrap.innerHTML = ''; return; }
+  const MAX_CHIPS = 4;
+  const shown = entries.slice(0, MAX_CHIPS);
+  const extra = entries.length - shown.length;
+  wrap.innerHTML = shown.map(e => `
+    <span class="bm-chip ${e.status}">
+      ${escapeHtml(BODY_PART_LABELS[e.part] || e.part)}
+      <button type="button" class="bm-chip-x" data-clear-part="${e.part}">✕</button>
+    </span>
+  `).join('') + (extra > 0 ? `<span class="bm-chip bm-chip-more">+${extra}</span>` : '');
+  wrap.querySelectorAll('[data-clear-part]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      clearBodyPart(btn.dataset.clearPart);
+    });
+  });
+}
+
+function applyBodyMarkStatus(part, status){
+  if(!bodyMarks[activePersonId]) bodyMarks[activePersonId] = {};
+  if(status === 'none') delete bodyMarks[activePersonId][part];
+  else bodyMarks[activePersonId][part] = status;
+}
+
+async function clearBodyPart(part){
+  if(!isRealPerson() || !bodyMarks[activePersonId]) return;
+  // The API only exposes a none->sore->pain->none cycle, so walk it forward
+  // to 'none' — but always trust the status the server actually returns
+  // rather than a locally-computed guess, so a failed request or an
+  // overlapping click can't leave local state out of sync with the server.
+  for(let i = 0; i < 3; i++){
+    const result = await toggleBodyMarkRemote(activePersonId, part);
+    if(!result || !result.status){
+      renderBodyMap();
+      renderTeamStatus();
+      return; // request failed; stop rather than assume it worked
+    }
+    applyBodyMarkStatus(part, result.status);
+    if(result.status === 'none') break;
+  }
+  renderBodyMap();
+  renderTeamStatus();
+}
+
+async function onBodyPartClick(part){
+  if(!isRealPerson()){
+    alert('Select your name first so we know whose body map to update.');
+    return;
+  }
+  const result = await toggleBodyMarkRemote(activePersonId, part);
+  if(!result || !result.status) return; // request failed; leave local state untouched
+  applyBodyMarkStatus(part, result.status);
+  renderBodyMap();
+  renderTeamStatus();
+}
+
+function renderTeamStatus(){
+  const list = $('teamStatusList');
+  if(!people.length){
+    list.innerHTML = '<div class="empty-note">No one on the roster yet.</div>';
+    return;
+  }
+  list.innerHTML = people.map(p=>{
+    const h = HEALTH_STATES[p.health_status] || HEALTH_STATES.healthy;
+    const t = TRAINING_STATES[p.training_status] || TRAINING_STATES.resting;
+    const marks = bodyMarks[p.id] || {};
+    const painCount = Object.values(marks).filter(s=>s==='pain').length;
+    const soreCount = Object.values(marks).filter(s=>s==='sore').length;
+    const bits = [];
+    if(painCount) bits.push(`<span class="status" style="background:var(--pain-bg);color:var(--pain);">${painCount} pain</span>`);
+    if(soreCount) bits.push(`<span class="status" style="background:var(--sore-bg);color:var(--sore);">${soreCount} sore</span>`);
+    return `<div class="roster-line">
+      <div class="roster-main">
+        <span class="dot" style="background:${p.color}"></span>
+        <span class="roster-name">${escapeHtml(p.name)}</span>
+        <span class="status" style="background:${h.bg};color:${h.color};">${h.label}</span>
+        <span class="status" style="background:${t.bg};color:${t.color};">${t.label}</span>
+        ${bits.join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderAll(){
   renderPersonSelect();
-  renderTagRow();
   renderPosts();
   $('editModeBtn').style.display = isRealPerson() ? '' : 'none';
   $('newPersonBtn').style.display = activePersonId ? 'none' : '';
@@ -1659,6 +2002,16 @@ function renderAll(){
   if(!isRealPerson() && editMode) setEditMode(false);
   renderCalendar();
   renderDayDetail();
+
+  $('bodyStatusHint').style.display = isRealPerson() ? 'none' : 'block';
+  $('healthPicker').style.opacity = isRealPerson() ? '1' : '0.5';
+  $('healthPicker').style.pointerEvents = isRealPerson() ? 'auto' : 'none';
+  $('trainingPicker').style.opacity = isRealPerson() ? '1' : '0.5';
+  $('trainingPicker').style.pointerEvents = isRealPerson() ? 'auto' : 'none';
+  renderHealthPicker();
+  renderTrainingPicker();
+  renderBodyMap();
+  renderTeamStatus();
 }
 
 function wireUI(){
@@ -1853,9 +2206,25 @@ function wireUI(){
     setEditMode(!editMode);
   });
   $('doneEditBtn').addEventListener('click', ()=> setEditMode(false));
+  $('alwaysFreeBtn').addEventListener('click', ()=> setDefaultStatus('available'));
+  $('neverFreeBtn').addEventListener('click', ()=> setDefaultStatus('unavailable'));
 
   $('eventTypePicker').querySelectorAll('.event-type-opt').forEach(btn=>{
     btn.addEventListener('click', ()=> setEventType(btn.dataset.type));
+  });
+
+  $('pageTabCalendar').addEventListener('click', ()=> setPage('calendar'));
+  $('pageTabBody').addEventListener('click', ()=> setPage('body'));
+
+  $('healthPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.addEventListener('click', ()=> setHealth(btn.dataset.type));
+  });
+  $('trainingPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.addEventListener('click', ()=> setTraining(btn.dataset.type));
+  });
+  $('bodyMapFlipBtn').addEventListener('click', ()=>{
+    bodyMapView = bodyMapView === 'front' ? 'back' : 'front';
+    renderBodyMap();
   });
 
   $('toggleEventForm').addEventListener('click', ()=>{
@@ -1892,6 +2261,7 @@ async function init(){
   renderDow();
   wireUI();
   renderEventTypePicker();
+  setPage('calendar');
   await loadState();
   renderAll();
 

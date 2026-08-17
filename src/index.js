@@ -18,19 +18,19 @@ async function readBody(request) {
 }
 
 async function getState(db) {
-  const [people, away, comments, events, rsvps, personTags, posts] = await Promise.all([
-    db.prepare('SELECT id, name, color, phone, email FROM people').all(),
-    db.prepare('SELECT person_id, date FROM away_days').all(),
+  const [people, overrides, comments, events, rsvps, bodyMarks, posts] = await Promise.all([
+    db.prepare('SELECT id, name, color, phone, email, default_status, health_status, training_status FROM people').all(),
+    db.prepare('SELECT person_id, date, status FROM availability_overrides').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
     db.prepare('SELECT id, date, title, time, description, type FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
-    db.prepare('SELECT person_id, tag FROM person_tags').all(),
+    db.prepare('SELECT person_id, part, status FROM body_marks').all(),
     db.prepare('SELECT id, person_id, text, header, created_at FROM posts').all(),
   ]);
 
-  const awayMap = {};
-  for (const row of away.results) {
-    (awayMap[row.person_id] ??= []).push(row.date);
+  const overridesMap = {};
+  for (const row of overrides.results) {
+    (overridesMap[row.person_id] ??= {})[row.date] = row.status;
   }
 
   const commentsMap = {};
@@ -55,9 +55,9 @@ async function getState(db) {
     (rsvpsMap[row.event_id] ??= {})[row.person_id] = row.status;
   }
 
-  const tagsMap = {};
-  for (const row of personTags.results) {
-    (tagsMap[row.person_id] ??= []).push(row.tag);
+  const bodyMap = {};
+  for (const row of bodyMarks.results) {
+    (bodyMap[row.person_id] ??= {})[row.part] = row.status;
   }
 
   const postsList = posts.results.map(row => ({
@@ -70,11 +70,11 @@ async function getState(db) {
 
   return {
     people: people.results,
-    away: awayMap,
+    overrides: overridesMap,
     comments: commentsMap,
     events: eventsMap,
     rsvps: rsvpsMap,
-    tags: tagsMap,
+    body: bodyMap,
     posts: postsList,
   };
 }
@@ -95,18 +95,85 @@ async function upsertPerson(db, body) {
   return json({ ok: true });
 }
 
-async function toggleAway(db, body) {
+async function toggleAvailability(db, body) {
   const personId = str(body?.personId, 100);
   const date = str(body?.date, 20);
   if (!personId || !date) return json({ error: 'Missing personId or date' }, 400);
 
-  const existing = await db.prepare('SELECT 1 FROM away_days WHERE person_id = ? AND date = ?').bind(personId, date).first();
-  if (existing) {
-    await db.prepare('DELETE FROM away_days WHERE person_id = ? AND date = ?').bind(personId, date).run();
-    return json({ away: false });
+  const person = await db.prepare('SELECT default_status FROM people WHERE id = ?').bind(personId).first();
+  if (!person) return json({ error: 'Unknown person' }, 400);
+
+  const existing = await db.prepare('SELECT status FROM availability_overrides WHERE person_id = ? AND date = ?').bind(personId, date).first();
+  const current = existing ? existing.status : person.default_status;
+  const next = current === 'available' ? 'unavailable' : 'available';
+
+  if (next === person.default_status) {
+    await db.prepare('DELETE FROM availability_overrides WHERE person_id = ? AND date = ?').bind(personId, date).run();
+  } else {
+    await db.prepare(
+      `INSERT INTO availability_overrides (person_id, date, status) VALUES (?, ?, ?)
+       ON CONFLICT(person_id, date) DO UPDATE SET status=excluded.status`
+    ).bind(personId, date, next).run();
   }
-  await db.prepare('INSERT INTO away_days (person_id, date) VALUES (?, ?)').bind(personId, date).run();
-  return json({ away: true });
+  return json({ status: next });
+}
+
+const VALID_DEFAULT_STATUS = ['available', 'unavailable'];
+
+async function setDefaultStatus(db, body) {
+  const personId = str(body?.personId, 100);
+  const status = str(body?.status, 20);
+  if (!personId || !VALID_DEFAULT_STATUS.includes(status)) return json({ error: 'Missing personId or invalid status' }, 400);
+
+  const result = await db.prepare('UPDATE people SET default_status = ? WHERE id = ?').bind(status, personId).run();
+  if (!result.meta.changes) return json({ error: 'Unknown person' }, 400);
+  return json({ ok: true });
+}
+
+const VALID_HEALTH_STATUS = ['healthy', 'injured', 'sick'];
+
+async function setHealthStatus(db, body) {
+  const personId = str(body?.personId, 100);
+  const status = str(body?.status, 20);
+  if (!personId || !VALID_HEALTH_STATUS.includes(status)) return json({ error: 'Missing personId or invalid status' }, 400);
+
+  const result = await db.prepare('UPDATE people SET health_status = ? WHERE id = ?').bind(status, personId).run();
+  if (!result.meta.changes) return json({ error: 'Unknown person' }, 400);
+  return json({ ok: true });
+}
+
+const VALID_TRAINING_STATUS = ['resting', 'running', 'crosstraining'];
+
+async function setTrainingStatus(db, body) {
+  const personId = str(body?.personId, 100);
+  const status = str(body?.status, 20);
+  if (!personId || !VALID_TRAINING_STATUS.includes(status)) return json({ error: 'Missing personId or invalid status' }, 400);
+
+  const result = await db.prepare('UPDATE people SET training_status = ? WHERE id = ?').bind(status, personId).run();
+  if (!result.meta.changes) return json({ error: 'Unknown person' }, 400);
+  return json({ ok: true });
+}
+
+const BODY_MARK_CYCLE = { none: 'sore', sore: 'pain', pain: 'none' };
+
+async function toggleBodyMark(db, body) {
+  const personId = str(body?.personId, 100);
+  const part = str(body?.part, 40);
+  if (!personId || !part) return json({ error: 'Missing personId or part' }, 400);
+
+  const existing = await db.prepare('SELECT status FROM body_marks WHERE person_id = ? AND part = ?').bind(personId, part).first();
+  const current = existing ? existing.status : 'none';
+  const next = BODY_MARK_CYCLE[current];
+
+  if (next === 'none') {
+    await db.prepare('DELETE FROM body_marks WHERE person_id = ? AND part = ?').bind(personId, part).run();
+  } else {
+    await db.prepare(
+      `INSERT INTO body_marks (person_id, part, status) VALUES (?, ?, ?)
+       ON CONFLICT(person_id, part) DO UPDATE SET status=excluded.status`
+    ).bind(personId, part, next).run();
+  }
+  return json({ status: next });
 }
 
 async function saveComment(db, body) {
@@ -144,22 +211,6 @@ async function createEvent(db, body) {
   return json({ event: { id, date, title, time, desc, type } });
 }
 
-const VALID_TAGS = ['sick', 'injured', 'cross_training'];
-
-async function toggleTag(db, body) {
-  const personId = str(body?.personId, 100);
-  const tag = str(body?.tag, 30);
-  if (!personId || !VALID_TAGS.includes(tag)) return json({ error: 'Missing personId or invalid tag' }, 400);
-
-  const existing = await db.prepare('SELECT 1 FROM person_tags WHERE person_id = ? AND tag = ?').bind(personId, tag).first();
-  if (existing) {
-    await db.prepare('DELETE FROM person_tags WHERE person_id = ? AND tag = ?').bind(personId, tag).run();
-    return json({ active: false });
-  }
-  await db.prepare('INSERT INTO person_tags (person_id, tag) VALUES (?, ?)').bind(personId, tag).run();
-  return json({ active: true });
-}
-
 async function createPost(db, body) {
   const personId = str(body?.personId, 100);
   const text = str(body?.text, 2000);
@@ -180,10 +231,10 @@ async function deletePerson(db, body) {
   if (!personId) return json({ error: 'Missing personId' }, 400);
 
   await db.batch([
-    db.prepare('DELETE FROM away_days WHERE person_id = ?').bind(personId),
+    db.prepare('DELETE FROM availability_overrides WHERE person_id = ?').bind(personId),
     db.prepare('DELETE FROM comments WHERE person_id = ?').bind(personId),
     db.prepare('DELETE FROM rsvps WHERE person_id = ?').bind(personId),
-    db.prepare('DELETE FROM person_tags WHERE person_id = ?').bind(personId),
+    db.prepare('DELETE FROM body_marks WHERE person_id = ?').bind(personId),
     db.prepare('UPDATE posts SET person_id = NULL WHERE person_id = ?').bind(personId),
     db.prepare('DELETE FROM people WHERE id = ?').bind(personId),
   ]);
@@ -257,11 +308,14 @@ export default {
         if (body === null) return json({ error: 'Invalid JSON body' }, 400);
 
         if (pathname === '/api/people') return await upsertPerson(env.DB, body);
-        if (pathname === '/api/away/toggle') return await toggleAway(env.DB, body);
+        if (pathname === '/api/availability/toggle') return await toggleAvailability(env.DB, body);
+        if (pathname === '/api/people/default-status') return await setDefaultStatus(env.DB, body);
+        if (pathname === '/api/people/health-status') return await setHealthStatus(env.DB, body);
+        if (pathname === '/api/people/training-status') return await setTrainingStatus(env.DB, body);
+        if (pathname === '/api/body/toggle') return await toggleBodyMark(env.DB, body);
         if (pathname === '/api/comment') return await saveComment(env.DB, body);
         if (pathname === '/api/events') return await createEvent(env.DB, body);
         if (pathname === '/api/rsvp') return await saveRsvp(env.DB, body);
-        if (pathname === '/api/tags/toggle') return await toggleTag(env.DB, body);
         if (pathname === '/api/posts') return await createPost(env.DB, body);
         if (pathname === '/api/people/delete') return await deletePerson(env.DB, body);
         if (pathname === '/api/posts/delete') return await deletePost(env.DB, body);
