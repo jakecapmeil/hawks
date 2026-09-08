@@ -30,6 +30,12 @@
     --meet-bg:#ece1f7;
     --other:#241934;
     --other-bg:#e5e1e8;
+    --easy:#1c7f4c;
+    --easy-bg:#dcf3e4;
+    --workout:#d2691e;
+    --workout-bg:#fbe6d6;
+    --long:#1c6b8a;
+    --long-bg:#e1eef3;
     --muted-bg:#e7e1d8;
     --r-card:14px;
     --r-control:10px;
@@ -258,6 +264,26 @@
     display:flex;justify-content:space-between;align-items:center;
     margin-bottom:10px;gap:8px;flex-wrap:wrap;
   }
+  .cal-toolbar-left{display:flex;align-items:center;gap:8px;}
+  /* Availability chip — hides the per-person dots so the grid shows only
+     what's actually scheduled. */
+  .chip-toggle{
+    display:flex;align-items:center;gap:6px;
+    height:var(--btn-h);padding:0 11px;
+    border:1px solid var(--line);border-radius:var(--r-control);
+    background:var(--card);color:var(--ink-soft);
+    font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+    cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease;
+  }
+  .chip-toggle .chip-dots{display:flex;gap:2px;}
+  .chip-toggle .chip-dots i{
+    width:5px;height:5px;border-radius:50%;background:currentColor;
+    opacity:0.45;transition:opacity .18s ease;
+  }
+  .chip-toggle[aria-pressed="true"]{
+    background:var(--gold-bg);border-color:var(--gold);color:var(--gold-ink);
+  }
+  .chip-toggle[aria-pressed="true"] .chip-dots i{opacity:1;}
   #editModeBtn.active{background:var(--green);border-color:var(--green);}
   .edit-banner{
     display:none;background:var(--green-bg);color:var(--green);
@@ -358,6 +384,9 @@
   .event-type-opt.active[data-type="practice"]{color:var(--ink);}
   .event-type-opt.active[data-type="meet"],
   .event-type-opt.active[data-type="other"]{color:#fff;}
+  .event-type-opt.active[data-kind]{color:#fff;}
+  .kind-wrap{display:none;}
+  .kind-wrap.show{display:block;}
   .event-type-label{
     font-size:10px;font-family:'Space Mono',monospace;text-transform:uppercase;
     letter-spacing:1.5px;color:var(--ink-soft);margin-bottom:2px;
@@ -513,6 +542,33 @@
   }
   .admin-delete-btn:hover{background:var(--red);color:#fff;}
   .admin-empty{font-size:12.5px;color:var(--ink-soft);}
+  .admin-past-toggle{margin-top:10px;}
+
+  /* traditional-week formatter */
+  .week-intro{font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;line-height:1.45;}
+  .week-tools{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .week-tools label{
+    font-family:'Space Mono',monospace;font-size:10px;text-transform:uppercase;
+    letter-spacing:1px;color:var(--ink-soft);flex-shrink:0;
+  }
+  .week-tools input{width:110px;}
+  .week-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line);}
+  .week-row:last-child{border-bottom:none;}
+  .week-check{width:19px;height:19px;flex-shrink:0;accent-color:var(--gold);cursor:pointer;}
+  .week-row-main{flex:1;min-width:0;}
+  .week-range{font-weight:600;font-size:13px;}
+  .week-strip{display:flex;gap:3px;margin-top:5px;}
+  .week-cell{
+    width:23px;height:20px;border-radius:5px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Mono',monospace;font-size:9.5px;font-weight:700;
+    background:var(--muted-bg);color:var(--ink-soft);
+  }
+  .week-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;}
+  .week-legend span{
+    display:flex;align-items:center;gap:5px;
+    font-size:10.5px;color:var(--ink-soft);
+  }
 </style>
 </head>
 <body>
@@ -603,7 +659,13 @@
         <button class="navbtn" id="nextMonth">›</button>
       </div>
       <div class="cal-toolbar">
-        <button class="ghost" id="todayBtn">Jump to today</button>
+        <div class="cal-toolbar-left">
+          <button class="chip-toggle" id="availToggle" type="button" aria-pressed="true"
+                  title="Show or hide who's available on each day">
+            <span class="chip-dots"><i></i><i></i><i></i></span>Availability
+          </button>
+          <button class="ghost" id="todayBtn">Jump to today</button>
+        </div>
         <button id="editModeBtn">Edit Availability</button>
       </div>
       <div class="edit-banner" id="editBanner">
@@ -632,6 +694,15 @@
           <button type="button" class="event-type-opt" data-type="practice">Practice</button>
           <button type="button" class="event-type-opt" data-type="meet">Meet</button>
           <button type="button" class="event-type-opt" data-type="other">Other</button>
+        </div>
+      </div>
+      <div class="kind-wrap" id="eventKindWrap">
+        <div class="event-type-label">Practice type</div>
+        <div class="event-type-picker" id="eventKindPicker">
+          <div class="event-type-slider" id="eventKindSlider"></div>
+          <button type="button" class="event-type-opt" data-kind="easy">Easy</button>
+          <button type="button" class="event-type-opt" data-kind="workout">Workout</button>
+          <button type="button" class="event-type-opt" data-kind="long_run">Long Run</button>
         </div>
       </div>
       <div class="btn-row">
@@ -724,6 +795,12 @@ let activePersonId = null;
 let viewYear, viewMonth;
 let selectedDate = null;
 let editMode = false;
+let showPastEvents = false;
+
+// The per-person availability dots are the noisiest thing on the grid, so
+// they can be switched off when you only want to read the schedule itself.
+let showAvailability = true;
+try{ showAvailability = localStorage.getItem('hawksShowAvailability') !== '0'; }catch(e){}
 
 const $ = id => document.getElementById(id);
 
@@ -764,9 +841,35 @@ const EVENT_TYPES = {
   other:    { label: 'Other',    color: 'var(--other)',    bg: 'var(--other-bg)',    text: 'var(--other)' },
 };
 const EVENT_TYPE_KEYS = Object.keys(EVENT_TYPES);
+
+// A practice is further split into easy day / workout / long run. Each kind
+// gets its own colour so the week's rhythm is readable straight off the
+// calendar grid.
+const PRACTICE_KINDS = {
+  easy:     { label: 'Easy',     color: 'var(--easy)',    bg: 'var(--easy-bg)',    text: 'var(--easy)' },
+  workout:  { label: 'Workout',  color: 'var(--workout)', bg: 'var(--workout-bg)', text: 'var(--workout)' },
+  long_run: { label: 'Long Run', color: 'var(--long)',    bg: 'var(--long-bg)',    text: 'var(--long)' },
+};
+const PRACTICE_KIND_KEYS = Object.keys(PRACTICE_KINDS);
+
+// Every event resolves to exactly one visual style: a practice with a kind is
+// coloured by that kind, anything else by its type. Kinds come first so the
+// calendar legend reads easy → workout → long run → plain practice → meet.
+const STYLE_KEYS = [...PRACTICE_KIND_KEYS, 'practice', 'meet', 'other'];
+const STYLES_BY_KEY = { ...PRACTICE_KINDS, ...EVENT_TYPES };
+
+function styleKeyOf(ev){
+  const type = ev.type || 'practice';
+  if(type === 'practice' && PRACTICE_KINDS[ev.kind]) return ev.kind;
+  return EVENT_TYPES[type] ? type : 'practice';
+}
+function eventStyle(ev){ return STYLES_BY_KEY[styleKeyOf(ev)]; }
+
 let selectedEventType = 'practice';
+let selectedEventKind = 'easy';
 let editingEventId = null;
 let adminEventType = 'practice';
+let adminEventKind = 'easy';
 
 function pad(n){return n<10?'0'+n:''+n;}
 function keyOf(y,m,d){return `${y}-${pad(m+1)}-${pad(d)}`;}
@@ -815,12 +918,12 @@ async function saveCommentRemote(dateKey, personId, text){
   await apiPost('/api/comment', { date: dateKey, personId, text });
 }
 
-async function createEventRemote(dateKey, title, time, desc, type){
-  return await apiPost('/api/events', { date: dateKey, title, time, desc, type });
+async function createEventRemote(dateKey, title, time, desc, type, kind){
+  return await apiPost('/api/events', { date: dateKey, title, time, desc, type, kind });
 }
 
-async function updateEventRemote(eventId, title, time, desc, type){
-  return await apiPost('/api/events/update', { eventId, title, time, desc, type });
+async function updateEventRemote(eventId, title, time, desc, type, kind){
+  return await apiPost('/api/events/update', { eventId, title, time, desc, type, kind });
 }
 
 async function saveRsvpRemote(eventId, personId, status){
@@ -1009,9 +1112,13 @@ function renderCalendar(){
     if(activePersonId && isAway(activePersonId, dk)) cls += ' you-away';
     if(editMode) cls += ' edit-target';
     const dayEvents = events[dk] || [];
-    const typesPresent = EVENT_TYPE_KEYS.filter(t => dayEvents.some(ev => (ev.type || 'practice') === t));
-    const marks = typesPresent.map(t => `<span class="e" style="background:${EVENT_TYPES[t].color}" title="${EVENT_TYPES[t].label}"></span>`).join('');
-    const dots = availablePeople.slice(0,10).map(p=>`<span class="d" style="background:${p.color}"></span>`).join('');
+    const stylesPresent = STYLE_KEYS.filter(k => dayEvents.some(ev => styleKeyOf(ev) === k));
+    const marks = stylesPresent.map(k => `<span class="e" style="background:${STYLES_BY_KEY[k].color}" title="${STYLES_BY_KEY[k].label}"></span>`).join('');
+    // While you're editing availability you always need to see it, whatever
+    // the toggle says.
+    const dots = (showAvailability || editMode)
+      ? availablePeople.slice(0,10).map(p=>`<span class="d" style="background:${p.color}"></span>`).join('')
+      : '';
     html += `<div class="${cls}" data-date="${dk}">
       <div class="num">${d}</div>
       <div class="event-marks">${marks}</div>
@@ -1040,6 +1147,13 @@ function onDayClick(dateKey){
   selectedDate = dateKey;
   renderCalendar();
   renderDayDetail();
+}
+
+function setAvailabilityVisible(on){
+  showAvailability = on;
+  $('availToggle').setAttribute('aria-pressed', on ? 'true' : 'false');
+  try{ localStorage.setItem('hawksShowAvailability', on ? '1' : '0'); }catch(e){}
+  renderCalendar();
 }
 
 function setEditMode(on){
@@ -1088,7 +1202,7 @@ function renderEvents(){
         if(evRsvps[pid] === 'available') availNames.push(person.name);
         else if(evRsvps[pid] === 'unavailable') unavailNames.push(person.name);
       });
-      const et = EVENT_TYPES[ev.type] || EVENT_TYPES.practice;
+      const et = eventStyle(ev);
       return `
       <div class="event-row">
         <div class="event-header">
@@ -1180,6 +1294,13 @@ function formatEventDate(dateKey){
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+// Compact form for the admin list, where the row also has to fit a time and a
+// type label on one line.
+function formatEventDateShort(dateKey){
+  const d = new Date(dateKey + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 function attendeesFor(ev){
   const evRsvps = rsvps[ev.id] || {};
   return people.filter(p => evRsvps[p.id] === 'available');
@@ -1229,20 +1350,43 @@ function textAttendees(ev){
   window.location.href = `sms:${phones.join(',')}?&body=${encodeURIComponent(body)}`;
 }
 
+// Slides one segmented picker's pill onto its active option and recolours it.
+// `keys` fixes the option order so the pill lands in the right slot.
+function paintPicker(pickerId, sliderId, attr, keys, styles, active){
+  const picker = $(pickerId);
+  if(!picker) return;
+  const idx = Math.max(0, keys.indexOf(active));
+  $(sliderId).style.transform = `translateX(${idx * 100}%)`;
+  $(sliderId).style.background = styles[active].color;
+  picker.querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset[attr] === active);
+  });
+}
+
 function setEventType(type){
   if(!EVENT_TYPES[type]) return;
   selectedEventType = type;
   renderEventTypePicker();
 }
 
+function setEventKind(kind){
+  if(!PRACTICE_KINDS[kind]) return;
+  selectedEventKind = kind;
+  renderEventTypePicker();
+}
+
 function renderEventTypePicker(){
-  const picker = $('eventTypePicker');
-  const idx = EVENT_TYPE_KEYS.indexOf(selectedEventType);
-  $('eventTypeSlider').style.transform = `translateX(${idx * 100}%)`;
-  $('eventTypeSlider').style.background = EVENT_TYPES[selectedEventType].color;
-  picker.querySelectorAll('.event-type-opt').forEach(btn=>{
-    btn.classList.toggle('active', btn.dataset.type === selectedEventType);
-  });
+  paintPicker('eventTypePicker', 'eventTypeSlider', 'type', EVENT_TYPE_KEYS, EVENT_TYPES, selectedEventType);
+  // The practice sub-type only means anything for practices.
+  $('eventKindWrap').classList.toggle('show', selectedEventType === 'practice');
+  paintPicker('eventKindPicker', 'eventKindSlider', 'kind', PRACTICE_KIND_KEYS, PRACTICE_KINDS, selectedEventKind);
+}
+
+function resetEventForm(){
+  $('eventTitle').value=''; $('eventTime').value=''; $('eventDesc').value='';
+  selectedEventType = 'practice';
+  selectedEventKind = 'easy';
+  renderEventTypePicker();
 }
 
 function setAdminEventType(type){
@@ -1251,15 +1395,26 @@ function setAdminEventType(type){
   renderAdminEventTypePicker();
 }
 
+function setAdminEventKind(kind){
+  if(!PRACTICE_KINDS[kind]) return;
+  adminEventKind = kind;
+  renderAdminEventTypePicker();
+}
+
+// The admin edit form is re-created by innerHTML on every render, so its
+// buttons are re-wired here rather than once at startup.
 function renderAdminEventTypePicker(){
-  const picker = $('adminEditTypePicker');
-  if(!picker) return;
-  const idx = EVENT_TYPE_KEYS.indexOf(adminEventType);
-  $('adminEditTypeSlider').style.transform = `translateX(${idx * 100}%)`;
-  $('adminEditTypeSlider').style.background = EVENT_TYPES[adminEventType].color;
-  picker.querySelectorAll('.event-type-opt').forEach(btn=>{
-    btn.classList.toggle('active', btn.dataset.type === adminEventType);
+  const typePicker = $('adminEditTypePicker');
+  if(!typePicker) return;
+  paintPicker('adminEditTypePicker', 'adminEditTypeSlider', 'type', EVENT_TYPE_KEYS, EVENT_TYPES, adminEventType);
+  typePicker.querySelectorAll('.event-type-opt').forEach(btn=>{
     btn.onclick = ()=> setAdminEventType(btn.dataset.type);
+  });
+
+  $('adminEditKindWrap').classList.toggle('show', adminEventType === 'practice');
+  paintPicker('adminEditKindPicker', 'adminEditKindSlider', 'kind', PRACTICE_KIND_KEYS, PRACTICE_KINDS, adminEventKind);
+  $('adminEditKindPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.onclick = ()=> setAdminEventKind(btn.dataset.kind);
   });
 }
 
@@ -1268,13 +1423,15 @@ async function addEvent(){
   const time = $('eventTime').value.trim();
   const desc = $('eventDesc').value.trim();
   if(!title){ $('eventTitle').focus(); return; }
-  const result = await createEventRemote(selectedDate, title, time, desc, selectedEventType);
-  const newEv = (result && result.event) ? result.event : {id:'e_'+Date.now(), date:selectedDate, title, time, desc, type:selectedEventType};
+  const kind = selectedEventType === 'practice' ? selectedEventKind : '';
+  const result = await createEventRemote(selectedDate, title, time, desc, selectedEventType, kind);
+  const newEv = (result && result.event)
+    ? result.event
+    : {id:'e_'+Date.now(), date:selectedDate, title, time, desc, type:selectedEventType, kind, auto:false};
   if(!events[selectedDate]) events[selectedDate] = [];
   events[selectedDate].push(newEv);
-  $('eventTitle').value=''; $('eventTime').value=''; $('eventDesc').value='';
   $('eventFormRow').classList.remove('show');
-  setEventType('practice');
+  resetEventForm();
   renderEvents();
   renderCalendar();
 }
@@ -1490,6 +1647,107 @@ function renderPostModal(){
   wirePostItems(list, renderPostModal);
 }
 
+// ---------------------------------------------------------------------------
+// Traditional week formatter
+//
+// Mirrors the template the worker applies: easy Monday, workout Tuesday, easy
+// Wednesday, workout Thursday, easy Friday. This side only draws the picker
+// and reads back what actually landed on the calendar.
+// ---------------------------------------------------------------------------
+
+const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F'];
+const WEEKS_SHOWN = 8;
+const FALLBACK_PRACTICE_TIME = '4:00 PM';
+
+let weekPracticeTime = FALLBACK_PRACTICE_TIME;
+try{ weekPracticeTime = localStorage.getItem('hawksPracticeTime') || FALLBACK_PRACTICE_TIME; }catch(e){}
+
+function mondayOf(date){
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));  // Sunday closes the week rather than opening it
+  return d;
+}
+
+function upcomingWeekStarts(n){
+  const first = mondayOf(new Date());
+  return Array.from({length: n}, (_, i)=>{
+    const d = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i * 7);
+    return keyOf(d.getFullYear(), d.getMonth(), d.getDate());
+  });
+}
+
+function weekdayKeys(weekStart){
+  const [y, m, d] = weekStart.split('-').map(Number);
+  return [0, 1, 2, 3, 4].map(i=>{
+    const x = new Date(y, m - 1, d + i);
+    return keyOf(x.getFullYear(), x.getMonth(), x.getDate());
+  });
+}
+
+function shortDate(dateKey){
+  return new Date(dateKey + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// A week reads as formatted once every open weekday carries a generated
+// practice. Days already claimed by a hand-made event don't count either way —
+// the formatter never touches them.
+function weekIsFormatted(weekStart){
+  let generated = 0;
+  for(const dk of weekdayKeys(weekStart)){
+    const list = events[dk] || [];
+    if(list.some(ev => !ev.auto)) continue;
+    if(!list.some(ev => ev.auto)) return false;
+    generated++;
+  }
+  return generated > 0;
+}
+
+// The one event that stands for a day in the mini week strip.
+function dayHeadline(dateKey){
+  const list = events[dateKey] || [];
+  if(!list.length) return null;
+  return list.find(ev => (ev.type || 'practice') === 'meet')
+    || list.find(ev => PRACTICE_KINDS[ev.kind])
+    || list[0];
+}
+
+function weekPlannerHtml(){
+  const rows = upcomingWeekStarts(WEEKS_SHOWN).map(weekStart => {
+    const days = weekdayKeys(weekStart);
+    const strip = days.map((dk, i) => {
+      const head = dayHeadline(dk);
+      const st = head ? eventStyle(head) : null;
+      const cell = st ? `background:${st.color};color:#fff` : '';
+      const hint = head
+        ? `${head.title}${head.time ? ' · ' + head.time : ''}`
+        : 'Nothing scheduled';
+      return `<span class="week-cell" style="${cell}" title="${escapeHtml(hint)}">${WEEKDAY_LETTERS[i]}</span>`;
+    }).join('');
+    return `
+      <div class="week-row">
+        <input type="checkbox" class="week-check" data-week="${weekStart}" ${weekIsFormatted(weekStart) ? 'checked' : ''}>
+        <div class="week-row-main">
+          <div class="week-range">${shortDate(days[0])} – ${shortDate(days[4])}</div>
+          <div class="week-strip">${strip}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const legend = STYLE_KEYS
+    .map(k => `<span><span class="dot" style="background:${STYLES_BY_KEY[k].color}"></span>${STYLES_BY_KEY[k].label}</span>`)
+    .join('');
+
+  return `
+    <div class="week-intro">Tick a week to fill Monday–Friday with the usual rhythm — easy, workout, easy, workout, easy. Days that already have something on them are left alone, and un-ticking only removes the practices this tool added.</div>
+    <div class="week-tools">
+      <label for="weekPracticeTime">Practice time</label>
+      <input type="text" id="weekPracticeTime" value="${escapeHtml(weekPracticeTime)}" placeholder="${FALLBACK_PRACTICE_TIME}">
+    </div>
+    ${rows}
+    <div class="week-legend">${legend}</div>
+  `;
+}
+
 function renderAdminModal(){
   const peopleHtml = people.length
     ? people.map(p => `
@@ -1515,9 +1773,7 @@ function renderAdminModal(){
       </div>`).join('')
     : '<div class="admin-empty">No posts yet.</div>';
 
-  const allEvents = Object.values(events).flat().sort((a, b) => a.date.localeCompare(b.date));
-  const eventsHtml = allEvents.length
-    ? allEvents.map(ev => {
+  const adminEventRow = ev => {
       if(ev.id === editingEventId){
         return `
       <div class="admin-row editing">
@@ -1534,6 +1790,15 @@ function renderAdminModal(){
               <button type="button" class="event-type-opt" data-type="other">Other</button>
             </div>
           </div>
+          <div class="kind-wrap" id="adminEditKindWrap">
+            <div class="event-type-label">Practice type</div>
+            <div class="event-type-picker" id="adminEditKindPicker">
+              <div class="event-type-slider" id="adminEditKindSlider"></div>
+              <button type="button" class="event-type-opt" data-kind="easy">Easy</button>
+              <button type="button" class="event-type-opt" data-kind="workout">Workout</button>
+              <button type="button" class="event-type-opt" data-kind="long_run">Long Run</button>
+            </div>
+          </div>
           <div class="btn-row">
             <button type="button" data-save-event="${ev.id}">Save</button>
             <button type="button" class="ghost" data-cancel-event-edit="1">Cancel</button>
@@ -1541,28 +1806,55 @@ function renderAdminModal(){
         </div>
       </div>`;
       }
-      const et = EVENT_TYPES[ev.type] || EVENT_TYPES.practice;
+      const et = eventStyle(ev);
       return `
       <div class="admin-row">
         <span class="dot" style="background:${et.color}" title="${et.label}"></span>
         <div class="admin-row-main">
           <div class="admin-row-title">${escapeHtml(ev.title)}</div>
-          <div class="admin-row-sub">${formatEventDate(ev.date)}${ev.time ? ' · ' + escapeHtml(ev.time) : ''}</div>
+          <div class="admin-row-sub">${formatEventDateShort(ev.date)}${ev.time ? ' · ' + escapeHtml(ev.time) : ''} · ${et.label}</div>
         </div>
         <button type="button" class="admin-edit-btn" data-edit-event="${ev.id}">Edit</button>
         <button type="button" class="admin-delete-btn" data-delete-event="${ev.id}">Delete</button>
       </div>`;
-    }).join('')
-    : '<div class="admin-empty">No events yet.</div>';
+  };
+
+  // Events lead the panel: they're what actually needs changing day to day,
+  // and the ones you can still act on come first. Anything already run is
+  // folded away behind a toggle.
+  const today = todayKey();
+  const allEvents = Object.values(events).flat().sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = allEvents.filter(ev => ev.date >= today);
+  const past = allEvents.filter(ev => ev.date < today).reverse();
+
+  const upcomingHtml = upcoming.length
+    ? upcoming.map(adminEventRow).join('')
+    : '<div class="admin-empty">Nothing scheduled from today onward.</div>';
+
+  const pastHtml = past.length
+    ? `<button type="button" class="ghost admin-past-toggle" id="togglePastEvents">${showPastEvents ? 'Hide' : 'Show'} ${past.length} past event${past.length === 1 ? '' : 's'}</button>
+       ${showPastEvents ? past.map(adminEventRow).join('') : ''}`
+    : '';
 
   $('adminModalList').innerHTML = `
-    <div class="admin-section-label">People</div>
-    ${peopleHtml}
+    <div class="admin-section-label">Events</div>
+    ${upcomingHtml}
+    ${pastHtml}
+    <div class="admin-section-label">Week schedule</div>
+    ${weekPlannerHtml()}
     <div class="admin-section-label">Posts</div>
     ${postsHtml}
-    <div class="admin-section-label">Events</div>
-    ${eventsHtml}
+    <div class="admin-section-label">People</div>
+    ${peopleHtml}
   `;
+
+  const pastBtn = $('togglePastEvents');
+  if(pastBtn){
+    pastBtn.addEventListener('click', ()=>{
+      showPastEvents = !showPastEvents;
+      renderAdminModal();
+    });
+  }
 
   $('adminModalList').querySelectorAll('[data-delete-person]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
@@ -1606,6 +1898,7 @@ function renderAdminModal(){
       if(!ev) return;
       editingEventId = ev.id;
       adminEventType = ev.type || 'practice';
+      adminEventKind = PRACTICE_KINDS[ev.kind] ? ev.kind : 'easy';
       renderAdminModal();
     });
   });
@@ -1622,15 +1915,35 @@ function renderAdminModal(){
       const time = $('adminEditTime').value.trim();
       const desc = $('adminEditDesc').value.trim();
       if(!title){ $('adminEditTitle').focus(); return; }
-      await updateEventRemote(id, title, time, desc, adminEventType);
+      const kind = adminEventType === 'practice' ? adminEventKind : '';
+      await updateEventRemote(id, title, time, desc, adminEventType, kind);
       const ev = findEventById(id);
-      if(ev){ ev.title = title; ev.time = time; ev.desc = desc; ev.type = adminEventType; }
+      if(ev){ ev.title = title; ev.time = time; ev.desc = desc; ev.type = adminEventType; ev.kind = kind; }
       editingEventId = null;
       renderAdminModal();
       renderEvents();
       renderCalendar();
     });
   });
+  $('weekPracticeTime').addEventListener('input', e=>{
+    weekPracticeTime = e.target.value;
+    try{ localStorage.setItem('hawksPracticeTime', weekPracticeTime); }catch(err){}
+  });
+  $('adminModalList').querySelectorAll('.week-check').forEach(box=>{
+    box.addEventListener('change', async ()=>{
+      box.disabled = true;
+      const path = box.checked ? '/api/schedule/week/apply' : '/api/schedule/week/clear';
+      await apiPost(path, {
+        weekStart: box.dataset.week,
+        time: weekPracticeTime.trim() || FALLBACK_PRACTICE_TIME,
+      });
+      await loadState();
+      renderAdminModal();
+      renderCalendar();
+      renderDayDetail();
+    });
+  });
+
   if(editingEventId) renderAdminEventTypePicker();
 }
 
@@ -1669,6 +1982,7 @@ function wireUI(){
     if(secretTapCount >= 3){
       secretTapCount = 0;
       clearTimeout(secretTapTimer);
+      showPastEvents = false;
       renderAdminModal();
       $('adminModalOverlay').classList.add('show');
     }
@@ -1854,19 +2168,23 @@ function wireUI(){
   });
   $('doneEditBtn').addEventListener('click', ()=> setEditMode(false));
 
+  $('availToggle').addEventListener('click', ()=> setAvailabilityVisible(!showAvailability));
+
   $('eventTypePicker').querySelectorAll('.event-type-opt').forEach(btn=>{
     btn.addEventListener('click', ()=> setEventType(btn.dataset.type));
+  });
+  $('eventKindPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
+    btn.addEventListener('click', ()=> setEventKind(btn.dataset.kind));
   });
 
   $('toggleEventForm').addEventListener('click', ()=>{
     $('eventFormRow').classList.add('show');
-    setEventType('practice');
+    resetEventForm();
     $('eventTitle').focus();
   });
   $('cancelEventBtn').addEventListener('click', ()=>{
     $('eventFormRow').classList.remove('show');
-    $('eventTitle').value=''; $('eventTime').value=''; $('eventDesc').value='';
-    setEventType('practice');
+    resetEventForm();
   });
   $('saveEventBtn').addEventListener('click', addEvent);
 
@@ -1891,6 +2209,7 @@ async function init(){
   selectedDate = todayKey();
   renderDow();
   wireUI();
+  setAvailabilityVisible(showAvailability);
   renderEventTypePicker();
   await loadState();
   renderAll();

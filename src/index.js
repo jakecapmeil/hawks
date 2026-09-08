@@ -22,7 +22,7 @@ async function getState(db) {
     db.prepare('SELECT id, name, color, phone, email FROM people').all(),
     db.prepare('SELECT person_id, date FROM away_days').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
-    db.prepare('SELECT id, date, title, time, description, type FROM events').all(),
+    db.prepare('SELECT id, date, title, time, description, type, kind, auto FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
     db.prepare('SELECT person_id, tag FROM person_tags').all(),
     db.prepare('SELECT id, person_id, text, header, created_at FROM posts').all(),
@@ -47,6 +47,8 @@ async function getState(db) {
       time: row.time,
       desc: row.description,
       type: row.type,
+      kind: row.kind || '',
+      auto: !!row.auto,
     });
   }
 
@@ -128,20 +130,29 @@ async function saveComment(db, body) {
 
 const VALID_EVENT_TYPES = ['practice', 'meet', 'other'];
 
+// Practice sub-type. Only meaningful for type 'practice'; '' means unspecified.
+const VALID_EVENT_KINDS = ['', 'easy', 'workout', 'long_run'];
+
+function normalizeKind(type, rawKind) {
+  if (type !== 'practice') return '';
+  return VALID_EVENT_KINDS.includes(rawKind) ? rawKind : '';
+}
+
 async function createEvent(db, body) {
   const date = str(body?.date, 20);
   const title = str(body?.title, 200);
   const time = str(body?.time, 40);
   const desc = str(body?.desc, 2000);
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
+  const kind = normalizeKind(type, body?.kind);
   if (!date || !title) return json({ error: 'Missing date or title' }, 400);
 
   const id = 'e_' + crypto.randomUUID();
   await db.prepare(
-    'INSERT INTO events (id, date, title, time, description, type) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, date, title, time, desc, type).run();
+    'INSERT INTO events (id, date, title, time, description, type, kind) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, date, title, time, desc, type, kind).run();
 
-  return json({ event: { id, date, title, time, desc, type } });
+  return json({ event: { id, date, title, time, desc, type, kind, auto: false } });
 }
 
 const VALID_TAGS = ['sick', 'injured', 'cross_training'];
@@ -205,11 +216,12 @@ async function updateEvent(db, body) {
   const time = str(body?.time, 40);
   const desc = str(body?.desc, 2000);
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
+  const kind = normalizeKind(type, body?.kind);
   if (!eventId || !title) return json({ error: 'Missing eventId or title' }, 400);
 
   await db.prepare(
-    'UPDATE events SET title = ?, time = ?, description = ?, type = ? WHERE id = ?'
-  ).bind(title, time, desc, type, eventId).run();
+    'UPDATE events SET title = ?, time = ?, description = ?, type = ?, kind = ? WHERE id = ?'
+  ).bind(title, time, desc, type, kind, eventId).run();
 
   return json({ ok: true });
 }
@@ -243,6 +255,96 @@ async function saveRsvp(db, body) {
   return json({ ok: true });
 }
 
+// ---------------------------------------------------------------------------
+// Traditional week formatter
+//
+// The team's default rhythm: easy Monday, workout Tuesday, easy Wednesday,
+// workout Thursday, easy Friday. The admin panel ticks a week into this shape
+// and un-ticks it back out. Generated rows carry auto = 1 so un-ticking only
+// ever removes what the formatter itself created.
+// ---------------------------------------------------------------------------
+
+const WEEK_TEMPLATE = [
+  { offset: 0, kind: 'easy',    title: 'Easy Run' },
+  { offset: 1, kind: 'workout', title: 'Workout' },
+  { offset: 2, kind: 'easy',    title: 'Easy Run' },
+  { offset: 3, kind: 'workout', title: 'Workout' },
+  { offset: 4, kind: 'easy',    title: 'Easy Run' },
+];
+
+const DEFAULT_PRACTICE_TIME = '4:00 PM';
+
+function addDays(dateKey, n) {
+  const d = new Date(dateKey + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// Returns the Monday key, or null if the input isn't a valid Monday.
+function parseWeekStart(raw) {
+  const weekStart = str(raw, 20);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return null;
+  const d = new Date(weekStart + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime()) || d.getUTCDay() !== 1) return null;
+  return weekStart;
+}
+
+async function applyWeekTemplate(db, body) {
+  const weekStart = parseWeekStart(body?.weekStart);
+  if (!weekStart) return json({ error: 'weekStart must be a Monday in YYYY-MM-DD form' }, 400);
+  const time = str(body?.time, 40) || DEFAULT_PRACTICE_TIME;
+
+  const dates = WEEK_TEMPLATE.map(t => addDays(weekStart, t.offset));
+  const existing = await db.prepare(
+    'SELECT date, type, auto FROM events WHERE date >= ? AND date <= ?'
+  ).bind(dates[0], dates[dates.length - 1]).all();
+
+  // The formatter only fills open weekday slots. A day with a hand-made event
+  // on it — a meet, a one-off practice, anything — keeps what it has, and a
+  // day that already holds a generated practice is left alone so re-applying a
+  // week is a no-op rather than a source of duplicates.
+  const occupied = new Set();
+  const alreadyGenerated = new Set();
+  for (const row of existing.results) {
+    if (row.auto) alreadyGenerated.add(row.date);
+    else occupied.add(row.date);
+  }
+
+  const created = [];
+  const stmts = [];
+  WEEK_TEMPLATE.forEach((t, i) => {
+    const date = dates[i];
+    if (occupied.has(date) || alreadyGenerated.has(date)) return;
+    const id = 'e_' + crypto.randomUUID();
+    created.push({ id, date, title: t.title, time, desc: '', type: 'practice', kind: t.kind, auto: true });
+    stmts.push(db.prepare(
+      "INSERT INTO events (id, date, title, time, description, type, kind, auto) VALUES (?, ?, ?, ?, '', 'practice', ?, 1)"
+    ).bind(id, date, t.title, time, t.kind));
+  });
+
+  if (stmts.length) await db.batch(stmts);
+  return json({ created, skipped: dates.filter(d => occupied.has(d)) });
+}
+
+async function clearWeekTemplate(db, body) {
+  const weekStart = parseWeekStart(body?.weekStart);
+  if (!weekStart) return json({ error: 'weekStart must be a Monday in YYYY-MM-DD form' }, 400);
+
+  const rows = await db.prepare(
+    'SELECT id FROM events WHERE auto = 1 AND date >= ? AND date <= ?'
+  ).bind(weekStart, addDays(weekStart, 4)).all();
+
+  const ids = rows.results.map(r => r.id);
+  if (ids.length) {
+    const holes = ids.map(() => '?').join(',');
+    await db.batch([
+      db.prepare(`DELETE FROM rsvps WHERE event_id IN (${holes})`).bind(...ids),
+      db.prepare(`DELETE FROM events WHERE id IN (${holes})`).bind(...ids),
+    ]);
+  }
+  return json({ removed: ids });
+}
+
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
@@ -267,6 +369,8 @@ export default {
         if (pathname === '/api/posts/delete') return await deletePost(env.DB, body);
         if (pathname === '/api/events/update') return await updateEvent(env.DB, body);
         if (pathname === '/api/events/delete') return await deleteEvent(env.DB, body);
+        if (pathname === '/api/schedule/week/apply') return await applyWeekTemplate(env.DB, body);
+        if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
       }
     } catch (err) {
       console.error(err);
