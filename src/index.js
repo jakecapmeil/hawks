@@ -350,22 +350,22 @@ async function applyWeekTemplate(db, body) {
     'SELECT date, type, auto FROM events WHERE date >= ? AND date <= ?'
   ).bind(dates[0], dates[dates.length - 1]).all();
 
-  // The formatter only fills open weekday slots. A day with a hand-made event
-  // on it — a meet, a one-off practice, anything — keeps what it has, and a
-  // day that already holds a generated practice is left alone so re-applying a
-  // week is a no-op rather than a source of duplicates.
-  const occupied = new Set();
+
+  // The rhythm goes onto all five weekdays, always. A day can hold more than
+  // one event, so anything already scheduled stays exactly where it is and the
+  // generated practice sits alongside it. The only thing that blocks a day is
+  // a practice this tool already generated there, so re-applying a week is a
+  // no-op rather than a source of duplicates.
   const alreadyGenerated = new Set();
   for (const row of existing.results) {
     if (row.auto) alreadyGenerated.add(row.date);
-    else occupied.add(row.date);
   }
 
   const created = [];
   const stmts = [];
   WEEK_TEMPLATE.forEach((t, i) => {
     const date = dates[i];
-    if (occupied.has(date) || alreadyGenerated.has(date)) return;
+    if (alreadyGenerated.has(date)) return;
     const id = 'e_' + crypto.randomUUID();
     created.push({ id, date, title: t.title, time, desc: '', type: 'practice', kind: t.kind, auto: true });
     stmts.push(db.prepare(
@@ -374,7 +374,7 @@ async function applyWeekTemplate(db, body) {
   });
 
   if (stmts.length) await db.batch(stmts);
-  return json({ created, skipped: dates.filter(d => occupied.has(d)) });
+  return json({ created });
 }
 
 async function clearWeekTemplate(db, body) {

@@ -324,8 +324,8 @@
   .day.today{background:var(--gold-bg);border-color:var(--gold);}
   .day.today .num{color:var(--gold-ink);}
   .day.edit-target{background:var(--green-bg);border-color:var(--green);}
-  .event-marks{display:flex;gap:2px;justify-content:center;margin-top:2px;height:3px;}
-  .event-marks .e{width:9px;height:3px;border-radius:2px;}
+  .event-marks{display:flex;gap:3px;justify-content:center;margin-top:3px;height:5px;}
+  .event-marks .e{width:12px;height:5px;border-radius:2.5px;}
   .dots{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:2px;max-width:100%;}
   .dots .d{width:5px;height:5px;border-radius:50%;}
   .day.you-away{opacity:0.5;}
@@ -719,7 +719,7 @@
       </div>
       <div class="cal-toolbar">
         <div class="cal-toolbar-left">
-          <button class="chip-toggle" id="availToggle" type="button" aria-pressed="true"
+          <button class="chip-toggle" id="availToggle" type="button" aria-pressed="false"
                   title="Show or hide who's available on each day">
             <span class="chip-dots"><i></i><i></i><i></i></span>Availability
           </button>
@@ -911,10 +911,10 @@ let showPastEvents = false;
 let currentPage = 'calendar';
 let bodyMapView = 'front';
 
-// The per-person availability dots are the noisiest thing on the grid, so
-// they can be switched off when you only want to read the schedule itself.
-let showAvailability = true;
-try{ showAvailability = localStorage.getItem('hawksShowAvailability') !== '0'; }catch(e){}
+// The per-person availability dots are the noisiest thing on the grid, so the
+// calendar starts on the schedule alone and the toggle opts back in.
+let showAvailability = false;
+try{ showAvailability = localStorage.getItem('hawksShowAvailability') === '1'; }catch(e){}
 
 const $ = id => document.getElementById(id);
 
@@ -1843,40 +1843,32 @@ function shortDate(dateKey){
   return new Date(dateKey + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// A week reads as formatted once every open weekday carries a generated
-// practice. Days already claimed by a hand-made event don't count either way —
-// the formatter never touches them.
+// The rhythm goes onto all five weekdays, so a week reads as formatted only
+// once every one of them carries a generated practice.
 function weekIsFormatted(weekStart){
-  let generated = 0;
-  for(const dk of weekdayKeys(weekStart)){
-    const list = events[dk] || [];
-    if(list.some(ev => !ev.auto)) continue;
-    if(!list.some(ev => ev.auto)) return false;
-    generated++;
-  }
-  return generated > 0;
+  return weekdayKeys(weekStart).every(dk => (events[dk] || []).some(ev => ev.auto));
 }
 
-// The one event that stands for a day in the mini week strip.
-function dayHeadline(dateKey){
+// A day can hold several events, so its cell bands together every distinct
+// style on it — a meet with a workout alongside reads as two stripes, not one.
+function dayCellStyle(dateKey){
   const list = events[dateKey] || [];
-  if(!list.length) return null;
-  return list.find(ev => (ev.type || 'practice') === 'meet')
-    || list.find(ev => PRACTICE_KINDS[ev.kind])
-    || list[0];
+  if(!list.length) return { css: '', hint: 'Nothing scheduled' };
+  const keys = STYLE_KEYS.filter(k => list.some(ev => styleKeyOf(ev) === k));
+  const step = 100 / keys.length;
+  const bands = keys.map((k, i) => `${STYLES_BY_KEY[k].color} ${i * step}% ${(i + 1) * step}%`);
+  return {
+    css: `background:linear-gradient(90deg, ${bands.join(', ')});color:#fff`,
+    hint: list.map(ev => `${ev.title}${ev.time ? ' · ' + ev.time : ''}`).join('\n'),
+  };
 }
 
 function weekPlannerHtml(){
   const rows = upcomingWeekStarts(WEEKS_SHOWN).map(weekStart => {
     const days = weekdayKeys(weekStart);
     const strip = days.map((dk, i) => {
-      const head = dayHeadline(dk);
-      const st = head ? eventStyle(head) : null;
-      const cell = st ? `background:${st.color};color:#fff` : '';
-      const hint = head
-        ? `${head.title}${head.time ? ' · ' + head.time : ''}`
-        : 'Nothing scheduled';
-      return `<span class="week-cell" style="${cell}" title="${escapeHtml(hint)}">${WEEKDAY_LETTERS[i]}</span>`;
+      const { css, hint } = dayCellStyle(dk);
+      return `<span class="week-cell" style="${css}" title="${escapeHtml(hint)}">${WEEKDAY_LETTERS[i]}</span>`;
     }).join('');
     return `
       <div class="week-row">
@@ -1893,7 +1885,7 @@ function weekPlannerHtml(){
     .join('');
 
   return `
-    <div class="week-intro">Tick a week to fill Monday–Friday with the usual rhythm — easy, workout, easy, workout, easy. Days that already have something on them are left alone, and un-ticking only removes the practices this tool added.</div>
+    <div class="week-intro">Tick a week to put the usual rhythm on all five weekdays — easy, workout, easy, workout, easy. Nothing already scheduled is touched or replaced; a day can hold a meet and a practice at once. Un-ticking removes only the practices this tool added.</div>
     <div class="week-tools">
       <label for="weekPracticeTime">Practice time</label>
       <input type="text" id="weekPracticeTime" value="${escapeHtml(weekPracticeTime)}" placeholder="${FALLBACK_PRACTICE_TIME}">
