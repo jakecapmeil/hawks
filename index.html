@@ -164,7 +164,7 @@
 
   /* Taps shouldn't flash a grey box — every control here has its own
      pressed state. */
-  a,button,[role=button],input,select,textarea,.day,.status.clickable,.active-chip{
+  a,button,[role=button],input,select,textarea,.day,.status.clickable{
     -webkit-tap-highlight-color:transparent;
   }
   /* Visible keyboard focus, invisible on pointer taps (HIG: focus should be
@@ -323,7 +323,8 @@
     letter-spacing:var(--tr-callout);
     cursor:pointer;
   }
-  .dd-trigger span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}
+  .dd-value{display:flex;align-items:center;gap:7px;min-width:0;flex:1;}
+  .dd-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}
   .dd-trigger .dd-chevron{width:15px;height:15px;flex-shrink:0;color:var(--ink-soft);transition:transform .2s ease;}
   .dd.open .dd-trigger{border-color:var(--ink);}
   .dd.open .dd-chevron{transform:rotate(180deg);}
@@ -371,25 +372,6 @@
     font-size:var(--fs-headline);letter-spacing:var(--tr-headline);padding:0 18px;
   }
 
-  .active-chip{
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-    height:var(--btn-h);
-    font-size:var(--fs-subhead);
-    font-weight:600;
-    letter-spacing:var(--tr-subhead);
-    padding:0 14px;
-    border-radius:var(--r-control);
-    background:var(--fill);
-    color:var(--on-fill);
-    max-width:100%;
-    overflow:hidden;
-    cursor:pointer;
-    user-select:none;
-    -webkit-touch-callout:none;
-    -webkit-user-select:none;
-  }
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
 
   #newPersonRow{display:none;flex-direction:column;gap:10px;margin-top:10px;}
@@ -897,14 +879,18 @@
   <div class="card">
     <div class="identity-block" style="padding-bottom:0;margin-bottom:0;border-bottom:none;">
       <div class="who-row">
-        <span id="activeChip" title="Hold to edit your name and color"></span>
         <div class="dd" id="personDropdown">
-          <button type="button" class="dd-trigger" id="personDropdownBtn">
-            <span id="personDropdownLabel">Select your name…</span>
+          <button type="button" class="dd-trigger" id="personDropdownBtn" aria-haspopup="listbox" aria-expanded="false">
+            <span class="dd-value">
+              <span class="dot" id="personDropdownDot" hidden></span>
+              <span class="dd-label" id="personDropdownLabel">Select your name…</span>
+              <span id="personDropdownTags"></span>
+            </span>
             <svg class="dd-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </button>
-          <div class="dd-menu pop-menu" id="personDropdownMenu"></div>
+          <div class="dd-menu pop-menu" id="personDropdownMenu" role="listbox"></div>
         </div>
+        <button class="ghost" id="editProfileBtn" hidden>Edit</button>
         <button class="ghost" id="newPersonBtn">+ New person</button>
       </div>
       <div id="newPersonRow">
@@ -1369,6 +1355,7 @@ function personTagsHtml(personId){
 function closePersonDropdown(){
   $('personDropdown').classList.remove('open');
   $('personDropdownMenu').classList.remove('show');
+  $('personDropdownBtn').setAttribute('aria-expanded', 'false');
 }
 
 function selectPerson(personId){
@@ -1393,19 +1380,29 @@ function renderPersonSelect(){
     btn.addEventListener('click', ()=> selectPerson(btn.dataset.personOption));
   });
 
+  // The trigger is the only place the current identity is shown — it used to
+  // be mirrored by a chip sitting right next to it, which said the same name
+  // twice and crowded the row.
   const label = $('personDropdownLabel');
-  const chip = $('activeChip');
+  const dot = $('personDropdownDot');
+  const tags = $('personDropdownTags');
+  const setIdentity = (name, color, tagHtml) => {
+    label.textContent = name;
+    dot.hidden = !color;
+    if(color) dot.style.background = color;
+    tags.innerHTML = tagHtml || '';
+  };
   if(activePersonId === COACH_ID){
-    label.textContent = 'Coach';
-    chip.innerHTML = `<span class="active-chip"><span class="dot" style="background:${COACH_COLOR}"></span>Coach</span>`;
+    setIdentity('Coach', COACH_COLOR, '');
   } else if(activePersonId){
     const p = people.find(x=>x.id===activePersonId);
-    label.textContent = p ? p.name : 'Select your name…';
-    chip.innerHTML = p ? `<span class="active-chip"><span class="dot" style="background:${p.color}"></span>${escapeHtml(p.name)}${personTagsHtml(p.id)}</span>` : '';
+    setIdentity(p ? p.name : 'Select your name…', p ? p.color : '', p ? personTagsHtml(p.id) : '');
   } else {
-    label.textContent = 'Select your name…';
-    chip.innerHTML = '';
+    setIdentity('Select your name…', '', '');
   }
+  // Editing your profile used to be reachable only by holding the chip — a
+  // hidden gesture with no visible alternative.
+  $('editProfileBtn').hidden = !isRealPerson();
 }
 
 async function addPerson(name){
@@ -2695,6 +2692,7 @@ function wireUI(){
     e.stopPropagation();
     const open = $('personDropdown').classList.toggle('open');
     $('personDropdownMenu').classList.toggle('show', open);
+    $('personDropdownBtn').setAttribute('aria-expanded', String(open));
   });
   document.addEventListener('click', e=>{
     if(!$('personDropdown').contains(e.target)) closePersonDropdown();
@@ -2730,16 +2728,7 @@ function wireUI(){
     $('colorHex').textContent = e.target.value.toUpperCase();
   });
 
-  let pressStart = 0;
-  const chip = $('activeChip');
-  chip.addEventListener('pointerdown', ()=>{ pressStart = Date.now(); });
-  chip.addEventListener('pointerup', ()=>{
-    if(!activePersonId) return;
-    if(Date.now() - pressStart >= 500){
-      openEditProfile();
-    }
-  });
-  chip.addEventListener('contextmenu', e=> e.preventDefault());
+  $('editProfileBtn').addEventListener('click', openEditProfile);
 
   $('editPersonColor').addEventListener('input', e=>{
     $('editPersonColorHex').textContent = e.target.value.toUpperCase();
