@@ -60,6 +60,7 @@
     --info:#1c6b8a;
     --info-bg:#e1eef3;
     --practice:#e0a415;
+    --practice-ink:#8a6206;
     --practice-bg:#faf0d2;
     --meet:#7a4fae;
     --meet-bg:#ece1f7;
@@ -72,6 +73,7 @@
     --long:#1c6b8a;
     --long-bg:#e1eef3;
     --muted-bg:#e7e1d8;
+    --track:#e7e1d8;
     /* Matches the vendored body-muscles library's own INTENSITY_COLORS[5]/[8]
        and its neutral fill (see vendor/body-muscles/), so the legend, the
        team-status pills, and the body map itself all agree on what
@@ -120,6 +122,7 @@
       --info:#6fc7e8;
       --info-bg:#123540;
       --practice:#f0b843;
+      --practice-ink:#f0b843;
       --practice-bg:#3d3010;
       --meet:#c4a0e8;
       --meet-bg:#3a2b52;
@@ -132,6 +135,7 @@
       --long:#6fc7e8;
       --long-bg:#123540;
       --muted-bg:#2c2635;
+      --track:#100d14;
       --sore-ink:#f7b878;
       --sore-bg:#3d2410;
       --pain-ink:#ffb3a0;
@@ -271,7 +275,7 @@
      segment, sentence-case labels at subhead weight. */
   .page-tabs{
     display:flex;gap:3px;margin-bottom:14px;
-    background:var(--muted-bg);border-radius:var(--r-control);padding:3px;
+    background:var(--track);border-radius:var(--r-control);padding:3px;
   }
   .page-tab{
     flex:1;height:38px;
@@ -342,11 +346,11 @@
   button{
     font-family:var(--font-ui);
     height:var(--btn-h);
-    padding:0 18px;
+    padding:0 14px;
     border-radius:var(--r-control);
-    font-size:var(--fs-headline);
-    line-height:var(--lh-headline);
-    letter-spacing:var(--tr-headline);
+    font-size:var(--fs-subhead);
+    line-height:var(--lh-subhead);
+    letter-spacing:var(--tr-subhead);
     font-weight:600;
     border:1px solid var(--fill);
     background:var(--fill);
@@ -362,6 +366,10 @@
     border:1px solid var(--line);
   }
   button:disabled{opacity:0.4;cursor:default;}
+  /* The one committing action in a form gets body-sized emphasis. */
+  #submitPostBtn,#saveEventBtn,#addPersonBtn,#saveEditPersonBtn,#saveNoteBtn{
+    font-size:var(--fs-headline);letter-spacing:var(--tr-headline);padding:0 18px;
+  }
 
   .active-chip{
     display:inline-flex;
@@ -502,8 +510,8 @@
   .section-label:first-child{margin-top:0;}
 
   .event-row{
-    padding:10px 0;
-    border-bottom:1px dashed var(--line);
+    padding:12px 0;
+    border-bottom:1px solid var(--line);
   }
   .event-row:last-child{border-bottom:none;}
   .event-header{display:flex;align-items:stretch;gap:9px;}
@@ -539,7 +547,7 @@
   /* event type picker — segmented slider */
   .event-type-picker{
     position:relative;display:flex;gap:2px;
-    background:var(--bg);border:1px solid var(--line);
+    background:var(--track);border:1px solid var(--line);
     border-radius:calc(var(--r-control) + 2px);padding:3px;margin-top:2px;
   }
   .event-type-slider{
@@ -966,7 +974,7 @@
           </button>
           <button class="ghost" id="todayBtn">Jump to today</button>
         </div>
-        <button id="editModeBtn">Edit Availability</button>
+        <button id="editModeBtn">Edit availability</button>
       </div>
       <div class="edit-banner" id="editBanner">
         <span>Tap days to toggle your availability</span>
@@ -1193,7 +1201,7 @@ const HEALTH_KEYS = Object.keys(HEALTH_STATES);
 
 const TRAINING_STATES = {
   resting:       { label: 'Resting',        color: 'var(--other)',    bg: 'var(--other-bg)' },
-  running:       { label: 'Running',        color: 'var(--practice)', bg: 'var(--practice-bg)' },
+  running:       { label: 'Running',        color: 'var(--practice-ink)', bg: 'var(--practice-bg)' },
   crosstraining: { label: 'Cross-training', color: 'var(--meet)',     bg: 'var(--meet-bg)' },
 };
 const TRAINING_KEYS = Object.keys(TRAINING_STATES);
@@ -1529,7 +1537,7 @@ function setAvailabilityVisible(on){
 function setEditMode(on){
   editMode = on;
   $('editModeBtn').classList.toggle('active', on);
-  $('editModeBtn').textContent = on ? 'Editing…' : 'Edit Availability';
+  $('editModeBtn').textContent = on ? 'Editing…' : 'Edit availability';
   $('editBanner').classList.toggle('show', on);
   renderCalendar();
 }
