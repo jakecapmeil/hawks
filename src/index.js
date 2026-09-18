@@ -18,14 +18,21 @@ async function readBody(request) {
 }
 
 async function getState(db) {
-  const [people, overrides, comments, events, rsvps, bodyMarks, posts] = await Promise.all([
-    db.prepare('SELECT id, name, color, phone, email, default_status, health_status, training_status FROM people').all(),
+  const [people, overrides, comments, events, rsvps, bodyMarks, posts, locations, travelEstimates] = await Promise.all([
+    db.prepare(
+      `SELECT id, name, color, phone, email, default_status, health_status, training_status,
+              first_name, class_year, track_id, date_entered, borough, home_address,
+              out_mon, out_tue, out_wed, out_thu, out_fri, personal_notes
+       FROM people`
+    ).all(),
     db.prepare('SELECT person_id, date, status FROM availability_overrides').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
-    db.prepare('SELECT id, date, title, time, description, type, kind, auto FROM events').all(),
+    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, auto FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
     db.prepare('SELECT person_id, part, status FROM body_marks').all(),
     db.prepare('SELECT id, person_id, text, header, created_at FROM posts').all(),
+    db.prepare('SELECT id, name, address, kind FROM locations').all(),
+    db.prepare('SELECT person_id, location_id, daypart, minutes, note FROM travel_estimates').all(),
   ]);
 
   const overridesMap = {};
@@ -45,6 +52,7 @@ async function getState(db) {
       date: row.date,
       title: row.title,
       time: row.time,
+      endTime: row.end_time || '',
       desc: row.description,
       type: row.type,
       kind: row.kind || '',
@@ -78,6 +86,8 @@ async function getState(db) {
     rsvps: rsvpsMap,
     body: bodyMap,
     posts: postsList,
+    locations: locations.results,
+    travelEstimates: travelEstimates.results,
   };
 }
 
@@ -93,6 +103,80 @@ async function upsertPerson(db, body) {
     `INSERT INTO people (id, name, color, phone, email) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, phone=excluded.phone, email=excluded.email`
   ).bind(id, name, color, phone, email).run();
+
+  return json({ ok: true });
+}
+
+const VALID_CLASS_YEARS = ['', 'Freshman', 'Sophomore', 'Junior', 'Senior'];
+
+function outPeriod(v) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n >= 1 && n <= 12 ? n : null;
+}
+
+async function upsertPersonal(db, body, env, ctx) {
+  const personId = str(body?.personId, 100);
+  if (!personId) return json({ error: 'Missing personId' }, 400);
+
+  const firstName = str(body?.firstName, 100);
+  const classYear = VALID_CLASS_YEARS.includes(body?.classYear) ? body.classYear : '';
+  const trackId = str(body?.trackId, 40);
+  const dateEntered = str(body?.dateEntered, 20);
+  const borough = str(body?.borough, 60);
+  const homeAddress = str(body?.homeAddress, 300);
+  const outMon = outPeriod(body?.outMon);
+  const outTue = outPeriod(body?.outTue);
+  const outWed = outPeriod(body?.outWed);
+  const outThu = outPeriod(body?.outThu);
+  const outFri = outPeriod(body?.outFri);
+  const personalNotes = str(body?.personalNotes, 2000);
+
+  const result = await db.prepare(
+    `UPDATE people SET first_name = ?, class_year = ?, track_id = ?, date_entered = ?, borough = ?,
+       home_address = ?, out_mon = ?, out_tue = ?, out_wed = ?, out_thu = ?, out_fri = ?, personal_notes = ?
+     WHERE id = ?`
+  ).bind(firstName, classYear, trackId, dateEntered, borough, homeAddress, outMon, outTue, outWed, outThu, outFri, personalNotes, personId).run();
+
+  if (!result.meta.changes) return json({ error: 'Unknown person' }, 400);
+  if (ctx) ctx.waitUntil(syncPersonToSheet(db, personId, env).catch(err => console.error('sheet sync failed', err)));
+  return json({ ok: true });
+}
+
+// Fire-and-forget push of one person's row to the coach's Google Sheet via a
+// bound Apps Script web app. Absent config, this is simply a no-op — the
+// Personal tab always writes to D1 first and never depends on the sheet.
+async function syncPersonToSheet(db, personId, env) {
+  if (!env?.SHEETS_SYNC_URL || !env?.SHEETS_SYNC_SECRET) return;
+  const person = await db.prepare(
+    `SELECT id, name, first_name, class_year, track_id, date_entered, phone, email, borough,
+            home_address, out_mon, out_tue, out_wed, out_thu, out_fri, personal_notes
+     FROM people WHERE id = ?`
+  ).bind(personId).first();
+  if (!person) return;
+
+  await fetch(env.SHEETS_SYNC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret: env.SHEETS_SYNC_SECRET, person }),
+  });
+}
+
+const VALID_DAYPARTS = ['weekday_practice', 'weekend_meet'];
+
+async function upsertTravelEstimate(db, body) {
+  const personId = str(body?.personId, 100);
+  const locationId = str(body?.locationId, 100);
+  const daypart = str(body?.daypart, 30);
+  const minutes = parseInt(body?.minutes, 10);
+  const note = str(body?.note, 300);
+  if (!personId || !locationId || !VALID_DAYPARTS.includes(daypart) || !Number.isFinite(minutes) || minutes < 0) {
+    return json({ error: 'Missing or invalid fields' }, 400);
+  }
+
+  await db.prepare(
+    `INSERT INTO travel_estimates (person_id, location_id, daypart, minutes, note) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(person_id, location_id, daypart) DO UPDATE SET minutes=excluded.minutes, note=excluded.note`
+  ).bind(personId, locationId, daypart, minutes, note).run();
 
   return json({ ok: true });
 }
@@ -209,6 +293,7 @@ async function createEvent(db, body) {
   const date = str(body?.date, 20);
   const title = str(body?.title, 200);
   const time = str(body?.time, 40);
+  const endTime = str(body?.endTime, 40);
   const desc = str(body?.desc, 2000);
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
   const kind = normalizeKind(type, body?.kind);
@@ -216,10 +301,10 @@ async function createEvent(db, body) {
 
   const id = 'e_' + crypto.randomUUID();
   await db.prepare(
-    'INSERT INTO events (id, date, title, time, description, type, kind) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, date, title, time, desc, type, kind).run();
+    'INSERT INTO events (id, date, title, time, end_time, description, type, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, date, title, time, endTime, desc, type, kind).run();
 
-  return json({ event: { id, date, title, time, desc, type, kind, auto: false } });
+  return json({ event: { id, date, title, time, endTime, desc, type, kind, auto: false } });
 }
 
 async function createPost(db, body) {
@@ -265,14 +350,15 @@ async function updateEvent(db, body) {
   const eventId = str(body?.eventId, 100);
   const title = str(body?.title, 200);
   const time = str(body?.time, 40);
+  const endTime = str(body?.endTime, 40);
   const desc = str(body?.desc, 2000);
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
   const kind = normalizeKind(type, body?.kind);
   if (!eventId || !title) return json({ error: 'Missing eventId or title' }, 400);
 
   await db.prepare(
-    'UPDATE events SET title = ?, time = ?, description = ?, type = ?, kind = ? WHERE id = ?'
-  ).bind(title, time, desc, type, kind, eventId).run();
+    'UPDATE events SET title = ?, time = ?, end_time = ?, description = ?, type = ?, kind = ? WHERE id = ?'
+  ).bind(title, time, endTime, desc, type, kind, eventId).run();
 
   return json({ ok: true });
 }
@@ -397,7 +483,7 @@ async function clearWeekTemplate(db, body) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
 
     try {
@@ -425,6 +511,8 @@ export default {
         if (pathname === '/api/events/delete') return await deleteEvent(env.DB, body);
         if (pathname === '/api/schedule/week/apply') return await applyWeekTemplate(env.DB, body);
         if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
+        if (pathname === '/api/people/personal') return await upsertPersonal(env.DB, body, env, ctx);
+        if (pathname === '/api/travel-estimate') return await upsertTravelEstimate(env.DB, body);
       }
     } catch (err) {
       console.error(err);

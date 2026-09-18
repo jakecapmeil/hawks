@@ -378,6 +378,40 @@
   #newPersonRow.show{display:flex;}
   #editPersonRow{display:none;flex-direction:column;gap:10px;margin-top:10px;}
   #editPersonRow.show{display:flex;}
+
+  .personal-form{display:none;flex-direction:column;gap:10px;margin-top:10px;}
+  .personal-form.show{display:flex;}
+  .personal-subtitle{
+    font-family:var(--font-ui);font-weight:600;font-size:var(--fs-footnote);
+    color:var(--ink-soft);margin-top:4px;
+  }
+  .personal-out-grid{
+    display:grid;grid-template-columns:repeat(5,1fr);gap:8px;
+  }
+  .personal-out-grid label{
+    display:flex;flex-direction:column;gap:4px;
+    font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);
+    text-align:center;
+  }
+  .personal-out-grid input{width:100%;text-align:center;padding:6px 2px;}
+  .personal-field-label{
+    display:flex;flex-direction:column;gap:4px;
+    font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);
+  }
+  .travel-row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:10px 0;border-bottom:1px solid var(--line);
+  }
+  .travel-row:last-child{border-bottom:none;}
+  .travel-row-main{flex:1;min-width:0;}
+  .travel-row-title{font-family:var(--font-ui);font-weight:600;font-size:var(--fs-subhead);}
+  .travel-row-sub{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .travel-row-time{
+    font-family:var(--font-ui);font-weight:700;font-size:var(--fs-subhead);
+    color:var(--ink);white-space:nowrap;
+  }
+  .travel-row a{color:inherit;text-decoration:none;}
+  .travel-row a:hover .travel-row-title{text-decoration:underline;}
   .color-pick-row{display:flex;align-items:center;gap:10px;}
   .color-pick-row input[type=color]{
     -webkit-appearance:none;appearance:none;
@@ -928,6 +962,7 @@
   <div class="page-tabs" role="tablist" aria-label="Sections">
     <button type="button" class="page-tab active" id="pageTabCalendar" role="tab" aria-selected="true" aria-controls="pageCalendar">Calendar</button>
     <button type="button" class="page-tab" id="pageTabBody" role="tab" aria-selected="false" aria-controls="pageBody">Body</button>
+    <button type="button" class="page-tab" id="pageTabPersonal" role="tab" aria-selected="false" aria-controls="pagePersonal">Personal</button>
   </div>
 
   <div id="pageCalendar">
@@ -984,6 +1019,7 @@
     <div id="eventFormRow">
       <input type="text" id="eventTitle" placeholder="Event title (e.g. Track practice, Meet vs. Xavier)">
       <input type="text" id="eventTime" placeholder="Time (e.g. 4:00 PM)">
+      <input type="text" id="eventEndTime" placeholder="End time (optional, e.g. 5:30 PM)">
       <textarea id="eventDesc" placeholder="Details — who's expected, notes…"></textarea>
       <div>
         <div class="event-type-label">Event type</div>
@@ -1070,6 +1106,48 @@
     </div>
   </div>
 
+  <div id="pagePersonal" style="display:none;">
+    <div class="card">
+      <div class="card-title">Your info</div>
+      <div class="hint" id="personalHint">Select your name above to see and edit your info.</div>
+      <div id="personalForm" class="personal-form">
+        <input type="text" id="personalFirstName" placeholder="First name" maxlength="100">
+        <select id="personalClassYear">
+          <option value="">Class…</option>
+          <option value="Freshman">Freshman</option>
+          <option value="Sophomore">Sophomore</option>
+          <option value="Junior">Junior</option>
+          <option value="Senior">Senior</option>
+        </select>
+        <input type="text" id="personalTrackId" placeholder="Track ID" maxlength="40">
+        <label class="personal-field-label">Date entered
+          <input type="date" id="personalDateEntered">
+        </label>
+        <input type="text" id="personalBorough" placeholder="Borough" maxlength="60">
+        <input type="text" id="personalHomeAddress" placeholder="Home address" maxlength="300">
+        <div class="personal-subtitle">Out of class by period (leave blank if unknown)</div>
+        <div class="personal-out-grid">
+          <label>Mon<input type="number" min="1" max="12" id="personalOutMon"></label>
+          <label>Tue<input type="number" min="1" max="12" id="personalOutTue"></label>
+          <label>Wed<input type="number" min="1" max="12" id="personalOutWed"></label>
+          <label>Thu<input type="number" min="1" max="12" id="personalOutThu"></label>
+          <label>Fri<input type="number" min="1" max="12" id="personalOutFri"></label>
+        </div>
+        <textarea id="personalNotes" placeholder="Notes (schedule exceptions, etc.)" rows="3" maxlength="2000"></textarea>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="savePersonalBtn">Save</button>
+          <span class="hint" id="personalSaveHint" style="display:none;">Saved.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="travelCard">
+      <div class="card-title">Getting there</div>
+      <div class="hint" id="travelHint">Approximate transit time from your home address — weekday for practices, weekend for meets. Tap a place to open directions.</div>
+      <div id="travelList"></div>
+    </div>
+  </div>
+
 </div>
 
 <div class="modal-overlay" id="postModalOverlay">
@@ -1132,6 +1210,8 @@ let events = {};
 let rsvps = {};
 let bodyMarks = {};
 let posts = [];
+let locations = [];
+let travelEstimates = [];
 let expandedPostIds = new Set();
 let shareMenuPostId = null;
 let shareMenuEventId = null;
@@ -1253,9 +1333,12 @@ async function loadState(){
     rsvps = data.rsvps || {};
     bodyMarks = data.body || {};
     posts = data.posts || [];
+    locations = data.locations || [];
+    travelEstimates = data.travelEstimates || [];
   }catch(e){
     console.error('Load failed, starting empty', e);
     people = []; overrides = {}; comments = {}; events = {}; rsvps = {}; bodyMarks = {}; posts = [];
+    locations = []; travelEstimates = [];
   }
 }
 
@@ -1301,12 +1384,12 @@ async function saveCommentRemote(dateKey, personId, text){
   await apiPost('/api/comment', { date: dateKey, personId, text });
 }
 
-async function createEventRemote(dateKey, title, time, desc, type, kind){
-  return await apiPost('/api/events', { date: dateKey, title, time, desc, type, kind });
+async function createEventRemote(dateKey, title, time, endTime, desc, type, kind){
+  return await apiPost('/api/events', { date: dateKey, title, time, endTime, desc, type, kind });
 }
 
-async function updateEventRemote(eventId, title, time, desc, type, kind){
-  return await apiPost('/api/events/update', { eventId, title, time, desc, type, kind });
+async function updateEventRemote(eventId, title, time, endTime, desc, type, kind){
+  return await apiPost('/api/events/update', { eventId, title, time, endTime, desc, type, kind });
 }
 
 async function saveRsvpRemote(eventId, personId, status){
@@ -1315,6 +1398,10 @@ async function saveRsvpRemote(eventId, personId, status){
 
 async function createPostRemote(personId, text, header){
   return await apiPost('/api/posts', { personId, text, header });
+}
+
+async function savePersonalRemote(fields){
+  return await apiPost('/api/people/personal', fields);
 }
 
 function effectiveStatus(personId, dateKey){
@@ -1593,7 +1680,7 @@ function renderEvents(){
           <span class="event-bar" style="background:${et.color}"></span>
           <span class="event-title">${escapeHtml(ev.title)}</span>
           <span class="event-type-pill" style="background:${et.bg};color:${et.text}">${et.label}</span>
-          <span class="event-time">${escapeHtml(ev.time)}</span>
+          <span class="event-time">${escapeHtml(formatEventTimeRange(ev))}</span>
         </div>
         ${ev.desc ? `<div class="event-desc">${escapeHtml(ev.desc)}</div>` : ''}
         <div class="event-actions">
@@ -1626,14 +1713,22 @@ function renderEvents(){
   }
 }
 
+// Renders "4:00 PM" or, when an end time is set, "4:00 PM – 5:30 PM".
+function formatEventTimeRange(ev){
+  if(!ev.time) return '';
+  return ev.endTime ? `${ev.time} – ${ev.endTime}` : ev.time;
+}
+
 function shareEventToWhatsApp(ev){
-  const msg = `New Event Posted: ${ev.title}${ev.time ? ' — ' + ev.time : ''}\n${window.location.href}`;
+  const timeRange = formatEventTimeRange(ev);
+  const msg = `New Event Posted: ${ev.title}${timeRange ? ' — ' + timeRange : ''}\n${window.location.href}`;
   const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
 }
 
 function shareEventViaSms(ev){
-  const msg = `New Event Posted: ${ev.title}${ev.time ? ' — ' + ev.time : ''}\n${window.location.href}`;
+  const timeRange = formatEventTimeRange(ev);
+  const msg = `New Event Posted: ${ev.title}${timeRange ? ' — ' + timeRange : ''}\n${window.location.href}`;
   window.location.href = `sms:&body=${encodeURIComponent(msg)}`;
 }
 
@@ -1694,8 +1789,9 @@ function eventReminderText(ev){
   if(!ev){
     return { subject: 'Hawks Calendar', body: `\n\n${window.location.href}` };
   }
-  const subject = `${ev.title}${ev.time ? ' — ' + ev.time : ''}`;
-  const body = `Reminder: ${ev.title} on ${formatEventDate(ev.date)}${ev.time ? ' at ' + ev.time : ''}.${ev.desc ? '\n\n' + ev.desc : ''}\n\n${window.location.href}`;
+  const timeRange = formatEventTimeRange(ev);
+  const subject = `${ev.title}${timeRange ? ' — ' + timeRange : ''}`;
+  const body = `Reminder: ${ev.title} on ${formatEventDate(ev.date)}${timeRange ? ' at ' + timeRange : ''}.${ev.desc ? '\n\n' + ev.desc : ''}\n\n${window.location.href}`;
   return { subject, body };
 }
 
@@ -1730,7 +1826,8 @@ function textAttendees(ev){
     alert("No one has RSVP'd as coming yet, so there's no one to text.");
     return;
   }
-  const body = `${ev.title}${ev.time ? ' at ' + ev.time : ''} on ${formatEventDate(ev.date)}.${ev.desc ? ' ' + ev.desc : ''}`;
+  const timeRange = formatEventTimeRange(ev);
+  const body = `${ev.title}${timeRange ? ' at ' + timeRange : ''} on ${formatEventDate(ev.date)}.${ev.desc ? ' ' + ev.desc : ''}`;
   window.location.href = `sms:${phones.join(',')}?&body=${encodeURIComponent(body)}`;
 }
 
@@ -1767,7 +1864,7 @@ function renderEventTypePicker(){
 }
 
 function resetEventForm(){
-  $('eventTitle').value=''; $('eventTime').value=''; $('eventDesc').value='';
+  $('eventTitle').value=''; $('eventTime').value=''; $('eventEndTime').value=''; $('eventDesc').value='';
   selectedEventType = 'practice';
   selectedEventKind = 'easy';
   renderEventTypePicker();
@@ -1805,13 +1902,14 @@ function renderAdminEventTypePicker(){
 async function addEvent(){
   const title = $('eventTitle').value.trim();
   const time = $('eventTime').value.trim();
+  const endTime = $('eventEndTime').value.trim();
   const desc = $('eventDesc').value.trim();
   if(!title){ $('eventTitle').focus(); return; }
   const kind = selectedEventType === 'practice' ? selectedEventKind : '';
-  const result = await createEventRemote(selectedDate, title, time, desc, selectedEventType, kind);
+  const result = await createEventRemote(selectedDate, title, time, endTime, desc, selectedEventType, kind);
   const newEv = (result && result.event)
     ? result.event
-    : {id:'e_'+Date.now(), date:selectedDate, title, time, desc, type:selectedEventType, kind, auto:false};
+    : {id:'e_'+Date.now(), date:selectedDate, title, time, endTime, desc, type:selectedEventType, kind, auto:false};
   if(!events[selectedDate]) events[selectedDate] = [];
   events[selectedDate].push(newEv);
   $('eventFormRow').classList.remove('show');
@@ -2106,7 +2204,7 @@ function dayCellStyle(dateKey){
   const bands = keys.map((k, i) => `${STYLES_BY_KEY[k].color} ${i * step}% ${(i + 1) * step}%`);
   return {
     css: `background:linear-gradient(90deg, ${bands.join(', ')});color:#fff;text-shadow:0 0 3px rgba(0,0,0,0.65)`,
-    hint: list.map(ev => `${ev.title}${ev.time ? ' · ' + ev.time : ''}`).join('\n'),
+    hint: list.map(ev => `${ev.title}${formatEventTimeRange(ev) ? ' · ' + formatEventTimeRange(ev) : ''}`).join('\n'),
   };
 }
 
@@ -2174,6 +2272,7 @@ function renderAdminModal(){
         <div class="admin-edit-form">
           <input type="text" id="adminEditTitle" value="${escapeHtml(ev.title)}" placeholder="Event title">
           <input type="text" id="adminEditTime" value="${escapeHtml(ev.time)}" placeholder="Time (e.g. 4:00 PM)">
+          <input type="text" id="adminEditEndTime" value="${escapeHtml(ev.endTime || '')}" placeholder="End time (optional, e.g. 5:30 PM)">
           <textarea id="adminEditDesc" placeholder="Details">${escapeHtml(ev.desc)}</textarea>
           <div>
             <div class="event-type-label">Event type</div>
@@ -2206,7 +2305,7 @@ function renderAdminModal(){
         <span class="dot" style="background:${et.color}" title="${et.label}"></span>
         <div class="admin-row-main">
           <div class="admin-row-title">${escapeHtml(ev.title)}</div>
-          <div class="admin-row-sub">${formatEventDateShort(ev.date)}${ev.time ? ' · ' + escapeHtml(ev.time) : ''} · ${et.label}</div>
+          <div class="admin-row-sub">${formatEventDateShort(ev.date)}${formatEventTimeRange(ev) ? ' · ' + escapeHtml(formatEventTimeRange(ev)) : ''} · ${et.label}</div>
         </div>
         <button type="button" class="admin-edit-btn" data-edit-event="${ev.id}">Edit</button>
         <button type="button" class="admin-delete-btn" data-delete-event="${ev.id}">Delete</button>
@@ -2307,12 +2406,13 @@ function renderAdminModal(){
       const id = btn.dataset.saveEvent;
       const title = $('adminEditTitle').value.trim();
       const time = $('adminEditTime').value.trim();
+      const endTime = $('adminEditEndTime').value.trim();
       const desc = $('adminEditDesc').value.trim();
       if(!title){ $('adminEditTitle').focus(); return; }
       const kind = adminEventType === 'practice' ? adminEventKind : '';
-      await updateEventRemote(id, title, time, desc, adminEventType, kind);
+      await updateEventRemote(id, title, time, endTime, desc, adminEventType, kind);
       const ev = findEventById(id);
-      if(ev){ ev.title = title; ev.time = time; ev.desc = desc; ev.type = adminEventType; ev.kind = kind; }
+      if(ev){ ev.title = title; ev.time = time; ev.endTime = endTime; ev.desc = desc; ev.type = adminEventType; ev.kind = kind; }
       editingEventId = null;
       renderAdminModal();
       renderEvents();
@@ -2360,10 +2460,14 @@ function setPage(page){
   currentPage = page;
   $('pageTabCalendar').classList.toggle('active', page === 'calendar');
   $('pageTabBody').classList.toggle('active', page === 'body');
+  $('pageTabPersonal').classList.toggle('active', page === 'personal');
   $('pageTabCalendar').setAttribute('aria-selected', String(page === 'calendar'));
   $('pageTabBody').setAttribute('aria-selected', String(page === 'body'));
+  $('pageTabPersonal').setAttribute('aria-selected', String(page === 'personal'));
   $('pageCalendar').style.display = page === 'calendar' ? '' : 'none';
   $('pageBody').style.display = page === 'body' ? '' : 'none';
+  $('pagePersonal').style.display = page === 'personal' ? '' : 'none';
+  if(page === 'personal') renderPersonal();
 }
 
 function currentHealthStatus(){
@@ -2546,6 +2650,103 @@ function renderTeamStatus(){
   }).join('');
 }
 
+const DAYPART_LABEL = { weekday_practice: 'Weekday practice', weekend_meet: 'Weekend meet' };
+
+function mapsLink(origin, destination){
+  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=transit`;
+}
+
+function renderTravelList(p){
+  const home = (p.home_address || '').trim();
+  if(!locations.length){
+    $('travelList').innerHTML = '<div class="admin-empty">No locations set up yet.</div>';
+    return;
+  }
+  const sorted = [...locations].sort((a,b)=> a.kind === b.kind ? a.name.localeCompare(b.name) : (a.kind === 'meet' ? 1 : -1));
+  $('travelList').innerHTML = sorted.map(loc=>{
+    const daypart = loc.kind === 'meet' ? 'weekend_meet' : 'weekday_practice';
+    const est = travelEstimates.find(t=> t.person_id===p.id && t.location_id===loc.id && t.daypart===daypart);
+    const timeLabel = home ? (est ? `~${est.minutes} min` : '—') : 'Add home address';
+    const href = home ? mapsLink(home, loc.address) : '';
+    return `
+      <div class="travel-row">
+        <a class="travel-row-main" ${href ? `href="${escapeHtml(href)}" target="_blank" rel="noopener"` : 'href="#" onclick="return false;"'}>
+          <div class="travel-row-title">${escapeHtml(loc.name)}</div>
+          <div class="travel-row-sub">${DAYPART_LABEL[daypart]}${est && est.note ? ' · ' + escapeHtml(est.note) : ''}</div>
+        </a>
+        <div class="travel-row-time">${escapeHtml(timeLabel)}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderPersonal(){
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  $('personalHint').style.display = p ? 'none' : 'block';
+  $('personalForm').classList.toggle('show', !!p);
+  $('travelCard').style.display = p ? '' : 'none';
+  if(!p) return;
+
+  $('personalFirstName').value = p.first_name || '';
+  $('personalClassYear').value = p.class_year || '';
+  $('personalTrackId').value = p.track_id || '';
+  $('personalDateEntered').value = p.date_entered || '';
+  $('personalBorough').value = p.borough || '';
+  $('personalHomeAddress').value = p.home_address || '';
+  $('personalOutMon').value = p.out_mon ?? '';
+  $('personalOutTue').value = p.out_tue ?? '';
+  $('personalOutWed').value = p.out_wed ?? '';
+  $('personalOutThu').value = p.out_thu ?? '';
+  $('personalOutFri').value = p.out_fri ?? '';
+  $('personalNotes').value = p.personal_notes || '';
+  $('personalSaveHint').style.display = 'none';
+
+  renderTravelList(p);
+}
+
+async function savePersonal(){
+  if(!isRealPerson()) return;
+  const p = people.find(x=>x.id===activePersonId);
+  if(!p) return;
+
+  const fields = {
+    personId: p.id,
+    firstName: $('personalFirstName').value.trim(),
+    classYear: $('personalClassYear').value,
+    trackId: $('personalTrackId').value.trim(),
+    dateEntered: $('personalDateEntered').value,
+    borough: $('personalBorough').value.trim(),
+    homeAddress: $('personalHomeAddress').value.trim(),
+    outMon: $('personalOutMon').value,
+    outTue: $('personalOutTue').value,
+    outWed: $('personalOutWed').value,
+    outThu: $('personalOutThu').value,
+    outFri: $('personalOutFri').value,
+    personalNotes: $('personalNotes').value.trim(),
+  };
+
+  const res = await savePersonalRemote(fields);
+  if(!res || res.error) return;
+
+  Object.assign(p, {
+    first_name: fields.firstName,
+    class_year: fields.classYear,
+    track_id: fields.trackId,
+    date_entered: fields.dateEntered,
+    borough: fields.borough,
+    home_address: fields.homeAddress,
+    out_mon: fields.outMon ? parseInt(fields.outMon, 10) : null,
+    out_tue: fields.outTue ? parseInt(fields.outTue, 10) : null,
+    out_wed: fields.outWed ? parseInt(fields.outWed, 10) : null,
+    out_thu: fields.outThu ? parseInt(fields.outThu, 10) : null,
+    out_fri: fields.outFri ? parseInt(fields.outFri, 10) : null,
+    personal_notes: fields.personalNotes,
+  });
+
+  $('personalSaveHint').style.display = '';
+  renderTravelList(p);
+  setTimeout(()=>{ $('personalSaveHint').style.display = 'none'; }, 2000);
+}
+
 function renderAll(){
   renderPersonSelect();
   renderPosts();
@@ -2565,6 +2766,7 @@ function renderAll(){
   renderTrainingPicker();
   renderBodyMap();
   renderTeamStatus();
+  if(currentPage === 'personal') renderPersonal();
 }
 
 function wireUI(){
@@ -2772,6 +2974,8 @@ function wireUI(){
 
   $('pageTabCalendar').addEventListener('click', ()=> setPage('calendar'));
   $('pageTabBody').addEventListener('click', ()=> setPage('body'));
+  $('pageTabPersonal').addEventListener('click', ()=> setPage('personal'));
+  $('savePersonalBtn').addEventListener('click', savePersonal);
 
   $('healthPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
     btn.addEventListener('click', ()=> setHealth(btn.dataset.type));
