@@ -89,9 +89,17 @@
     --pain-bg:#fbe0e0;
     --bodymap-grey:#94a3b8;
 
+    /* ---- Shape --------------------------------------------------------
+       Three radii, each tied to what it's for rather than picked per
+       component: cards/sheets get --r-card, buttons/inputs/day cells get
+       --r-control, and anything meant to read as a capsule (badges, RSVP
+       buttons, the CTA) gets --r-pill, which is deliberately larger than
+       any element's own height so it always fully rounds regardless of
+       size — one token instead of hand-computing height/2 per component. */
     --r-card:16px;
     --r-control:11px;
-    --r-pill:8px;
+    --r-row:8px;
+    --r-pill:999px;
     /* HIG's 44pt minimum hit target. --btn-h-sm is a *visual* height only:
        anything using it expands its touch area back to 44 with a pseudo. */
     --btn-h:44px;
@@ -249,7 +257,7 @@
     background:transparent;border:none;color:var(--ink);
     font-family:var(--font-ui);font-size:var(--fs-subhead);font-weight:500;
     letter-spacing:var(--tr-subhead);
-    text-align:left;border-radius:8px;cursor:pointer;white-space:nowrap;
+    text-align:left;border-radius:var(--r-row);cursor:pointer;white-space:nowrap;
   }
   .pop-menu button:hover{background:var(--bg);}
 
@@ -334,7 +342,7 @@
     transform-origin:top center;
   }
   .dd-option{
-    height:var(--tap-min);padding:0 12px;border-radius:8px;border:none;
+    height:var(--tap-min);padding:0 12px;border-radius:var(--r-row);border:none;
     background:transparent;color:var(--ink);flex-shrink:0;
     font-family:var(--font-ui);font-size:var(--fs-subhead);font-weight:500;
     letter-spacing:var(--tr-subhead);
@@ -493,7 +501,7 @@
     color:var(--ink-soft);padding-bottom:6px;
   }
   .day{
-    aspect-ratio:1/1;border-radius:8px;border:1px solid var(--line);
+    aspect-ratio:1/1;border-radius:var(--r-row);border:1px solid var(--line);
     background:var(--bg);
     display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
     padding:3px 1px;cursor:pointer;position:relative;
@@ -695,37 +703,55 @@
     font-size:var(--fs-footnote);line-height:var(--lh-footnote);
     letter-spacing:var(--tr-footnote);color:var(--ink-soft);margin-bottom:12px;
   }
+  /* Apple Mail/Messages-style list row: leading avatar, sender + time on
+     one line, subject below, preview below that. The separator is inset —
+     it starts after the avatar column, not full-bleed — same as an iOS
+     grouped list. */
   .post-item{
-    display:flex;gap:8px;align-items:flex-start;
-    padding:20px 0;border-bottom:1px solid var(--line);
+    display:flex;gap:11px;align-items:flex-start;
+    padding:13px 0;
   }
-  .post-item:first-child{padding-top:4px;}
-  .post-item:last-child{border-bottom:none;padding-bottom:4px;}
-  .post-main{flex:1;min-width:0;}
-  /* Byline reads left-to-right as one phrase — name, then when. Previously
-     space-between flung the timestamp to the far edge, detaching it. Styled
-     as a small eyebrow label (like a dateline) above the headline. */
-  .post-byline{
-    display:flex;align-items:baseline;gap:5px;flex-wrap:wrap;
-    font-size:var(--fs-caption);line-height:var(--lh-caption);
-    letter-spacing:var(--tr-caption);color:var(--ink-soft);
-    text-transform:uppercase;font-weight:600;
-    margin-bottom:6px;
+  .post-item:first-child{padding-top:2px;}
+  .post-item:last-child{padding-bottom:2px;}
+  .post-avatar{
+    flex-shrink:0;width:38px;height:38px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:600;font-size:var(--fs-footnote);
+    letter-spacing:0;margin-top:1px;
   }
-  .post-author{font-weight:600;color:var(--ink-soft);}
-  .post-byline .sep{color:var(--ink-soft);}
-  .post-time{font-variant-numeric:tabular-nums;}
+  .post-main{
+    flex:1;min-width:0;padding-bottom:13px;
+    border-bottom:1px solid var(--line);
+  }
+  .post-item:last-child .post-main{border-bottom:none;padding-bottom:0;}
+  .post-top-row{
+    display:flex;align-items:center;gap:6px;
+    margin-bottom:2px;
+  }
+  .post-author{
+    font-weight:600;font-size:var(--fs-subhead);line-height:var(--lh-subhead);
+    letter-spacing:var(--tr-subhead);color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .post-unread-dot{
+    width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0;
+  }
+  .post-time{
+    margin-left:auto;flex-shrink:0;
+    font-size:var(--fs-caption);letter-spacing:var(--tr-caption);
+    color:var(--ink-soft);font-variant-numeric:tabular-nums;
+  }
   .post-header{
-    font-weight:700;font-size:var(--fs-title3);line-height:var(--lh-title3);
-    letter-spacing:var(--tr-title3);margin:0 0 4px;cursor:pointer;
+    font-weight:700;font-size:var(--fs-headline);line-height:var(--lh-headline);
+    letter-spacing:var(--tr-headline);margin:0 0 2px;cursor:pointer;
   }
   .post-text{
-    font-size:var(--fs-callout);line-height:var(--lh-body);
-    letter-spacing:var(--tr-callout);color:var(--ink-soft);
+    font-size:var(--fs-subhead);line-height:var(--lh-subhead);
+    letter-spacing:var(--tr-subhead);color:var(--ink-soft);
     white-space:pre-wrap;cursor:pointer;overflow-wrap:anywhere;
   }
   .post-text.clamped{
-    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
     overflow:hidden;
   }
   .post-empty{
@@ -838,7 +864,7 @@
   }
   .week-strip{display:flex;gap:3px;margin-top:5px;}
   .week-cell{
-    width:25px;height:22px;border-radius:6px;flex-shrink:0;
+    width:25px;height:22px;border-radius:var(--r-row);flex-shrink:0;
     display:flex;align-items:center;justify-content:center;
     font-size:var(--fs-caption2);font-weight:700;letter-spacing:var(--tr-caption2);
     background:var(--muted-bg);color:var(--ink-soft);
@@ -862,7 +888,7 @@
   .bodymap-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;}
   .bm-chip{
     display:inline-flex;align-items:center;gap:6px;
-    height:30px;padding:0 6px 0 12px;border-radius:15px;
+    height:30px;padding:0 6px 0 12px;border-radius:var(--r-pill);
     background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);
     color:#f7b878;font-family:var(--font-ui);font-size:var(--fs-footnote);font-weight:600;
     letter-spacing:var(--tr-footnote);
@@ -881,7 +907,7 @@
 
   .bodymap-flip-btn{
     display:inline-flex;align-items:center;gap:7px;
-    height:var(--btn-h);padding:0 20px;border-radius:22px;
+    height:var(--btn-h);padding:0 20px;border-radius:var(--r-pill);
     background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
     color:#fff;font-family:var(--font-ui);font-weight:600;font-size:var(--fs-subhead);
     letter-spacing:var(--tr-subhead);cursor:pointer;
@@ -2114,13 +2140,31 @@ function closeShareMenu(){
   shareMenuPostId = null;
 }
 
+const POST_UNREAD_MS = 3 * 60 * 60 * 1000;
+
+function initialsOf(name){
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) return '?';
+  if(parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function postAuthorColor(personId){
+  if(personId === COACH_ID) return COACH_COLOR;
+  const p = people.find(x => x.id === personId);
+  return p ? p.color : '#9b93a6';
+}
+
 function renderPostItem(post){
   const expanded = expandedPostIds.has(post.id);
+  const authorName = postAuthorName(post.personId);
+  const isNew = Date.now() - post.createdAt < POST_UNREAD_MS;
   return `<div class="post-item">
+    <div class="post-avatar" style="background:${postAuthorColor(post.personId)}">${escapeHtml(initialsOf(authorName))}</div>
     <div class="post-main">
-      <div class="post-byline">
-        <span class="post-author">${escapeHtml(postAuthorName(post.personId))}</span>
-        <span class="sep" aria-hidden="true">&middot;</span>
+      <div class="post-top-row">
+        <span class="post-author">${escapeHtml(authorName)}</span>
+        ${isNew ? '<span class="post-unread-dot" aria-label="New"></span>' : ''}
         <span class="post-time">${relativeTime(post.createdAt)}</span>
       </div>
       ${post.header ? `<div class="post-header" data-post-toggle="${post.id}">${escapeHtml(post.header)}</div>` : ''}

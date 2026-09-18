@@ -556,6 +556,37 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: 'update_event',
+    description: 'Edit an existing calendar event. All fields except eventId are replaced wholesale, so pass the values that should stay the same too (get them from list_events first).',
+    inputSchema: {
+      type: 'object',
+      required: ['eventId', 'title'],
+      properties: {
+        eventId: { type: 'string', description: 'Event id, from list_events' },
+        title: { type: 'string' },
+        time: { type: 'string', description: 'e.g. "4:00 PM"' },
+        endTime: { type: 'string', description: 'e.g. "5:30 PM", optional' },
+        desc: { type: 'string', description: 'optional details' },
+        location: { type: 'string', description: 'e.g. "Van Cortlandt Park" or a full address, optional' },
+        type: { type: 'string', enum: ['practice', 'meet', 'other'], description: 'defaults to practice' },
+        kind: { type: 'string', enum: ['easy', 'workout', 'long_run'], description: 'only used when type is practice' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'delete_event',
+    description: "Permanently delete a calendar event and everyone's RSVPs to it. To move an event to a different date, delete it and create_event a replacement — there is no in-place date change.",
+    inputSchema: {
+      type: 'object',
+      required: ['eventId'],
+      properties: {
+        eventId: { type: 'string', description: 'Event id, from list_events' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'create_post',
     description: 'Post a team announcement, visible on the Calendar tab.',
     inputSchema: {
@@ -568,6 +599,171 @@ const MCP_TOOLS = [
       },
       additionalProperties: false,
     },
+  },
+  {
+    name: 'delete_post',
+    description: 'Permanently delete a team announcement.',
+    inputSchema: {
+      type: 'object',
+      required: ['postId'],
+      properties: {
+        postId: { type: 'string', description: "Post id, from get_state's posts list" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'delete_person',
+    description: "Permanently remove someone from the roster, along with their RSVPs, availability overrides, comments, and body marks. Their past posts are kept but unattributed. This cannot be undone — confirm the name and personId with the user before calling.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'set_default_status',
+    description: "Set a person's default availability (used on any day without a specific override).",
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'status'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        status: { type: 'string', enum: ['available', 'unavailable'] },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'set_health_status',
+    description: "Set a person's health status.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'status'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        status: { type: 'string', enum: ['healthy', 'injured', 'sick'] },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'set_training_status',
+    description: "Set a person's current training status.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'status'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        status: { type: 'string', enum: ['resting', 'running', 'crosstraining'] },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'set_availability',
+    description: "Set whether a person is available on one specific date, overriding their default status for that day only. Pass status 'default' to clear the override and fall back to their usual default.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'date', 'status'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        status: { type: 'string', enum: ['available', 'unavailable', 'default'] },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'set_body_mark',
+    description: "Set the injury/soreness mark for one body part on a person. 'none' clears it.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'part', 'status'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        part: { type: 'string', description: 'Body part key, e.g. "left_knee", "right_hamstring"' },
+        status: { type: 'string', enum: ['none', 'sore', 'pain'] },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'save_comment',
+    description: "Set (or clear, with empty text) the coach's comment on a person for a specific date.",
+    inputSchema: {
+      type: 'object',
+      required: ['date', 'personId', 'text'],
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        text: { type: 'string', description: 'Empty string clears the comment' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'save_rsvp',
+    description: "Set a person's RSVP status for an event. Status 'unknown' clears the RSVP.",
+    inputSchema: {
+      type: 'object',
+      required: ['eventId', 'personId', 'status'],
+      properties: {
+        eventId: { type: 'string', description: 'Event id, from list_events' },
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        status: { type: 'string', enum: ['available', 'unavailable', 'unknown'], description: '"available" means coming, "unavailable" means not coming' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'upsert_travel_estimate',
+    description: "Set someone's estimated one-way travel time to a location, for either weekday practices or weekend meets. Location ids come from get_state's locations list.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'locationId', 'daypart', 'minutes'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        locationId: { type: 'string', description: "Location id, from get_state's locations list" },
+        daypart: { type: 'string', enum: ['weekday_practice', 'weekend_meet'] },
+        minutes: { type: 'integer', description: 'One-way travel time in minutes' },
+        note: { type: 'string', description: 'optional, e.g. "by subway"' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'apply_week_template',
+    description: "Fill in the team's standard weekday rhythm (easy/workout/easy/workout/easy, Mon-Fri) for one week, skipping any weekday that already has an auto-generated practice. Existing manually-created events are left alone and the rhythm is added alongside them.",
+    inputSchema: {
+      type: 'object',
+      required: ['weekStart'],
+      properties: {
+        weekStart: { type: 'string', description: 'The Monday that starts the week, YYYY-MM-DD' },
+        time: { type: 'string', description: 'Practice time for all five days, defaults to "4:00 PM"' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'clear_week_template',
+    description: 'Remove the auto-generated weekday practices (from apply_week_template) for one week. Manually-created events are never touched by this.',
+    inputSchema: {
+      type: 'object',
+      required: ['weekStart'],
+      properties: {
+        weekStart: { type: 'string', description: 'The Monday that starts the week, YYYY-MM-DD' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'get_state',
+    description: 'Full snapshot of everything the app tracks: roster, availability overrides, daily comments, events, RSVPs, body marks, announcements, locations, and travel estimates. Use this when you need more than get_roster/list_events give you — e.g. RSVPs, comments, body marks, posts, or location ids.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
 ];
 
@@ -639,6 +835,59 @@ async function mcpUpdatePerson(db, args, env, ctx) {
   return { ok: true };
 }
 
+const VALID_BODY_MARK_STATUS = ['none', 'sore', 'pain'];
+
+// Deterministic counterpart to the admin UI's toggleBodyMark cycle: sets the
+// mark to exactly the status passed, rather than advancing none->sore->pain.
+async function mcpSetBodyMark(db, args) {
+  const personId = str(args?.personId, 100);
+  const part = str(args?.part, 40);
+  const status = str(args?.status, 20);
+  if (!personId || !part) throw new McpToolError('Missing personId or part');
+  if (!VALID_BODY_MARK_STATUS.includes(status)) throw new McpToolError('Invalid status');
+
+  if (status === 'none') {
+    await db.prepare('DELETE FROM body_marks WHERE person_id = ? AND part = ?').bind(personId, part).run();
+  } else {
+    await db.prepare(
+      `INSERT INTO body_marks (person_id, part, status) VALUES (?, ?, ?)
+       ON CONFLICT(person_id, part) DO UPDATE SET status=excluded.status`
+    ).bind(personId, part, status).run();
+  }
+  return { status };
+}
+
+// Deterministic counterpart to the admin UI's toggleAvailability: sets the
+// override to exactly the status passed (or clears it for 'default'), rather
+// than flipping whatever is currently there.
+async function mcpSetAvailability(db, args) {
+  const personId = str(args?.personId, 100);
+  const date = str(args?.date, 20);
+  const status = str(args?.status, 20);
+  if (!personId || !date) throw new McpToolError('Missing personId or date');
+  if (!['available', 'unavailable', 'default'].includes(status)) throw new McpToolError('Invalid status');
+
+  const person = await db.prepare('SELECT default_status FROM people WHERE id = ?').bind(personId).first();
+  if (!person) throw new McpToolError('Unknown personId');
+
+  const effective = status === 'default' ? person.default_status : status;
+  if (effective === person.default_status) {
+    await db.prepare('DELETE FROM availability_overrides WHERE person_id = ? AND date = ?').bind(personId, date).run();
+  } else {
+    await db.prepare(
+      `INSERT INTO availability_overrides (person_id, date, status) VALUES (?, ?, ?)
+       ON CONFLICT(person_id, date) DO UPDATE SET status=excluded.status`
+    ).bind(personId, date, effective).run();
+  }
+  return { status: effective };
+}
+
+async function unwrapJson(res, fallbackError) {
+  const data = await res.json();
+  if (!res.ok) throw new McpToolError(data.error || fallbackError);
+  return data;
+}
+
 async function callMcpTool(name, args, env, ctx) {
   const db = env.DB;
   const a = args || {};
@@ -647,20 +896,42 @@ async function callMcpTool(name, args, env, ctx) {
       return await mcpGetRoster(db);
     case 'list_events':
       return await mcpListEvents(db, a);
-    case 'create_event': {
-      const res = await createEvent(db, a);
-      const data = await res.json();
-      if (!res.ok) throw new McpToolError(data.error || 'create_event failed');
-      return data;
-    }
+    case 'get_state':
+      return await getState(db);
+    case 'create_event':
+      return await unwrapJson(await createEvent(db, a), 'create_event failed');
+    case 'update_event':
+      return await unwrapJson(await updateEvent(db, a), 'update_event failed');
+    case 'delete_event':
+      return await unwrapJson(await deleteEvent(db, a), 'delete_event failed');
     case 'update_person':
       return await mcpUpdatePerson(db, a, env, ctx);
-    case 'create_post': {
-      const res = await createPost(db, a);
-      const data = await res.json();
-      if (!res.ok) throw new McpToolError(data.error || 'create_post failed');
-      return data;
-    }
+    case 'delete_person':
+      return await unwrapJson(await deletePerson(db, a), 'delete_person failed');
+    case 'set_default_status':
+      return await unwrapJson(await setDefaultStatus(db, a), 'set_default_status failed');
+    case 'set_health_status':
+      return await unwrapJson(await setHealthStatus(db, a), 'set_health_status failed');
+    case 'set_training_status':
+      return await unwrapJson(await setTrainingStatus(db, a), 'set_training_status failed');
+    case 'set_availability':
+      return await mcpSetAvailability(db, a);
+    case 'set_body_mark':
+      return await mcpSetBodyMark(db, a);
+    case 'save_comment':
+      return await unwrapJson(await saveComment(db, a), 'save_comment failed');
+    case 'save_rsvp':
+      return await unwrapJson(await saveRsvp(db, a), 'save_rsvp failed');
+    case 'create_post':
+      return await unwrapJson(await createPost(db, a), 'create_post failed');
+    case 'delete_post':
+      return await unwrapJson(await deletePost(db, a), 'delete_post failed');
+    case 'upsert_travel_estimate':
+      return await unwrapJson(await upsertTravelEstimate(db, a), 'upsert_travel_estimate failed');
+    case 'apply_week_template':
+      return await unwrapJson(await applyWeekTemplate(db, a), 'apply_week_template failed');
+    case 'clear_week_template':
+      return await unwrapJson(await clearWeekTemplate(db, a), 'clear_week_template failed');
     default:
       throw new McpToolError(`Unknown tool: ${name}`);
   }
