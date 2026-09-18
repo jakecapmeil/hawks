@@ -548,6 +548,14 @@
     font-size:var(--fs-caption);font-weight:600;letter-spacing:var(--tr-caption);
     padding:3px 8px;border-radius:var(--r-pill);
   }
+  .event-location{
+    display:flex;align-items:center;gap:5px;
+    font-size:var(--fs-subhead);line-height:var(--lh-subhead);
+    letter-spacing:var(--tr-subhead);color:var(--gold);font-weight:600;
+    margin:5px 0 0 12px;text-decoration:none;width:fit-content;
+  }
+  .event-location:hover{text-decoration:underline;}
+  .event-location svg{width:14px;height:14px;flex-shrink:0;}
   .event-desc{
     font-size:var(--fs-subhead);line-height:var(--lh-subhead);
     letter-spacing:var(--tr-subhead);color:var(--ink-soft);margin:6px 0 0 12px;
@@ -689,29 +697,31 @@
   }
   .post-item{
     display:flex;gap:8px;align-items:flex-start;
-    padding:14px 0;border-bottom:1px solid var(--line);
+    padding:20px 0;border-bottom:1px solid var(--line);
   }
-  .post-item:first-child{padding-top:2px;}
-  .post-item:last-child{border-bottom:none;padding-bottom:2px;}
+  .post-item:first-child{padding-top:4px;}
+  .post-item:last-child{border-bottom:none;padding-bottom:4px;}
   .post-main{flex:1;min-width:0;}
   /* Byline reads left-to-right as one phrase — name, then when. Previously
-     space-between flung the timestamp to the far edge, detaching it. */
+     space-between flung the timestamp to the far edge, detaching it. Styled
+     as a small eyebrow label (like a dateline) above the headline. */
   .post-byline{
     display:flex;align-items:baseline;gap:5px;flex-wrap:wrap;
-    font-size:var(--fs-subhead);line-height:var(--lh-subhead);
-    letter-spacing:var(--tr-subhead);color:var(--ink-soft);
-    margin-bottom:2px;
+    font-size:var(--fs-caption);line-height:var(--lh-caption);
+    letter-spacing:var(--tr-caption);color:var(--ink-soft);
+    text-transform:uppercase;font-weight:600;
+    margin-bottom:6px;
   }
-  .post-author{font-weight:600;color:var(--ink);}
+  .post-author{font-weight:600;color:var(--ink-soft);}
   .post-byline .sep{color:var(--ink-soft);}
   .post-time{font-variant-numeric:tabular-nums;}
   .post-header{
-    font-weight:600;font-size:var(--fs-headline);line-height:var(--lh-headline);
-    letter-spacing:var(--tr-headline);margin:0 0 2px;cursor:pointer;
+    font-weight:700;font-size:var(--fs-title3);line-height:var(--lh-title3);
+    letter-spacing:var(--tr-title3);margin:0 0 4px;cursor:pointer;
   }
   .post-text{
     font-size:var(--fs-callout);line-height:var(--lh-body);
-    letter-spacing:var(--tr-callout);
+    letter-spacing:var(--tr-callout);color:var(--ink-soft);
     white-space:pre-wrap;cursor:pointer;overflow-wrap:anywhere;
   }
   .post-text.clamped{
@@ -1020,6 +1030,7 @@
       <input type="text" id="eventTitle" placeholder="Event title (e.g. Track practice, Meet vs. Xavier)">
       <input type="text" id="eventTime" placeholder="Time (e.g. 4:00 PM)">
       <input type="text" id="eventEndTime" placeholder="End time (optional, e.g. 5:30 PM)">
+      <input type="text" id="eventLocation" list="knownLocations" placeholder="Location (e.g. Van Cortlandt Park, or a full address)">
       <textarea id="eventDesc" placeholder="Details — who's expected, notes…"></textarea>
       <div>
         <div class="event-type-label">Event type</div>
@@ -1044,6 +1055,7 @@
         <button class="ghost" id="cancelEventBtn">Cancel</button>
       </div>
     </div>
+    <datalist id="knownLocations"></datalist>
 
     <div class="section-label">Availability</div>
     <div id="detailList"></div>
@@ -1146,6 +1158,15 @@
       <div class="hint" id="travelHint">Approximate transit time from your home address — weekday for practices, weekend for meets. Tap a place to open directions.</div>
       <div id="travelList"></div>
     </div>
+
+    <div class="card" id="calendarFeedCard" style="display:none;">
+      <div class="card-title">Google Calendar</div>
+      <div class="hint">Paste this into Google Calendar → Settings → Add calendar → From URL, and it'll stay in sync with the team schedule and your RSVPs.</div>
+      <div class="copy-row" style="margin-top:8px;">
+        <textarea id="calendarFeedUrl" readonly rows="1"></textarea>
+        <button id="copyCalendarFeedBtn">Copy</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -1202,6 +1223,11 @@ const SHARE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 </svg>`;
 
 const DD_CHEVRON = `<svg class="rsvp-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+
+const LOCATION_PIN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+  <circle cx="12" cy="10" r="3"/>
+</svg>`;
 
 let people = [];
 let overrides = {};
@@ -1340,6 +1366,13 @@ async function loadState(){
     people = []; overrides = {}; comments = {}; events = {}; rsvps = {}; bodyMarks = {}; posts = [];
     locations = []; travelEstimates = [];
   }
+  renderLocationOptions();
+}
+
+function renderLocationOptions(){
+  const list = $('knownLocations');
+  if(!list) return;
+  list.innerHTML = locations.map(loc => `<option value="${escapeHtml(loc.name)}">`).join('');
 }
 
 async function apiPost(path, body){
@@ -1384,12 +1417,12 @@ async function saveCommentRemote(dateKey, personId, text){
   await apiPost('/api/comment', { date: dateKey, personId, text });
 }
 
-async function createEventRemote(dateKey, title, time, endTime, desc, type, kind){
-  return await apiPost('/api/events', { date: dateKey, title, time, endTime, desc, type, kind });
+async function createEventRemote(dateKey, title, time, endTime, desc, type, kind, location){
+  return await apiPost('/api/events', { date: dateKey, title, time, endTime, desc, type, kind, location });
 }
 
-async function updateEventRemote(eventId, title, time, endTime, desc, type, kind){
-  return await apiPost('/api/events/update', { eventId, title, time, endTime, desc, type, kind });
+async function updateEventRemote(eventId, title, time, endTime, desc, type, kind, location){
+  return await apiPost('/api/events/update', { eventId, title, time, endTime, desc, type, kind, location });
 }
 
 async function saveRsvpRemote(eventId, personId, status){
@@ -1682,6 +1715,7 @@ function renderEvents(){
           <span class="event-type-pill" style="background:${et.bg};color:${et.text}">${et.label}</span>
           <span class="event-time">${escapeHtml(formatEventTimeRange(ev))}</span>
         </div>
+        ${ev.location ? `<a class="event-location" href="${mapsSearchLink(ev.location)}" target="_blank" rel="noopener">${LOCATION_PIN_ICON}${escapeHtml(ev.location)}</a>` : ''}
         ${ev.desc ? `<div class="event-desc">${escapeHtml(ev.desc)}</div>` : ''}
         <div class="event-actions">
           ${isRealPerson() ? `<button class="rsvp-btn tap44 ${status}" data-event="${ev.id}">${rsvpLabel[status]}</button>` : ''}
@@ -1864,7 +1898,7 @@ function renderEventTypePicker(){
 }
 
 function resetEventForm(){
-  $('eventTitle').value=''; $('eventTime').value=''; $('eventEndTime').value=''; $('eventDesc').value='';
+  $('eventTitle').value=''; $('eventTime').value=''; $('eventEndTime').value=''; $('eventLocation').value=''; $('eventDesc').value='';
   selectedEventType = 'practice';
   selectedEventKind = 'easy';
   renderEventTypePicker();
@@ -1903,13 +1937,14 @@ async function addEvent(){
   const title = $('eventTitle').value.trim();
   const time = $('eventTime').value.trim();
   const endTime = $('eventEndTime').value.trim();
+  const location = $('eventLocation').value.trim();
   const desc = $('eventDesc').value.trim();
   if(!title){ $('eventTitle').focus(); return; }
   const kind = selectedEventType === 'practice' ? selectedEventKind : '';
-  const result = await createEventRemote(selectedDate, title, time, endTime, desc, selectedEventType, kind);
+  const result = await createEventRemote(selectedDate, title, time, endTime, desc, selectedEventType, kind, location);
   const newEv = (result && result.event)
     ? result.event
-    : {id:'e_'+Date.now(), date:selectedDate, title, time, endTime, desc, type:selectedEventType, kind, auto:false};
+    : {id:'e_'+Date.now(), date:selectedDate, title, time, endTime, desc, type:selectedEventType, kind, location, auto:false};
   if(!events[selectedDate]) events[selectedDate] = [];
   events[selectedDate].push(newEv);
   $('eventFormRow').classList.remove('show');
@@ -2273,6 +2308,7 @@ function renderAdminModal(){
           <input type="text" id="adminEditTitle" value="${escapeHtml(ev.title)}" placeholder="Event title">
           <input type="text" id="adminEditTime" value="${escapeHtml(ev.time)}" placeholder="Time (e.g. 4:00 PM)">
           <input type="text" id="adminEditEndTime" value="${escapeHtml(ev.endTime || '')}" placeholder="End time (optional, e.g. 5:30 PM)">
+          <input type="text" id="adminEditLocation" list="knownLocations" value="${escapeHtml(ev.location || '')}" placeholder="Location (e.g. Van Cortlandt Park, or a full address)">
           <textarea id="adminEditDesc" placeholder="Details">${escapeHtml(ev.desc)}</textarea>
           <div>
             <div class="event-type-label">Event type</div>
@@ -2407,12 +2443,13 @@ function renderAdminModal(){
       const title = $('adminEditTitle').value.trim();
       const time = $('adminEditTime').value.trim();
       const endTime = $('adminEditEndTime').value.trim();
+      const location = $('adminEditLocation').value.trim();
       const desc = $('adminEditDesc').value.trim();
       if(!title){ $('adminEditTitle').focus(); return; }
       const kind = adminEventType === 'practice' ? adminEventKind : '';
-      await updateEventRemote(id, title, time, endTime, desc, adminEventType, kind);
+      await updateEventRemote(id, title, time, endTime, desc, adminEventType, kind, location);
       const ev = findEventById(id);
-      if(ev){ ev.title = title; ev.time = time; ev.endTime = endTime; ev.desc = desc; ev.type = adminEventType; ev.kind = kind; }
+      if(ev){ ev.title = title; ev.time = time; ev.endTime = endTime; ev.location = location; ev.desc = desc; ev.type = adminEventType; ev.kind = kind; }
       editingEventId = null;
       renderAdminModal();
       renderEvents();
@@ -2656,6 +2693,10 @@ function mapsLink(origin, destination){
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=transit`;
 }
 
+function mapsSearchLink(query){
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 function renderTravelList(p){
   const home = (p.home_address || '').trim();
   if(!locations.length){
@@ -2684,6 +2725,7 @@ function renderPersonal(){
   $('personalHint').style.display = p ? 'none' : 'block';
   $('personalForm').classList.toggle('show', !!p);
   $('travelCard').style.display = p ? '' : 'none';
+  $('calendarFeedCard').style.display = p ? '' : 'none';
   if(!p) return;
 
   $('personalFirstName').value = p.first_name || '';
@@ -2701,6 +2743,8 @@ function renderPersonal(){
   $('personalSaveHint').style.display = 'none';
 
   renderTravelList(p);
+
+  $('calendarFeedUrl').value = `${location.origin}/api/calendar/${p.id}.ics`;
 }
 
 async function savePersonal(){
@@ -3007,6 +3051,17 @@ function wireUI(){
     input.setSelectionRange(0, 99999);
     try{ navigator.clipboard.writeText(input.value); }catch(e){ document.execCommand('copy'); }
     const btn = $('copyBtn');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(()=>{ btn.textContent = orig; }, 1200);
+  });
+
+  $('copyCalendarFeedBtn').addEventListener('click', ()=>{
+    const input = $('calendarFeedUrl');
+    input.select();
+    input.setSelectionRange(0, 99999);
+    try{ navigator.clipboard.writeText(input.value); }catch(e){ document.execCommand('copy'); }
+    const btn = $('copyCalendarFeedBtn');
     const orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(()=>{ btn.textContent = orig; }, 1200);

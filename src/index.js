@@ -27,7 +27,7 @@ async function getState(db) {
     ).all(),
     db.prepare('SELECT person_id, date, status FROM availability_overrides').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
-    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, auto FROM events').all(),
+    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, auto, location FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
     db.prepare('SELECT person_id, part, status FROM body_marks').all(),
     db.prepare('SELECT id, person_id, text, header, created_at FROM posts').all(),
@@ -57,6 +57,7 @@ async function getState(db) {
       type: row.type,
       kind: row.kind || '',
       auto: !!row.auto,
+      location: row.location || '',
     });
   }
 
@@ -295,16 +296,17 @@ async function createEvent(db, body) {
   const time = str(body?.time, 40);
   const endTime = str(body?.endTime, 40);
   const desc = str(body?.desc, 2000);
+  const location = str(body?.location, 200);
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
   const kind = normalizeKind(type, body?.kind);
   if (!date || !title) return json({ error: 'Missing date or title' }, 400);
 
   const id = 'e_' + crypto.randomUUID();
   await db.prepare(
-    'INSERT INTO events (id, date, title, time, end_time, description, type, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, date, title, time, endTime, desc, type, kind).run();
+    'INSERT INTO events (id, date, title, time, end_time, description, type, kind, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, date, title, time, endTime, desc, type, kind, location).run();
 
-  return json({ event: { id, date, title, time, endTime, desc, type, kind, auto: false } });
+  return json({ event: { id, date, title, time, endTime, desc, type, kind, location, auto: false } });
 }
 
 async function createPost(db, body) {
@@ -352,13 +354,14 @@ async function updateEvent(db, body) {
   const time = str(body?.time, 40);
   const endTime = str(body?.endTime, 40);
   const desc = str(body?.desc, 2000);
+  const location = str(body?.location, 200);
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
   const kind = normalizeKind(type, body?.kind);
   if (!eventId || !title) return json({ error: 'Missing eventId or title' }, 400);
 
   await db.prepare(
-    'UPDATE events SET title = ?, time = ?, end_time = ?, description = ?, type = ?, kind = ? WHERE id = ?'
-  ).bind(title, time, endTime, desc, type, kind, eventId).run();
+    'UPDATE events SET title = ?, time = ?, end_time = ?, description = ?, type = ?, kind = ?, location = ? WHERE id = ?'
+  ).bind(title, time, endTime, desc, type, kind, location, eventId).run();
 
   return json({ ok: true });
 }
@@ -482,6 +485,350 @@ async function clearWeekTemplate(db, body) {
   return json({ removed: ids });
 }
 
+// ---------------------------------------------------------------------------
+// MCP server — lets Claude (Chat, Cowork, Code) read and write the same D1
+// data the web app uses, over the stateless Streamable HTTP transport
+// (single POST endpoint, JSON responses, no SSE/session state needed for a
+// tool set this small).
+// ---------------------------------------------------------------------------
+
+const MCP_TOOLS = [
+  {
+    name: 'get_roster',
+    description: "List everyone on the Hawks roster with their contact info, school info, home address, and out-periods.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'list_events',
+    description: 'List calendar events (practices, meets, other), optionally filtered to a date range.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Inclusive start date, YYYY-MM-DD. Omit for no lower bound.' },
+        to: { type: 'string', description: 'Inclusive end date, YYYY-MM-DD. Omit for no upper bound.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_event',
+    description: 'Create a new calendar event (practice, meet, or other).',
+    inputSchema: {
+      type: 'object',
+      required: ['date', 'title'],
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        title: { type: 'string' },
+        time: { type: 'string', description: 'e.g. "4:00 PM"' },
+        endTime: { type: 'string', description: 'e.g. "5:30 PM", optional' },
+        desc: { type: 'string', description: 'optional details' },
+        location: { type: 'string', description: 'e.g. "Van Cortlandt Park" or a full address, optional' },
+        type: { type: 'string', enum: ['practice', 'meet', 'other'], description: 'defaults to practice' },
+        kind: { type: 'string', enum: ['easy', 'workout', 'long_run'], description: 'only used when type is practice' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'update_person',
+    description: "Update one person's contact, school, or personal info. Only the fields you pass are changed — everything else keeps its current value.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        phone: { type: 'string' },
+        email: { type: 'string' },
+        firstName: { type: 'string' },
+        classYear: { type: 'string', enum: ['Freshman', 'Sophomore', 'Junior', 'Senior'] },
+        trackId: { type: 'string' },
+        dateEntered: { type: 'string', description: 'YYYY-MM-DD' },
+        borough: { type: 'string' },
+        homeAddress: { type: 'string' },
+        outMon: { type: 'integer', description: 'School period (1-12) they leave early on Monday' },
+        outTue: { type: 'integer' },
+        outWed: { type: 'integer' },
+        outThu: { type: 'integer' },
+        outFri: { type: 'integer' },
+        personalNotes: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_post',
+    description: 'Post a team announcement, visible on the Calendar tab.',
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'text'],
+      properties: {
+        personId: { type: 'string', description: 'Who the post is from' },
+        text: { type: 'string' },
+        header: { type: 'string', description: 'optional short title' },
+      },
+      additionalProperties: false,
+    },
+  },
+];
+
+class McpToolError extends Error {}
+
+async function mcpGetRoster(db) {
+  const rows = await db.prepare(
+    `SELECT id, name, phone, email, first_name, class_year, track_id, date_entered, borough,
+            home_address, out_mon, out_tue, out_wed, out_thu, out_fri, personal_notes,
+            default_status, health_status, training_status
+     FROM people ORDER BY name`
+  ).all();
+  return rows.results;
+}
+
+async function mcpListEvents(db, args) {
+  const from = str(args?.from, 20);
+  const to = str(args?.to, 20);
+  const conds = [];
+  const binds = [];
+  if (from) { conds.push('date >= ?'); binds.push(from); }
+  if (to) { conds.push('date <= ?'); binds.push(to); }
+  let query = 'SELECT id, date, title, time, end_time, description, type, kind, location FROM events';
+  if (conds.length) query += ' WHERE ' + conds.join(' AND ');
+  query += ' ORDER BY date, time';
+  const rows = await db.prepare(query).bind(...binds).all();
+  return rows.results.map(r => ({
+    id: r.id, date: r.date, title: r.title, time: r.time, endTime: r.end_time,
+    desc: r.description, type: r.type, kind: r.kind, location: r.location,
+  }));
+}
+
+async function mcpUpdatePerson(db, args, env, ctx) {
+  const personId = str(args?.personId, 100);
+  if (!personId) throw new McpToolError('Missing personId');
+
+  const current = await db.prepare(
+    `SELECT phone, email, first_name, class_year, track_id, date_entered, borough,
+            home_address, out_mon, out_tue, out_wed, out_thu, out_fri, personal_notes
+     FROM people WHERE id = ?`
+  ).bind(personId).first();
+  if (!current) throw new McpToolError('Unknown personId');
+
+  const phone = args.phone !== undefined ? str(args.phone, 40) : current.phone;
+  const email = args.email !== undefined ? str(args.email, 200) : current.email;
+  const firstName = args.firstName !== undefined ? str(args.firstName, 100) : current.first_name;
+  const classYear = args.classYear !== undefined
+    ? (VALID_CLASS_YEARS.includes(args.classYear) ? args.classYear : '')
+    : current.class_year;
+  const trackId = args.trackId !== undefined ? str(args.trackId, 40) : current.track_id;
+  const dateEntered = args.dateEntered !== undefined ? str(args.dateEntered, 20) : current.date_entered;
+  const borough = args.borough !== undefined ? str(args.borough, 60) : current.borough;
+  const homeAddress = args.homeAddress !== undefined ? str(args.homeAddress, 300) : current.home_address;
+  const outMon = args.outMon !== undefined ? outPeriod(args.outMon) : current.out_mon;
+  const outTue = args.outTue !== undefined ? outPeriod(args.outTue) : current.out_tue;
+  const outWed = args.outWed !== undefined ? outPeriod(args.outWed) : current.out_wed;
+  const outThu = args.outThu !== undefined ? outPeriod(args.outThu) : current.out_thu;
+  const outFri = args.outFri !== undefined ? outPeriod(args.outFri) : current.out_fri;
+  const personalNotes = args.personalNotes !== undefined ? str(args.personalNotes, 2000) : current.personal_notes;
+
+  await db.prepare(
+    `UPDATE people SET phone=?, email=?, first_name=?, class_year=?, track_id=?, date_entered=?, borough=?,
+       home_address=?, out_mon=?, out_tue=?, out_wed=?, out_thu=?, out_fri=?, personal_notes=?
+     WHERE id=?`
+  ).bind(phone, email, firstName, classYear, trackId, dateEntered, borough, homeAddress,
+         outMon, outTue, outWed, outThu, outFri, personalNotes, personId).run();
+
+  if (ctx) ctx.waitUntil(syncPersonToSheet(db, personId, env).catch(err => console.error('sheet sync failed', err)));
+  return { ok: true };
+}
+
+async function callMcpTool(name, args, env, ctx) {
+  const db = env.DB;
+  const a = args || {};
+  switch (name) {
+    case 'get_roster':
+      return await mcpGetRoster(db);
+    case 'list_events':
+      return await mcpListEvents(db, a);
+    case 'create_event': {
+      const res = await createEvent(db, a);
+      const data = await res.json();
+      if (!res.ok) throw new McpToolError(data.error || 'create_event failed');
+      return data;
+    }
+    case 'update_person':
+      return await mcpUpdatePerson(db, a, env, ctx);
+    case 'create_post': {
+      const res = await createPost(db, a);
+      const data = await res.json();
+      if (!res.ok) throw new McpToolError(data.error || 'create_post failed');
+      return data;
+    }
+    default:
+      throw new McpToolError(`Unknown tool: ${name}`);
+  }
+}
+
+async function handleMcp(request, env, ctx) {
+  const auth = request.headers.get('Authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!env.MCP_AUTH_TOKEN || token !== env.MCP_AUTH_TOKEN) {
+    return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } }, 401);
+  }
+
+  let rpc;
+  try {
+    rpc = await request.json();
+  } catch {
+    return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400);
+  }
+
+  const { id, method, params } = rpc || {};
+  const isNotification = id === undefined;
+  const respond = (result) => isNotification ? new Response(null, { status: 202 }) : json({ jsonrpc: '2.0', id, result });
+  const respondErr = (code, message) => isNotification ? new Response(null, { status: 202 }) : json({ jsonrpc: '2.0', id, error: { code, message } });
+
+  try {
+    if (method === 'initialize') {
+      return respond({
+        protocolVersion: '2025-06-18',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'hawks-calendar', version: '1.0.0' },
+      });
+    }
+    if (method === 'notifications/initialized') return new Response(null, { status: 202 });
+    if (method === 'ping') return respond({});
+    if (method === 'tools/list') return respond({ tools: MCP_TOOLS });
+    if (method === 'tools/call') {
+      const { name, arguments: toolArgs } = params || {};
+      try {
+        const data = await callMcpTool(name, toolArgs, env, ctx);
+        return respond({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+      } catch (err) {
+        return respond({ content: [{ type: 'text', text: err.message || 'Tool failed' }], isError: true });
+      }
+    }
+    return respondErr(-32601, `Method not found: ${method}`);
+  } catch (err) {
+    console.error(err);
+    return respondErr(-32603, 'Internal error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-person .ics calendar feed — subscribe once in Google Calendar (Settings
+// > Add calendar > From URL) and it stays live from then on. No Google OAuth
+// needed since this is a read-only published feed, same no-auth model as the
+// rest of the app.
+// ---------------------------------------------------------------------------
+
+function parseTimeToHM(text) {
+  const m = String(text || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  const ap = m[3] ? m[3].toUpperCase() : null;
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  if (h > 23 || min > 59) return null;
+  return { h, min };
+}
+
+function icsEscape(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+function icsFold(line) {
+  if (line.length <= 75) return line;
+  let out = line.slice(0, 75);
+  let rest = line.slice(75);
+  while (rest.length) {
+    out += '\r\n ' + rest.slice(0, 74);
+    rest = rest.slice(74);
+  }
+  return out;
+}
+
+function icsDateStamp(ymd, hm) {
+  const bare = ymd.replace(/-/g, '');
+  if (!hm) return { value: bare, allDay: true };
+  const hh = String(hm.h).padStart(2, '0');
+  const mm = String(hm.min).padStart(2, '0');
+  return { value: `${bare}T${hh}${mm}00`, allDay: false };
+}
+
+async function buildIcsFeed(db, personId) {
+  const person = await db.prepare('SELECT id, name FROM people WHERE id = ?').bind(personId).first();
+  if (!person) return null;
+
+  const [eventsRes, rsvpsRes, locsRes, travelRes] = await Promise.all([
+    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, location FROM events ORDER BY date, time').all(),
+    db.prepare('SELECT event_id, status FROM rsvps WHERE person_id = ?').bind(personId).all(),
+    db.prepare('SELECT id, name, kind FROM locations').all(),
+    db.prepare('SELECT location_id, daypart, minutes FROM travel_estimates WHERE person_id = ?').bind(personId).all(),
+  ]);
+
+  const rsvpByEvent = {};
+  for (const r of rsvpsRes.results) rsvpByEvent[r.event_id] = r.status;
+  const locByName = {};
+  for (const l of locsRes.results) locByName[l.name.toLowerCase()] = l;
+  const travelByLocDaypart = {};
+  for (const t of travelRes.results) travelByLocDaypart[`${t.location_id}:${t.daypart}`] = t.minutes;
+
+  const typeLabel = { practice: 'Practice', meet: 'Meet', other: 'Event' };
+  const rsvpLabel = { available: 'Coming', unavailable: 'Not coming' };
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'PRODID:-//Hawks Calendar//EN',
+    `X-WR-CALNAME:${icsEscape(person.name)} — Hawks XC/Track`,
+    'X-WR-TIMEZONE:America/New_York',
+  ];
+
+  const now = new Date();
+  const dtstamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+
+  for (const ev of eventsRes.results) {
+    const start = parseTimeToHM(ev.time);
+    const end = parseTimeToHM(ev.end_time);
+    const dtStart = icsDateStamp(ev.date, start);
+
+    const descParts = [];
+    if (ev.description) descParts.push(ev.description);
+    const status = rsvpByEvent[ev.id];
+    descParts.push(`RSVP: ${status ? rsvpLabel[status] || status : 'No response yet'}`);
+    const loc = ev.location ? locByName[ev.location.toLowerCase()] : null;
+    if (loc) {
+      const daypart = loc.kind === 'meet' ? 'weekend_meet' : 'weekday_practice';
+      const minutes = travelByLocDaypart[`${loc.id}:${daypart}`];
+      if (minutes) descParts.push(`~${minutes} min from home (approximate, transit)`);
+    }
+
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${ev.id}@hawks-calendar`);
+    lines.push(`DTSTAMP:${dtstamp}`);
+    if (dtStart.allDay) {
+      lines.push(`DTSTART;VALUE=DATE:${dtStart.value}`);
+    } else {
+      lines.push(`DTSTART;TZID=America/New_York:${dtStart.value}`);
+      const dtEnd = end ? icsDateStamp(ev.date, end) : null;
+      if (dtEnd && !dtEnd.allDay) {
+        lines.push(`DTEND;TZID=America/New_York:${dtEnd.value}`);
+      } else {
+        const hh = String((start.h + 1) % 24).padStart(2, '0');
+        lines.push(`DTEND;TZID=America/New_York:${ev.date.replace(/-/g, '')}T${hh}${String(start.min).padStart(2, '0')}00`);
+      }
+    }
+    lines.push(icsFold(`SUMMARY:${icsEscape(`${typeLabel[ev.type] || 'Event'}: ${ev.title}`)}`));
+    if (ev.location) lines.push(icsFold(`LOCATION:${icsEscape(ev.location)}`));
+    lines.push(icsFold(`DESCRIPTION:${descParts.map(icsEscape).join('\\n')}`));
+    lines.push('END:VEVENT');
+  }
+
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
@@ -489,6 +836,25 @@ export default {
     try {
       if (pathname === '/api/state' && request.method === 'GET') {
         return json(await getState(env.DB));
+      }
+
+      if (pathname === '/mcp' && request.method === 'POST') {
+        return await handleMcp(request, env, ctx);
+      }
+      if (pathname === '/mcp' && request.method === 'GET') {
+        return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
+      }
+
+      const icsMatch = pathname.match(/^\/api\/calendar\/([^/]+)\.ics$/);
+      if (icsMatch && request.method === 'GET') {
+        const feed = await buildIcsFeed(env.DB, icsMatch[1]);
+        if (!feed) return new Response('Not found', { status: 404 });
+        return new Response(feed, {
+          headers: {
+            'Content-Type': 'text/calendar; charset=utf-8',
+            'Content-Disposition': 'inline; filename="hawks-calendar.ics"',
+          },
+        });
       }
 
       if (request.method === 'POST') {
