@@ -420,6 +420,25 @@
   }
   .travel-row a{color:inherit;text-decoration:none;}
   .travel-row a:hover .travel-row-title{text-decoration:underline;}
+  .meets-scroll{
+    max-height:min(70vh,640px);overflow-y:auto;-webkit-overflow-scrolling:touch;
+    display:flex;flex-direction:column;gap:10px;margin-top:4px;
+  }
+  .meet-card{
+    border:1px solid var(--line);border-radius:var(--r-control);padding:12px 14px;
+  }
+  .meet-card-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .meet-card-title{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-subhead);}
+  .meet-card-date{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);white-space:nowrap;}
+  .meet-card-location{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:2px;}
+  .meet-card-location a{color:inherit;}
+  .meet-stats{display:flex;gap:16px;margin-top:10px;}
+  .meet-stat{display:flex;flex-direction:column;gap:1px;}
+  .meet-stat-label{font-family:var(--font-ui);font-size:var(--fs-caption2);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;}
+  .meet-stat-value{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-subhead);}
+  .meet-card-attending{margin-top:10px;font-family:var(--font-ui);font-size:var(--fs-footnote);}
+  .meet-card-attending b{color:var(--ink-soft);font-weight:600;}
+  .meets-empty{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);padding:8px 0;}
   .color-pick-row{display:flex;align-items:center;gap:10px;}
   .color-pick-row input[type=color]{
     -webkit-appearance:none;appearance:none;
@@ -999,6 +1018,7 @@
     <button type="button" class="page-tab active" id="pageTabCalendar" role="tab" aria-selected="true" aria-controls="pageCalendar">Calendar</button>
     <button type="button" class="page-tab" id="pageTabBody" role="tab" aria-selected="false" aria-controls="pageBody">Body</button>
     <button type="button" class="page-tab" id="pageTabPersonal" role="tab" aria-selected="false" aria-controls="pagePersonal">Personal</button>
+    <button type="button" class="page-tab" id="pageTabMeets" role="tab" aria-selected="false" aria-controls="pageMeets">Meets</button>
   </div>
 
   <div id="pageCalendar">
@@ -1192,6 +1212,14 @@
         <textarea id="calendarFeedUrl" readonly rows="1"></textarea>
         <button id="copyCalendarFeedBtn">Copy</button>
       </div>
+    </div>
+  </div>
+
+  <div id="pageMeets" style="display:none;">
+    <div class="card">
+      <div class="card-title">Meets</div>
+      <div class="hint">Distance and time to arrive are estimated from your home address on the Personal tab. Select your name above to see your own numbers.</div>
+      <div id="meetsList" class="meets-scroll"></div>
     </div>
   </div>
 
@@ -1443,12 +1471,19 @@ async function saveCommentRemote(dateKey, personId, text){
   await apiPost('/api/comment', { date: dateKey, personId, text });
 }
 
+function matchLocationId(text){
+  const t = (text || '').trim().toLowerCase();
+  if(!t) return '';
+  const match = locations.find(loc => loc.name.trim().toLowerCase() === t);
+  return match ? match.id : '';
+}
+
 async function createEventRemote(dateKey, title, time, endTime, desc, type, kind, location){
-  return await apiPost('/api/events', { date: dateKey, title, time, endTime, desc, type, kind, location });
+  return await apiPost('/api/events', { date: dateKey, title, time, endTime, desc, type, kind, location, locationId: matchLocationId(location) });
 }
 
 async function updateEventRemote(eventId, title, time, endTime, desc, type, kind, location){
-  return await apiPost('/api/events/update', { eventId, title, time, endTime, desc, type, kind, location });
+  return await apiPost('/api/events/update', { eventId, title, time, endTime, desc, type, kind, location, locationId: matchLocationId(location) });
 }
 
 async function saveRsvpRemote(eventId, personId, status){
@@ -2542,13 +2577,17 @@ function setPage(page){
   $('pageTabCalendar').classList.toggle('active', page === 'calendar');
   $('pageTabBody').classList.toggle('active', page === 'body');
   $('pageTabPersonal').classList.toggle('active', page === 'personal');
+  $('pageTabMeets').classList.toggle('active', page === 'meets');
   $('pageTabCalendar').setAttribute('aria-selected', String(page === 'calendar'));
   $('pageTabBody').setAttribute('aria-selected', String(page === 'body'));
   $('pageTabPersonal').setAttribute('aria-selected', String(page === 'personal'));
+  $('pageTabMeets').setAttribute('aria-selected', String(page === 'meets'));
   $('pageCalendar').style.display = page === 'calendar' ? '' : 'none';
   $('pageBody').style.display = page === 'body' ? '' : 'none';
   $('pagePersonal').style.display = page === 'personal' ? '' : 'none';
+  $('pageMeets').style.display = page === 'meets' ? '' : 'none';
   if(page === 'personal') renderPersonal();
+  if(page === 'meets') renderMeets();
 }
 
 function currentHealthStatus(){
@@ -2791,6 +2830,88 @@ function renderPersonal(){
   $('calendarFeedUrl').value = `${location.origin}/api/calendar/${p.id}.ics`;
 }
 
+function resolvedMeetLocation(ev){
+  const loc = ev.locationId ? locations.find(l => l.id === ev.locationId) : null;
+  return { name: loc ? loc.name : (ev.location || ''), address: loc ? loc.address : (ev.location || '') };
+}
+
+function allMeetsSorted(){
+  const out = [];
+  Object.keys(events).sort().forEach(date=>{
+    events[date].forEach(ev=>{ if(ev.type === 'meet') out.push(ev); });
+  });
+  out.sort((a,b)=> (a.date + (a.time||'')).localeCompare(b.date + (b.time||'')));
+  return out;
+}
+
+const meetsDistanceCache = new Map();
+
+function fetchMeetDistance(personId, locationId){
+  const key = `${personId}|${locationId}`;
+  if(!meetsDistanceCache.has(key)){
+    meetsDistanceCache.set(key, fetch(`/api/distance?personId=${encodeURIComponent(personId)}&locationId=${encodeURIComponent(locationId)}`)
+      .then(r=>r.json()).catch(()=>({configured:false, available:false})));
+  }
+  return meetsDistanceCache.get(key);
+}
+
+function renderMeets(){
+  const list = $('meetsList');
+  const meets = allMeetsSorted();
+  if(!meets.length){
+    list.innerHTML = '<div class="meets-empty">No meets on the calendar yet.</div>';
+    return;
+  }
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  const home = p ? (p.home_address || '').trim() : '';
+
+  list.innerHTML = meets.map(ev=>{
+    const loc = resolvedMeetLocation(ev);
+    const timeRange = formatEventTimeRange(ev);
+    const est = (p && ev.locationId)
+      ? travelEstimates.find(t=> t.person_id===p.id && t.location_id===ev.locationId && t.daypart==='weekend_meet')
+      : null;
+    const etaLabel = !p ? 'Select your name' : (!home ? 'Add home address' : (!ev.locationId ? '—' : (est ? `~${est.minutes} min` : '—')));
+    const attendees = attendeesFor(ev);
+    const attendingLabel = attendees.length ? attendees.map(a=>escapeHtml(a.name)).join(', ') : 'No one has RSVP’d yet';
+    const directionsHref = loc.address ? (home ? mapsLink(home, loc.address) : mapsSearchLink(loc.address)) : '';
+    const showDistance = p && home && ev.locationId;
+
+    return `<div class="meet-card">
+      <div class="meet-card-head">
+        <div class="meet-card-title">${escapeHtml(ev.title)}</div>
+        <div class="meet-card-date">${formatEventDate(ev.date)}${timeRange ? ' · ' + escapeHtml(timeRange) : ''}</div>
+      </div>
+      <div class="meet-card-location">${loc.name
+        ? (directionsHref ? `<a href="${escapeHtml(directionsHref)}" target="_blank" rel="noopener">${escapeHtml(loc.name)}</a>` : escapeHtml(loc.name))
+        : 'Location TBD'}</div>
+      <div class="meet-stats">
+        <div class="meet-stat">
+          <div class="meet-stat-label">Time to arrive</div>
+          <div class="meet-stat-value">${escapeHtml(etaLabel)}</div>
+        </div>
+        <div class="meet-stat">
+          <div class="meet-stat-label">Distance</div>
+          <div class="meet-stat-value" id="meetDist_${ev.id}">${showDistance ? '…' : '—'}</div>
+        </div>
+      </div>
+      <div class="meet-card-attending"><b>Attending:</b> ${attendingLabel}</div>
+    </div>`;
+  }).join('');
+
+  if(p && home){
+    meets.forEach(ev=>{
+      if(!ev.locationId) return;
+      fetchMeetDistance(p.id, ev.locationId).then(res=>{
+        const el = document.getElementById(`meetDist_${ev.id}`);
+        if(!el) return;
+        if(res && res.available) el.textContent = `${res.miles.toFixed(1)} mi`;
+        else el.textContent = '—';
+      });
+    });
+  }
+}
+
 async function savePersonal(){
   if(!isRealPerson()) return;
   const p = people.find(x=>x.id===activePersonId);
@@ -2855,6 +2976,7 @@ function renderAll(){
   renderBodyMap();
   renderTeamStatus();
   if(currentPage === 'personal') renderPersonal();
+  if(currentPage === 'meets') renderMeets();
 }
 
 function wireUI(){
@@ -3063,6 +3185,7 @@ function wireUI(){
   $('pageTabCalendar').addEventListener('click', ()=> setPage('calendar'));
   $('pageTabBody').addEventListener('click', ()=> setPage('body'));
   $('pageTabPersonal').addEventListener('click', ()=> setPage('personal'));
+  $('pageTabMeets').addEventListener('click', ()=> setPage('meets'));
   $('savePersonalBtn').addEventListener('click', savePersonal);
 
   $('healthPicker').querySelectorAll('.event-type-opt').forEach(btn=>{

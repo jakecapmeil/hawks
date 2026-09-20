@@ -27,7 +27,7 @@ async function getState(db) {
     ).all(),
     db.prepare('SELECT person_id, date, status FROM availability_overrides').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
-    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, auto, location FROM events').all(),
+    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, auto, location, location_id FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
     db.prepare('SELECT person_id, part, status FROM body_marks').all(),
     db.prepare('SELECT id, person_id, text, header, created_at FROM posts').all(),
@@ -58,6 +58,7 @@ async function getState(db) {
       kind: row.kind || '',
       auto: !!row.auto,
       location: row.location || '',
+      locationId: row.location_id || '',
     });
   }
 
@@ -182,6 +183,59 @@ async function upsertTravelEstimate(db, body) {
   return json({ ok: true });
 }
 
+// Driving distance from a person's home to a location, via Google's Distance
+// Matrix API, cached in D1 since it costs real money per call. Cache keys on
+// the origin address too — if someone updates their home address the old
+// row is just a miss, not a silent stale answer.
+const DISTANCE_CACHE_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+async function getDistance(db, params, env) {
+  const personId = str(params.get('personId'), 100);
+  const locationId = str(params.get('locationId'), 100);
+  if (!personId || !locationId) return json({ error: 'Missing personId or locationId' }, 400);
+
+  const person = await db.prepare('SELECT home_address FROM people WHERE id = ?').bind(personId).first();
+  const location = await db.prepare('SELECT address FROM locations WHERE id = ?').bind(locationId).first();
+  if (!person || !location) return json({ error: 'Unknown personId or locationId' }, 400);
+  const origin = (person.home_address || '').trim();
+  if (!origin) return json({ configured: true, available: false, reason: 'no_home_address' });
+
+  const cached = await db.prepare(
+    'SELECT miles, drive_minutes, origin_address, updated_at FROM distance_cache WHERE person_id = ? AND location_id = ?'
+  ).bind(personId, locationId).first();
+  const fresh = cached && cached.origin_address === origin && (Date.now() - cached.updated_at) < DISTANCE_CACHE_MAX_AGE_MS;
+  if (fresh) return json({ configured: true, available: true, miles: cached.miles, driveMinutes: cached.drive_minutes, cached: true });
+
+  if (!env.GOOGLE_MAPS_API_KEY) {
+    // No key set up: fall back to a stale cache entry if we have one, else say so.
+    if (cached) return json({ configured: true, available: true, miles: cached.miles, driveMinutes: cached.drive_minutes, cached: true, stale: true });
+    return json({ configured: false, available: false });
+  }
+
+  const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json');
+  url.searchParams.set('origins', origin);
+  url.searchParams.set('destinations', location.address);
+  url.searchParams.set('units', 'imperial');
+  url.searchParams.set('key', env.GOOGLE_MAPS_API_KEY);
+
+  const res = await fetch(url);
+  const data = await res.json();
+  const element = data?.rows?.[0]?.elements?.[0];
+  if (!res.ok || data.status !== 'OK' || !element || element.status !== 'OK') {
+    if (cached) return json({ configured: true, available: true, miles: cached.miles, driveMinutes: cached.drive_minutes, cached: true, stale: true });
+    return json({ configured: true, available: false, reason: 'lookup_failed' });
+  }
+
+  const miles = element.distance.value / 1609.344;
+  const driveMinutes = Math.round(element.duration.value / 60);
+  await db.prepare(
+    `INSERT INTO distance_cache (person_id, location_id, origin_address, miles, drive_minutes, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(person_id, location_id) DO UPDATE SET origin_address=excluded.origin_address, miles=excluded.miles, drive_minutes=excluded.drive_minutes, updated_at=excluded.updated_at`
+  ).bind(personId, locationId, origin, miles, driveMinutes, Date.now()).run();
+
+  return json({ configured: true, available: true, miles, driveMinutes, cached: false });
+}
+
 async function toggleAvailability(db, body) {
   const personId = str(body?.personId, 100);
   const date = str(body?.date, 20);
@@ -299,14 +353,15 @@ async function createEvent(db, body) {
   const location = str(body?.location, 200);
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
   const kind = normalizeKind(type, body?.kind);
+  const locationId = str(body?.locationId, 100) || null;
   if (!date || !title) return json({ error: 'Missing date or title' }, 400);
 
   const id = 'e_' + crypto.randomUUID();
   await db.prepare(
-    'INSERT INTO events (id, date, title, time, end_time, description, type, kind, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, date, title, time, endTime, desc, type, kind, location).run();
+    'INSERT INTO events (id, date, title, time, end_time, description, type, kind, location, location_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, date, title, time, endTime, desc, type, kind, location, locationId).run();
 
-  return json({ event: { id, date, title, time, endTime, desc, type, kind, location, auto: false } });
+  return json({ event: { id, date, title, time, endTime, desc, type, kind, location, locationId: locationId || '', auto: false } });
 }
 
 async function createPost(db, body) {
@@ -359,9 +414,20 @@ async function updateEvent(db, body) {
   const kind = normalizeKind(type, body?.kind);
   if (!eventId || !title) return json({ error: 'Missing eventId or title' }, 400);
 
+  // location_id is merge-style, not full-replace: most callers (the admin
+  // edit form, MCP update_event) don't know or send it, and a blind
+  // full-replace would silently unlink the venue on every unrelated edit.
+  let locationId;
+  if (body?.locationId !== undefined) {
+    locationId = str(body.locationId, 100) || null;
+  } else {
+    const current = await db.prepare('SELECT location_id FROM events WHERE id = ?').bind(eventId).first();
+    locationId = current ? current.location_id : null;
+  }
+
   await db.prepare(
-    'UPDATE events SET title = ?, time = ?, end_time = ?, description = ?, type = ?, kind = ?, location = ? WHERE id = ?'
-  ).bind(title, time, endTime, desc, type, kind, location, eventId).run();
+    'UPDATE events SET title = ?, time = ?, end_time = ?, description = ?, type = ?, kind = ?, location = ?, location_id = ? WHERE id = ?'
+  ).bind(title, time, endTime, desc, type, kind, location, locationId, eventId).run();
 
   return json({ ok: true });
 }
@@ -523,8 +589,24 @@ const MCP_TOOLS = [
         endTime: { type: 'string', description: 'e.g. "5:30 PM", optional' },
         desc: { type: 'string', description: 'optional details' },
         location: { type: 'string', description: 'e.g. "Van Cortlandt Park" or a full address, optional' },
+        locationId: { type: 'string', description: "A known venue's id (from get_state's locations list), optional. Links the event to that venue so the Meets tab can show travel time and distance." },
         type: { type: 'string', enum: ['practice', 'meet', 'other'], description: 'defaults to practice' },
         kind: { type: 'string', enum: ['easy', 'workout', 'long_run'], description: 'only used when type is practice' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'add_person',
+    description: "Add a new person to the roster. Returns the new person's id — pass that to update_person afterward to fill in school/personal info, since this only sets the basics.",
+    inputSchema: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        name: { type: 'string', description: 'Full display name, e.g. "Chengyuan Cai"' },
+        phone: { type: 'string' },
+        email: { type: 'string' },
+        color: { type: 'string', description: 'Optional hex color for their calendar chip, e.g. "#7a4fae"' },
       },
       additionalProperties: false,
     },
@@ -568,6 +650,7 @@ const MCP_TOOLS = [
         endTime: { type: 'string', description: 'e.g. "5:30 PM", optional' },
         desc: { type: 'string', description: 'optional details' },
         location: { type: 'string', description: 'e.g. "Van Cortlandt Park" or a full address, optional' },
+        locationId: { type: 'string', description: "A known venue's id (from get_state's locations list), optional. Omit to leave the current link (if any) unchanged." },
         type: { type: 'string', enum: ['practice', 'meet', 'other'], description: 'defaults to practice' },
         kind: { type: 'string', enum: ['easy', 'workout', 'long_run'], description: 'only used when type is practice' },
       },
@@ -779,6 +862,16 @@ async function mcpGetRoster(db) {
   return rows.results;
 }
 
+async function mcpAddPerson(db, args) {
+  const name = str(args?.name, 100);
+  if (!name) throw new McpToolError('Missing name');
+  const id = 'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  const res = await upsertPerson(db, { id, name, color: args?.color, phone: args?.phone, email: args?.email });
+  const data = await res.json();
+  if (!res.ok) throw new McpToolError(data.error || 'add_person failed');
+  return { id, name };
+}
+
 async function mcpListEvents(db, args) {
   const from = str(args?.from, 20);
   const to = str(args?.to, 20);
@@ -786,13 +879,13 @@ async function mcpListEvents(db, args) {
   const binds = [];
   if (from) { conds.push('date >= ?'); binds.push(from); }
   if (to) { conds.push('date <= ?'); binds.push(to); }
-  let query = 'SELECT id, date, title, time, end_time, description, type, kind, location FROM events';
+  let query = 'SELECT id, date, title, time, end_time, description, type, kind, location, location_id FROM events';
   if (conds.length) query += ' WHERE ' + conds.join(' AND ');
   query += ' ORDER BY date, time';
   const rows = await db.prepare(query).bind(...binds).all();
   return rows.results.map(r => ({
     id: r.id, date: r.date, title: r.title, time: r.time, endTime: r.end_time,
-    desc: r.description, type: r.type, kind: r.kind, location: r.location,
+    desc: r.description, type: r.type, kind: r.kind, location: r.location, locationId: r.location_id || '',
   }));
 }
 
@@ -902,6 +995,8 @@ async function callMcpTool(name, args, env, ctx) {
       return await unwrapJson(await createEvent(db, a), 'create_event failed');
     case 'update_event':
       return await unwrapJson(await updateEvent(db, a), 'update_event failed');
+    case 'add_person':
+      return await mcpAddPerson(db, a);
     case 'delete_event':
       return await unwrapJson(await deleteEvent(db, a), 'delete_event failed');
     case 'update_person':
@@ -1102,11 +1197,16 @@ async function buildIcsFeed(db, personId) {
 
 export default {
   async fetch(request, env, ctx) {
-    const { pathname } = new URL(request.url);
+    const reqUrl = new URL(request.url);
+    const { pathname } = reqUrl;
 
     try {
       if (pathname === '/api/state' && request.method === 'GET') {
         return json(await getState(env.DB));
+      }
+
+      if (pathname === '/api/distance' && request.method === 'GET') {
+        return await getDistance(env.DB, reqUrl.searchParams, env);
       }
 
       if (pathname === '/mcp' && request.method === 'POST') {
