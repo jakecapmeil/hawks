@@ -1471,11 +1471,15 @@ async function saveCommentRemote(dateKey, personId, text){
   await apiPost('/api/comment', { date: dateKey, personId, text });
 }
 
+// Returns undefined (not '') for blank/unmatched text, so JSON.stringify
+// drops the key and updateEvent's merge-guard preserves whatever venue link
+// is already on the event, instead of a blank location field silently
+// unlinking it — most meets carry their venue in desc, not this field.
 function matchLocationId(text){
   const t = (text || '').trim().toLowerCase();
-  if(!t) return '';
+  if(!t) return undefined;
   const match = locations.find(loc => loc.name.trim().toLowerCase() === t);
-  return match ? match.id : '';
+  return match ? match.id : undefined;
 }
 
 async function createEventRemote(dateKey, title, time, endTime, desc, type, kind, location){
@@ -2387,7 +2391,7 @@ function renderAdminModal(){
           <input type="text" id="adminEditTitle" value="${escapeHtml(ev.title)}" placeholder="Event title">
           <input type="text" id="adminEditTime" value="${escapeHtml(ev.time)}" placeholder="Time (e.g. 4:00 PM)">
           <input type="text" id="adminEditEndTime" value="${escapeHtml(ev.endTime || '')}" placeholder="End time (optional, e.g. 5:30 PM)">
-          <input type="text" id="adminEditLocation" list="knownLocations" value="${escapeHtml(ev.location || '')}" placeholder="Location (e.g. Van Cortlandt Park, or a full address)">
+          <input type="text" id="adminEditLocation" list="knownLocations" value="${escapeHtml(ev.location || resolvedMeetLocation(ev).name || '')}" placeholder="Location (e.g. Van Cortlandt Park, or a full address)">
           <textarea id="adminEditDesc" placeholder="Details">${escapeHtml(ev.desc)}</textarea>
           <div>
             <div class="event-type-label">Event type</div>
