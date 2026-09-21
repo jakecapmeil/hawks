@@ -27,11 +27,11 @@ async function getState(db) {
     ).all(),
     db.prepare('SELECT person_id, date, status FROM availability_overrides').all(),
     db.prepare('SELECT date, person_id, text FROM comments').all(),
-    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, auto, location, location_id FROM events').all(),
+    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, auto, location, location_id, checklist, results FROM events').all(),
     db.prepare('SELECT event_id, person_id, status FROM rsvps').all(),
     db.prepare('SELECT person_id, part, status FROM body_marks').all(),
     db.prepare('SELECT id, person_id, text, header, created_at FROM posts').all(),
-    db.prepare('SELECT id, name, address, kind FROM locations').all(),
+    db.prepare('SELECT id, name, address, kind, lat, lng FROM locations').all(),
     db.prepare('SELECT person_id, location_id, daypart, minutes, note FROM travel_estimates').all(),
   ]);
 
@@ -59,6 +59,8 @@ async function getState(db) {
       auto: !!row.auto,
       location: row.location || '',
       locationId: row.location_id || '',
+      checklist: row.checklist || '',
+      results: row.results || '',
     });
   }
 
@@ -354,14 +356,15 @@ async function createEvent(db, body) {
   const type = VALID_EVENT_TYPES.includes(body?.type) ? body.type : 'practice';
   const kind = normalizeKind(type, body?.kind);
   const locationId = str(body?.locationId, 100) || null;
+  const checklist = str(body?.checklist, 1000);
   if (!date || !title) return json({ error: 'Missing date or title' }, 400);
 
   const id = 'e_' + crypto.randomUUID();
   await db.prepare(
-    'INSERT INTO events (id, date, title, time, end_time, description, type, kind, location, location_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, date, title, time, endTime, desc, type, kind, location, locationId).run();
+    'INSERT INTO events (id, date, title, time, end_time, description, type, kind, location, location_id, checklist) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, date, title, time, endTime, desc, type, kind, location, locationId, checklist).run();
 
-  return json({ event: { id, date, title, time, endTime, desc, type, kind, location, locationId: locationId || '', auto: false } });
+  return json({ event: { id, date, title, time, endTime, desc, type, kind, location, locationId: locationId || '', checklist, results: '', auto: false } });
 }
 
 async function createPost(db, body) {
@@ -414,20 +417,21 @@ async function updateEvent(db, body) {
   const kind = normalizeKind(type, body?.kind);
   if (!eventId || !title) return json({ error: 'Missing eventId or title' }, 400);
 
-  // location_id is merge-style, not full-replace: most callers (the admin
-  // edit form, MCP update_event) don't know or send it, and a blind
-  // full-replace would silently unlink the venue on every unrelated edit.
-  let locationId;
-  if (body?.locationId !== undefined) {
-    locationId = str(body.locationId, 100) || null;
-  } else {
-    const current = await db.prepare('SELECT location_id FROM events WHERE id = ?').bind(eventId).first();
-    locationId = current ? current.location_id : null;
-  }
+  // location_id, checklist, and results are merge-style, not full-replace:
+  // most callers (the admin edit form, MCP update_event) don't send them,
+  // and a blind full-replace would silently wipe them on every unrelated edit.
+  const needsCurrent = body?.locationId === undefined || body?.checklist === undefined || body?.results === undefined;
+  const current = needsCurrent
+    ? await db.prepare('SELECT location_id, checklist, results FROM events WHERE id = ?').bind(eventId).first()
+    : null;
+
+  const locationId = body?.locationId !== undefined ? (str(body.locationId, 100) || null) : (current ? current.location_id : null);
+  const checklist = body?.checklist !== undefined ? str(body.checklist, 1000) : (current ? current.checklist : '');
+  const results = body?.results !== undefined ? str(body.results, 2000) : (current ? current.results : '');
 
   await db.prepare(
-    'UPDATE events SET title = ?, time = ?, end_time = ?, description = ?, type = ?, kind = ?, location = ?, location_id = ? WHERE id = ?'
-  ).bind(title, time, endTime, desc, type, kind, location, locationId, eventId).run();
+    'UPDATE events SET title = ?, time = ?, end_time = ?, description = ?, type = ?, kind = ?, location = ?, location_id = ?, checklist = ?, results = ? WHERE id = ?'
+  ).bind(title, time, endTime, desc, type, kind, location, locationId, checklist, results, eventId).run();
 
   return json({ ok: true });
 }
@@ -592,6 +596,7 @@ const MCP_TOOLS = [
         locationId: { type: 'string', description: "A known venue's id (from get_state's locations list), optional. Links the event to that venue so the Meets tab can show travel time and distance." },
         type: { type: 'string', enum: ['practice', 'meet', 'other'], description: 'defaults to practice' },
         kind: { type: 'string', enum: ['easy', 'workout', 'long_run'], description: 'only used when type is practice' },
+        checklist: { type: 'string', description: 'optional "what to bring" note shown on the Meets tab, e.g. "Spikes + singlet"' },
       },
       additionalProperties: false,
     },
@@ -653,6 +658,8 @@ const MCP_TOOLS = [
         locationId: { type: 'string', description: "A known venue's id (from get_state's locations list), optional. Omit to leave the current link (if any) unchanged." },
         type: { type: 'string', enum: ['practice', 'meet', 'other'], description: 'defaults to practice' },
         kind: { type: 'string', enum: ['easy', 'workout', 'long_run'], description: 'only used when type is practice' },
+        checklist: { type: 'string', description: 'Optional "what to bring" note shown on the Meets tab. Omit to leave unchanged.' },
+        results: { type: 'string', description: 'Optional results/placements to log after the meet happens, shown on the Meets tab. Omit to leave unchanged.' },
       },
       additionalProperties: false,
     },
@@ -879,13 +886,14 @@ async function mcpListEvents(db, args) {
   const binds = [];
   if (from) { conds.push('date >= ?'); binds.push(from); }
   if (to) { conds.push('date <= ?'); binds.push(to); }
-  let query = 'SELECT id, date, title, time, end_time, description, type, kind, location, location_id FROM events';
+  let query = 'SELECT id, date, title, time, end_time, description, type, kind, location, location_id, checklist, results FROM events';
   if (conds.length) query += ' WHERE ' + conds.join(' AND ');
   query += ' ORDER BY date, time';
   const rows = await db.prepare(query).bind(...binds).all();
   return rows.results.map(r => ({
     id: r.id, date: r.date, title: r.title, time: r.time, endTime: r.end_time,
     desc: r.description, type: r.type, kind: r.kind, location: r.location, locationId: r.location_id || '',
+    checklist: r.checklist || '', results: r.results || '',
   }));
 }
 
@@ -1125,7 +1133,7 @@ async function buildIcsFeed(db, personId) {
   if (!person) return null;
 
   const [eventsRes, rsvpsRes, locsRes, travelRes] = await Promise.all([
-    db.prepare('SELECT id, date, title, time, end_time, description, type, kind, location FROM events ORDER BY date, time').all(),
+    db.prepare("SELECT id, date, title, time, end_time, description, type, kind, location FROM events WHERE type = 'meet' ORDER BY date, time").all(),
     db.prepare('SELECT event_id, status FROM rsvps WHERE person_id = ?').bind(personId).all(),
     db.prepare('SELECT id, name, kind FROM locations').all(),
     db.prepare('SELECT location_id, daypart, minutes FROM travel_estimates WHERE person_id = ?').bind(personId).all(),
@@ -1195,7 +1203,66 @@ async function buildIcsFeed(db, personId) {
   return lines.join('\r\n');
 }
 
+// Meet-day reminder email, sent to everyone RSVP'd "available" for a meet
+// happening today, with their own time-to-arrive if it's on file.
+//
+// SHIPPED DISABLED ON PURPOSE. This can email every RSVP'd student
+// unattended, so it must not be able to fire without the coach's explicit
+// go-ahead on recipients, timing, and channel:
+//   1. No cron trigger is registered for this in wrangler.jsonc — Cloudflare
+//      never calls `scheduled` below unless one is added there and deployed.
+//   2. Even if it were somehow invoked, it no-ops without RESEND_API_KEY,
+//      which is not set.
+// Both guards must be deliberately removed/added by a human before this can
+// send anything.
+async function sendMeetDayReminders(env) {
+  if (!env.RESEND_API_KEY) return { sent: 0, reason: 'not_configured' };
+
+  const todayNY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+  const db = env.DB;
+  const meets = await db.prepare(
+    "SELECT id, title, time, location, location_id FROM events WHERE type = 'meet' AND date = ?"
+  ).bind(todayNY).all();
+  if (!meets.results.length) return { sent: 0, reason: 'no_meets_today' };
+
+  let sent = 0;
+  for (const meet of meets.results) {
+    const attendees = await db.prepare(
+      `SELECT p.name, p.email, p.id FROM rsvps r JOIN people p ON p.id = r.person_id
+       WHERE r.event_id = ? AND r.status = 'available' AND p.email != ''`
+    ).bind(meet.id).all();
+
+    for (const person of attendees.results) {
+      let etaLine = '';
+      if (meet.location_id) {
+        const est = await db.prepare(
+          "SELECT minutes FROM travel_estimates WHERE person_id = ? AND location_id = ? AND daypart = 'weekend_meet'"
+        ).bind(person.id, meet.location_id).first();
+        if (est) etaLine = `\n\nYour estimated travel time: ~${est.minutes} min.`;
+      }
+      const body = `Reminder: ${meet.title} today${meet.time ? ' at ' + meet.time : ''}.${meet.location ? '\n' + meet.location : ''}${etaLine}`;
+
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: env.RESEND_FROM || 'Hawks Calendar <onboarding@resend.dev>',
+          to: person.email,
+          subject: `Today: ${meet.title}`,
+          text: body,
+        }),
+      });
+      if (res.ok) sent++;
+    }
+  }
+  return { sent };
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendMeetDayReminders(env).catch(err => console.error('meet-day reminder failed', err)));
+  },
+
   async fetch(request, env, ctx) {
     const reqUrl = new URL(request.url);
     const { pathname } = reqUrl;

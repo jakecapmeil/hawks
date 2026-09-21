@@ -439,6 +439,18 @@
   .meet-card-attending{margin-top:10px;font-family:var(--font-ui);font-size:var(--fs-footnote);}
   .meet-card-attending b{color:var(--ink-soft);font-weight:600;}
   .meets-empty{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);padding:8px 0;}
+  .meet-weather{color:var(--ink-soft);}
+  .meet-nudge{
+    margin-top:8px;padding:5px 10px;border-radius:var(--r-row);
+    background:var(--gold-bg);color:var(--gold-ink);
+    font-family:var(--font-ui);font-weight:600;font-size:var(--fs-caption2);display:inline-block;
+  }
+  .meet-carpool{margin-top:6px;font-family:var(--font-ui);font-size:var(--fs-caption2);color:var(--ink-soft);}
+  .meet-carpool b{font-weight:600;}
+  .meet-card-note{margin-top:8px;font-family:var(--font-ui);font-size:var(--fs-footnote);}
+  .meet-card-note b{color:var(--ink-soft);font-weight:600;}
+  .meet-card-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .meet-card-actions .rsvp-btn{margin:0;}
   .color-pick-row{display:flex;align-items:center;gap:10px;}
   .color-pick-row input[type=color]{
     -webkit-appearance:none;appearance:none;
@@ -1207,7 +1219,7 @@
 
     <div class="card" id="calendarFeedCard" style="display:none;">
       <div class="card-title">Google Calendar</div>
-      <div class="hint">Paste this into Google Calendar → Settings → Add calendar → From URL, and it'll stay in sync with the team schedule and your RSVPs.</div>
+      <div class="hint">Paste this into Google Calendar → Settings → Add calendar → From URL, and it'll stay in sync with meets (not practices) and your RSVPs.</div>
       <div class="copy-row" style="margin-top:8px;">
         <textarea id="calendarFeedUrl" readonly rows="1"></textarea>
         <button id="copyCalendarFeedBtn">Copy</button>
@@ -1486,8 +1498,9 @@ async function createEventRemote(dateKey, title, time, endTime, desc, type, kind
   return await apiPost('/api/events', { date: dateKey, title, time, endTime, desc, type, kind, location, locationId: matchLocationId(location) });
 }
 
-async function updateEventRemote(eventId, title, time, endTime, desc, type, kind, location){
-  return await apiPost('/api/events/update', { eventId, title, time, endTime, desc, type, kind, location, locationId: matchLocationId(location) });
+async function updateEventRemote(eventId, title, time, endTime, desc, type, kind, location, checklist, results){
+  // checklist/results left undefined (not sent) are preserved server-side, not wiped.
+  return await apiPost('/api/events/update', { eventId, title, time, endTime, desc, type, kind, location, locationId: matchLocationId(location), checklist, results });
 }
 
 async function saveRsvpRemote(eventId, personId, status){
@@ -1751,6 +1764,7 @@ async function cycleRsvp(eventId){
   else rsvps[eventId][activePersonId] = next;
   await saveRsvpRemote(eventId, activePersonId, next);
   renderEvents();
+  if(currentPage === 'meets') renderMeets();
 }
 
 const rsvpLabel = {unknown:'Unknown', available:'Coming', unavailable:'Not coming'};
@@ -2411,6 +2425,8 @@ function renderAdminModal(){
               <button type="button" class="event-type-opt" data-kind="long_run">Long Run</button>
             </div>
           </div>
+          <textarea id="adminEditChecklist" placeholder="What to bring (optional, shown on the Meets tab) — e.g. Spikes + singlet">${escapeHtml(ev.checklist || '')}</textarea>
+          <textarea id="adminEditResults" placeholder="Results (optional, fill in after the meet)">${escapeHtml(ev.results || '')}</textarea>
           <div class="btn-row">
             <button type="button" data-save-event="${ev.id}">Save</button>
             <button type="button" class="ghost" data-cancel-event-edit="1">Cancel</button>
@@ -2528,15 +2544,18 @@ function renderAdminModal(){
       const endTime = $('adminEditEndTime').value.trim();
       const location = $('adminEditLocation').value.trim();
       const desc = $('adminEditDesc').value.trim();
+      const checklist = $('adminEditChecklist').value.trim();
+      const results = $('adminEditResults').value.trim();
       if(!title){ $('adminEditTitle').focus(); return; }
       const kind = adminEventType === 'practice' ? adminEventKind : '';
-      await updateEventRemote(id, title, time, endTime, desc, adminEventType, kind, location);
+      await updateEventRemote(id, title, time, endTime, desc, adminEventType, kind, location, checklist, results);
       const ev = findEventById(id);
-      if(ev){ ev.title = title; ev.time = time; ev.endTime = endTime; ev.location = location; ev.desc = desc; ev.type = adminEventType; ev.kind = kind; }
+      if(ev){ ev.title = title; ev.time = time; ev.endTime = endTime; ev.location = location; ev.desc = desc; ev.type = adminEventType; ev.kind = kind; ev.checklist = checklist; ev.results = results; }
       editingEventId = null;
       renderAdminModal();
       renderEvents();
       renderCalendar();
+      if(currentPage === 'meets') renderMeets();
     });
   });
   $('weekPracticeTime').addEventListener('input', e=>{
@@ -2836,7 +2855,12 @@ function renderPersonal(){
 
 function resolvedMeetLocation(ev){
   const loc = ev.locationId ? locations.find(l => l.id === ev.locationId) : null;
-  return { name: loc ? loc.name : (ev.location || ''), address: loc ? loc.address : (ev.location || '') };
+  return {
+    name: loc ? loc.name : (ev.location || ''),
+    address: loc ? loc.address : (ev.location || ''),
+    lat: loc ? loc.lat : null,
+    lng: loc ? loc.lng : null,
+  };
 }
 
 function allMeetsSorted(){
@@ -2848,6 +2872,37 @@ function allMeetsSorted(){
   return out;
 }
 
+function daysUntil(dateKey){
+  const today = new Date(todayKey() + 'T00:00:00');
+  const target = new Date(dateKey + 'T00:00:00');
+  return Math.round((target - today) / 86400000);
+}
+
+function carpoolGroups(attendees){
+  const groups = {};
+  attendees.forEach(p=>{
+    const b = (p.borough || '').trim() || 'No borough on file';
+    (groups[b] ??= []).push(p.name);
+  });
+  return groups;
+}
+
+function copyText(text, btn){
+  try{ navigator.clipboard.writeText(text); }
+  catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  if(btn){
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(()=>{ btn.textContent = orig; }, 1200);
+  }
+}
+
 const meetsDistanceCache = new Map();
 
 function fetchMeetDistance(personId, locationId){
@@ -2857,6 +2912,19 @@ function fetchMeetDistance(personId, locationId){
       .then(r=>r.json()).catch(()=>({configured:false, available:false})));
   }
   return meetsDistanceCache.get(key);
+}
+
+// Open-Meteo: free, keyless forecast API. Only meaningful within its ~16 day
+// forecast horizon, so callers skip anything further out.
+const meetsWeatherCache = new Map();
+
+function fetchMeetWeather(lat, lng, dateKey){
+  const key = `${lat},${lng},${dateKey}`;
+  if(!meetsWeatherCache.has(key)){
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&timezone=America%2FNew_York&start_date=${dateKey}&end_date=${dateKey}`;
+    meetsWeatherCache.set(key, fetch(url).then(r=>r.json()).catch(()=>null));
+  }
+  return meetsWeatherCache.get(key);
 }
 
 function renderMeets(){
@@ -2880,6 +2948,23 @@ function renderMeets(){
     const attendingLabel = attendees.length ? attendees.map(a=>escapeHtml(a.name)).join(', ') : 'No one has RSVP’d yet';
     const directionsHref = loc.address ? (home ? mapsLink(home, loc.address) : mapsSearchLink(loc.address)) : '';
     const showDistance = p && home && ev.locationId;
+    const rsvpStatus = p ? getRsvp(ev.id) : 'unknown';
+
+    const dUntil = daysUntil(ev.date);
+    const evRsvps = rsvps[ev.id] || {};
+    const noResponseCount = people.filter(person => person.name !== 'Coach Johnson' && !(person.id in evRsvps)).length;
+    const nudge = (dUntil >= 0 && dUntil <= 3 && noResponseCount > 0)
+      ? `<div class="meet-nudge">${noResponseCount} ${noResponseCount === 1 ? 'person hasn’t' : 'people haven’t'} responded — ${dUntil === 0 ? 'today' : dUntil === 1 ? 'tomorrow' : `in ${dUntil} days`}</div>`
+      : '';
+
+    const groups = carpoolGroups(attendees);
+    const groupNames = Object.keys(groups).sort((a,b)=> a === 'No borough on file' ? 1 : b === 'No borough on file' ? -1 : a.localeCompare(b));
+    const carpoolHtml = attendees.length
+      ? `<div class="meet-carpool"><b>By borough:</b> ${groupNames.map(g => `${escapeHtml(g)} (${groups[g].map(escapeHtml).join(', ')})`).join(' · ')}</div>`
+      : '';
+
+    const checklistHtml = ev.checklist ? `<div class="meet-card-note"><b>Bring:</b> ${escapeHtml(ev.checklist)}</div>` : '';
+    const resultsHtml = ev.results ? `<div class="meet-card-note"><b>Results:</b> ${escapeHtml(ev.results)}</div>` : '';
 
     return `<div class="meet-card">
       <div class="meet-card-head">
@@ -2888,7 +2973,8 @@ function renderMeets(){
       </div>
       <div class="meet-card-location">${loc.name
         ? (directionsHref ? `<a href="${escapeHtml(directionsHref)}" target="_blank" rel="noopener">${escapeHtml(loc.name)}</a>` : escapeHtml(loc.name))
-        : 'Location TBD'}</div>
+        : 'Location TBD'}<span class="meet-weather" id="meetWeather_${ev.id}"></span></div>
+      ${nudge}
       <div class="meet-stats">
         <div class="meet-stat">
           <div class="meet-stat-label">Time to arrive</div>
@@ -2899,9 +2985,26 @@ function renderMeets(){
           <div class="meet-stat-value" id="meetDist_${ev.id}">${showDistance ? '…' : '—'}</div>
         </div>
       </div>
+      ${checklistHtml}
+      ${resultsHtml}
       <div class="meet-card-attending"><b>Attending:</b> ${attendingLabel}</div>
+      ${carpoolHtml}
+      <div class="meet-card-actions">
+        ${p ? `<button class="rsvp-btn tap44 ${rsvpStatus}" data-event="${ev.id}">${rsvpLabel[rsvpStatus]}</button>` : ''}
+        <button class="rsvp-btn tap44 share-btn" data-copy-attendees="${ev.id}">Copy attendees</button>
+      </div>
     </div>`;
   }).join('');
+
+  list.querySelectorAll('.rsvp-btn[data-event]').forEach(btn=>{
+    btn.addEventListener('click', ()=> cycleRsvp(btn.dataset.event));
+  });
+  list.querySelectorAll('[data-copy-attendees]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const names = attendeesFor(findEventById(btn.dataset.copyAttendees)).map(a=>a.name);
+      copyText(names.length ? names.join(', ') : 'No one has RSVP’d yet', btn);
+    });
+  });
 
   if(p && home){
     meets.forEach(ev=>{
@@ -2914,6 +3017,21 @@ function renderMeets(){
       });
     });
   }
+
+  meets.forEach(ev=>{
+    const loc = resolvedMeetLocation(ev);
+    const d = daysUntil(ev.date);
+    if(!loc.lat || !loc.lng || d < 0 || d > 14) return;
+    fetchMeetWeather(loc.lat, loc.lng, ev.date).then(res=>{
+      const el = document.getElementById(`meetWeather_${ev.id}`);
+      const daily = res && res.daily;
+      if(!el || !daily || !daily.temperature_2m_max || !daily.temperature_2m_max.length) return;
+      const hi = Math.round(daily.temperature_2m_max[0]);
+      const lo = Math.round(daily.temperature_2m_min[0]);
+      const rain = daily.precipitation_probability_max ? daily.precipitation_probability_max[0] : null;
+      el.textContent = ` · ${hi}°/${lo}°F${rain != null ? ` · ${rain}% rain` : ''}`;
+    });
+  });
 }
 
 async function savePersonal(){
