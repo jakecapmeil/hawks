@@ -278,6 +278,8 @@
   /* identity, inside calendar card */
   .identity-block{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line);}
   .who-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .who-name{flex:1;min-width:110px;display:flex;align-items:center;gap:8px;font-family:var(--font-ui);font-size:var(--fs-callout);font-weight:600;}
+  .who-name .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
 
   /* HIG segmented control: one background track, a sliding-looking selected
      segment, sentence-case labels at subhead weight. */
@@ -286,14 +288,21 @@
     background:var(--track);border-radius:var(--r-control);padding:3px;
   }
   .page-tab{
-    flex:1;height:38px;
+    flex:1;min-width:0;height:52px;padding:0 2px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
     border-radius:calc(var(--r-control) - 3px);
     border:1px solid transparent;
     background:transparent;color:var(--ink-soft);
-    font-family:var(--font-ui);font-weight:600;font-size:var(--fs-subhead);
-    letter-spacing:var(--tr-subhead);cursor:pointer;
+    font-family:var(--font-ui);font-weight:600;font-size:var(--fs-caption2);
+    line-height:1;letter-spacing:var(--tr-caption2);cursor:pointer;
     transition:background .2s ease,color .2s ease,box-shadow .2s ease;
   }
+  .page-tab svg{
+    width:21px;height:21px;display:block;flex-shrink:0;
+    fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+  }
+  .page-tab svg .fill{fill:currentColor;stroke:none;}
+  .page-tab.active svg{color:var(--gold);}
   .page-tab.active{
     background:var(--card);border-color:var(--line);color:var(--ink);
     box-shadow:0 1px 3px var(--shadow);
@@ -420,6 +429,62 @@
   }
   .travel-row a{color:inherit;text-decoration:none;}
   .travel-row a:hover .travel-row-title{text-decoration:underline;}
+  /* training plans */
+  .tp-weeks{
+    display:flex;gap:3px;margin:10px 0 12px;
+    background:var(--track);border-radius:var(--r-control);padding:3px;
+  }
+  .tp-week{
+    flex:1;min-width:0;padding:6px 2px;border-radius:calc(var(--r-control) - 3px);
+    border:1px solid transparent;background:transparent;color:var(--ink-soft);
+    font-family:var(--font-ui);font-weight:600;font-size:var(--fs-caption);line-height:1.2;
+    cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;
+  }
+  .tp-week small{font-size:var(--fs-caption2);font-weight:500;opacity:.85;}
+  .tp-week.active{background:var(--card);border-color:var(--line);color:var(--ink);box-shadow:0 1px 3px var(--shadow);}
+  .tp-grades{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0;}
+  .tp-grade{
+    height:var(--btn-h-sm);padding:0 12px;border-radius:var(--r-pill);
+    border:1px solid var(--line);background:var(--field);color:var(--ink-soft);
+    font-family:var(--font-ui);font-weight:600;font-size:var(--fs-footnote);cursor:pointer;
+  }
+  .tp-grade.active{background:var(--gold-bg);border-color:var(--gold);color:var(--gold-ink);}
+  .tp-days{display:flex;flex-direction:column;gap:6px;}
+  .tp-day{
+    display:grid;grid-template-columns:64px 1fr auto;gap:2px 10px;align-items:baseline;
+    border:1px solid var(--line);border-radius:var(--r-control);padding:9px 12px;
+  }
+  .tp-day.hard{border-color:var(--gold);background:var(--gold-bg);}
+  .tp-day.off{opacity:.7;}
+  .tp-dname{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-footnote);}
+  .tp-dtype{font-family:var(--font-ui);font-weight:600;font-size:var(--fs-footnote);}
+  .tp-dmiles{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-footnote);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .tp-dsub{grid-column:2 / 4;font-family:var(--font-ui);font-size:var(--fs-caption);color:var(--ink-soft);line-height:1.35;}
+  .tp-day.hard .tp-dsub{color:var(--gold-ink);}
+  .tp-total{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:10px;}
+  .tp-ref-title{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-footnote);margin:12px 0 2px;}
+  .tp-ref-desc{font-family:var(--font-ui);font-size:var(--fs-caption);color:var(--ink-soft);margin-bottom:4px;}
+  .tp-ref-list{margin:0;padding-left:18px;font-family:var(--font-ui);font-size:var(--fs-footnote);line-height:1.4;}
+  .tp-ref-line{font-family:var(--font-ui);font-size:var(--fs-footnote);margin-top:6px;}
+  .tp-ref-line b{color:var(--ink-soft);font-weight:600;}
+
+  /* welcome picker */
+  .welcome-box{max-width:380px;}
+  .welcome-body{padding:6px 16px 18px;display:flex;flex-direction:column;gap:8px;}
+  .welcome-sub{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);margin:0 0 4px;}
+  .welcome-opt{
+    width:100%;height:var(--tap-min);padding:0 14px;border-radius:var(--r-control);
+    border:1px solid var(--line);background:var(--field);color:var(--ink);
+    font-family:var(--font-ui);font-weight:600;font-size:var(--fs-subhead);
+    display:flex;align-items:center;gap:8px;text-align:left;cursor:pointer;
+  }
+  .welcome-opt:hover{border-color:var(--gold);}
+  .welcome-opt.primary{background:var(--gold-bg);border-color:var(--gold);color:var(--gold-ink);}
+  .welcome-opt[hidden]{display:none;}
+  .welcome-opt .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .welcome-opt .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .welcome-select{width:100%;flex:none;}
+
   .meets-scroll{
     max-height:min(70vh,640px);overflow-y:auto;-webkit-overflow-scrolling:touch;
     display:flex;flex-direction:column;gap:10px;margin-top:4px;
@@ -980,16 +1045,10 @@
   <div class="card">
     <div class="identity-block" style="padding-bottom:0;margin-bottom:0;border-bottom:none;">
       <div class="who-row">
-        <div class="dd" id="personDropdown">
-          <button type="button" class="dd-trigger" id="personDropdownBtn" aria-haspopup="listbox" aria-expanded="false">
-            <span class="dd-value">
-              <span class="dot" id="personDropdownDot" hidden></span>
-              <span class="dd-label" id="personDropdownLabel">Select your name…</span>
-              <span id="personDropdownTags"></span>
-            </span>
-            <svg class="dd-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </button>
-          <div class="dd-menu pop-menu" id="personDropdownMenu" role="listbox"></div>
+        <div class="who-name">
+          <span class="dot" id="whoDot" hidden></span>
+          <span class="who-label" id="whoLabel">Guest</span>
+          <span id="whoTags"></span>
         </div>
         <button class="ghost" id="editProfileBtn" hidden>Edit</button>
         <button class="ghost" id="newPersonBtn">+ New person</button>
@@ -1027,10 +1086,11 @@
   </div>
 
   <div class="page-tabs" role="tablist" aria-label="Sections">
-    <button type="button" class="page-tab active" id="pageTabCalendar" role="tab" aria-selected="true" aria-controls="pageCalendar">Calendar</button>
-    <button type="button" class="page-tab" id="pageTabBody" role="tab" aria-selected="false" aria-controls="pageBody">Body</button>
-    <button type="button" class="page-tab" id="pageTabPersonal" role="tab" aria-selected="false" aria-controls="pagePersonal">Personal</button>
-    <button type="button" class="page-tab" id="pageTabMeets" role="tab" aria-selected="false" aria-controls="pageMeets">Meets</button>
+    <button type="button" class="page-tab active" id="pageTabCalendar" role="tab" aria-selected="true" aria-controls="pageCalendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle class="fill" cx="8.5" cy="14.5" r="1.1"/><circle class="fill" cx="12" cy="14.5" r="1.1"/><circle class="fill" cx="15.5" cy="14.5" r="1.1"/></svg><span>Calendar</span></button>
+    <button type="button" class="page-tab" id="pageTabBody" role="tab" aria-selected="false" aria-controls="pageBody"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.6" r="2.2"/><path d="M7 9.4c1.6.8 3.2 1 5 1s3.4-.2 5-1M12 10.6v4.2M12 14.8l-3 5.4M12 14.8l3 5.4"/><path d="M9.2 20.2H7.8M15 20.2h1.4"/></svg><span>Body</span></button>
+    <button type="button" class="page-tab" id="pageTabPersonal" role="tab" aria-selected="false" aria-controls="pagePersonal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3.5"/><circle cx="9" cy="11" r="2.1"/><path d="M5.8 16.2c.6-1.6 1.9-2.4 3.2-2.4s2.6.8 3.2 2.4M14.5 10H18M14.5 13.5H17"/></svg><span>Personal</span></button>
+    <button type="button" class="page-tab" id="pageTabMeets" role="tab" aria-selected="false" aria-controls="pageMeets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V3.5M4 21h4"/><path d="M6 4.5c3-1.6 5 1.4 8 0 1.8-.9 3-.6 4.5-.2v7.600c-1.5-.4-2.7-.7-4.5.2-3 1.4-5-1.6-8 0"/></svg><span>Meets</span></button>
+    <button type="button" class="page-tab" id="pageTabTraining" role="tab" aria-selected="false" aria-controls="pageTraining"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.500c0-1.7.5-3 1.8-3.400l3.2-1 1.4 1.800c.7.9 1.7 1.4 2.8 1.400H17c2.2 0 4 1.4 4 3.200V17H3z"/><path d="M8 11.100V8.500M3.5 19.500h17M12.7 13.300l.8-1.300M15 13.600l.8-1.3"/></svg><span>Training</span></button>
   </div>
 
   <div id="pageCalendar">
@@ -1043,7 +1103,7 @@
         <button id="submitPostBtn">Post</button>
       </div>
     </div>
-    <div class="post-hint" id="postHint">Select your name above to post.</div>
+    <div class="post-hint" id="postHint">Reload and pick your name to post.</div>
     <div id="postList"></div>
     <button class="ghost" id="viewAllPostsBtn">See all posts</button>
   </div>
@@ -1149,7 +1209,7 @@
         <button type="button" class="event-type-opt" data-type="running">Running</button>
         <button type="button" class="event-type-opt" data-type="crosstraining">Cross-train</button>
       </div>
-      <div class="hint" id="bodyStatusHint" style="margin-top:10px;">Select your name above to update your status.</div>
+      <div class="hint" id="bodyStatusHint" style="margin-top:10px;">Reload and pick your name to update your status.</div>
     </div>
 
     <div class="card">
@@ -1179,7 +1239,7 @@
   <div id="pagePersonal" style="display:none;">
     <div class="card">
       <div class="card-title">Your info</div>
-      <div class="hint" id="personalHint">Select your name above to see and edit your info.</div>
+      <div class="hint" id="personalHint">Reload and pick your name to see and edit your info.</div>
       <div id="personalForm" class="personal-form">
         <input type="text" id="personalFirstName" placeholder="First name" maxlength="100">
         <select id="personalClassYear">
@@ -1230,11 +1290,38 @@
   <div id="pageMeets" style="display:none;">
     <div class="card">
       <div class="card-title">Meets</div>
-      <div class="hint">Distance and time to arrive are estimated from your home address on the Personal tab. Select your name above to see your own numbers.</div>
+      <div class="hint">Distance and time to arrive are estimated from your home address on the Personal tab. Reload and pick your name to see your own numbers.</div>
       <div id="meetsList" class="meets-scroll"></div>
     </div>
   </div>
 
+  <div id="pageTraining" style="display:none;">
+    <div class="card">
+      <div class="card-title" id="tpTitle">Training plan</div>
+      <div class="hint" id="tpHint"></div>
+      <div class="tp-grades" id="tpGrades"></div>
+      <div class="tp-weeks" id="tpWeeks" role="tablist" aria-label="Week type"></div>
+      <div class="tp-days" id="tpDays"></div>
+      <div class="tp-total" id="tpTotal"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Workout menu</div>
+      <div id="tpRef"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay modal-lock" id="welcomeOverlay">
+  <div class="modal-box welcome-box" role="dialog" aria-modal="true" aria-label="Choose who you are">
+    <div class="modal-head"><h3>Welcome to Hawks</h3></div>
+    <div class="welcome-body">
+      <p class="welcome-sub">Who’s using this device?</p>
+      <button type="button" class="welcome-opt primary" id="welcomeLast" hidden></button>
+      <button type="button" class="welcome-opt" id="welcomeGuest">Continue as guest</button>
+      <select class="welcome-select" id="welcomeSelect" aria-label="Select user"></select>
+    </div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="postModalOverlay">
@@ -1316,6 +1403,10 @@ let selectedDate = null;
 let editMode = false;
 let showPastEvents = false;
 let currentPage = 'calendar';
+const PAGES = ['calendar','body','personal','meets','training'];
+const LAST_USER_KEY = 'hawksLastUser';
+let trainingGrade = null;
+let trainingWeek = null;
 let bodyMapView = 'front';
 
 // The per-person availability dots are the noisiest thing on the grid, so the
@@ -1550,56 +1641,30 @@ function personTagsHtml(personId){
   return `<span class="person-tags">${icons.join('')}</span>`;
 }
 
-function closePersonDropdown(){
-  $('personDropdown').classList.remove('open');
-  $('personDropdownMenu').classList.remove('show');
-  $('personDropdownBtn').setAttribute('aria-expanded', 'false');
+function rememberUser(personId){
+  try{ if(personId) localStorage.setItem(LAST_USER_KEY, personId); }catch(e){}
 }
 
 function selectPerson(personId){
   activePersonId = personId || null;
-  closePersonDropdown();
+  rememberUser(activePersonId);
   renderAll();
 }
 
+// Who you are is chosen once, in the welcome pop-up; this just shows it.
 function renderPersonSelect(){
-  const menu = $('personDropdownMenu');
-  const options = [
-    { id: '', label: 'Select your name…', color: null },
-    { id: COACH_ID, label: 'Coach', color: COACH_COLOR },
-    ...people.map(p => ({ id: p.id, label: p.name, color: p.color })),
-  ];
-  menu.innerHTML = options.map(o => `
-    <button type="button" class="dd-option ${o.id===(activePersonId||'') ? 'active' : ''}" data-person-option="${o.id}">
-      ${o.color ? `<span class="dot" style="background:${o.color}"></span>` : ''}${escapeHtml(o.label)}
-    </button>
-  `).join('');
-  menu.querySelectorAll('[data-person-option]').forEach(btn=>{
-    btn.addEventListener('click', ()=> selectPerson(btn.dataset.personOption));
-  });
-
-  // The trigger is the only place the current identity is shown — it used to
-  // be mirrored by a chip sitting right next to it, which said the same name
-  // twice and crowded the row.
-  const label = $('personDropdownLabel');
-  const dot = $('personDropdownDot');
-  const tags = $('personDropdownTags');
-  const setIdentity = (name, color, tagHtml) => {
-    label.textContent = name;
-    dot.hidden = !color;
-    if(color) dot.style.background = color;
-    tags.innerHTML = tagHtml || '';
-  };
+  const dot = $('whoDot');
+  let name = 'Guest', color = '', tagHtml = '';
   if(activePersonId === COACH_ID){
-    setIdentity('Coach', COACH_COLOR, '');
+    name = 'Coach'; color = COACH_COLOR;
   } else if(activePersonId){
     const p = people.find(x=>x.id===activePersonId);
-    setIdentity(p ? p.name : 'Select your name…', p ? p.color : '', p ? personTagsHtml(p.id) : '');
-  } else {
-    setIdentity('Select your name…', '', '');
+    if(p){ name = p.name; color = p.color; tagHtml = personTagsHtml(p.id); }
   }
-  // Editing your profile used to be reachable only by holding the chip — a
-  // hidden gesture with no visible alternative.
+  $('whoLabel').textContent = name;
+  dot.hidden = !color;
+  if(color) dot.style.background = color;
+  $('whoTags').innerHTML = tagHtml;
   $('editProfileBtn').hidden = !isRealPerson();
 }
 
@@ -1708,7 +1773,7 @@ function renderCalendar(){
 function onDayClick(dateKey){
   if(editMode){
     if(!activePersonId){
-      alert('Select your name first so we know whose availability to change.');
+      alert('Reload and pick your name first so we know whose availability to change.');
       return;
     }
     toggleAvailabilityLocal(activePersonId, dateKey);
@@ -1753,7 +1818,7 @@ function getRsvp(eventId){
 
 async function cycleRsvp(eventId){
   if(!activePersonId){
-    alert('Select your name first so we know whose RSVP to change.');
+    alert('Reload and pick your name first so we know whose RSVP to change.');
     return;
   }
   const order = ['unknown','available','unavailable'];
@@ -2597,20 +2662,16 @@ async function submitPost(){
 
 function setPage(page){
   currentPage = page;
-  $('pageTabCalendar').classList.toggle('active', page === 'calendar');
-  $('pageTabBody').classList.toggle('active', page === 'body');
-  $('pageTabPersonal').classList.toggle('active', page === 'personal');
-  $('pageTabMeets').classList.toggle('active', page === 'meets');
-  $('pageTabCalendar').setAttribute('aria-selected', String(page === 'calendar'));
-  $('pageTabBody').setAttribute('aria-selected', String(page === 'body'));
-  $('pageTabPersonal').setAttribute('aria-selected', String(page === 'personal'));
-  $('pageTabMeets').setAttribute('aria-selected', String(page === 'meets'));
-  $('pageCalendar').style.display = page === 'calendar' ? '' : 'none';
-  $('pageBody').style.display = page === 'body' ? '' : 'none';
-  $('pagePersonal').style.display = page === 'personal' ? '' : 'none';
-  $('pageMeets').style.display = page === 'meets' ? '' : 'none';
+  PAGES.forEach(name=>{
+    const cap = name[0].toUpperCase() + name.slice(1);
+    const on = page === name;
+    $('pageTab' + cap).classList.toggle('active', on);
+    $('pageTab' + cap).setAttribute('aria-selected', String(on));
+    $('page' + cap).style.display = on ? '' : 'none';
+  });
   if(page === 'personal') renderPersonal();
   if(page === 'meets') renderMeets();
+  if(page === 'training') renderTraining();
 }
 
 function currentHealthStatus(){
@@ -2645,7 +2706,7 @@ function renderTrainingPicker(){
 
 async function setHealth(status){
   if(!isRealPerson()){
-    alert('Select your name first so we know whose status to change.');
+    alert('Reload and pick your name first so we know whose status to change.');
     return;
   }
   const p = people.find(x=>x.id===activePersonId);
@@ -2659,7 +2720,7 @@ async function setHealth(status){
 
 async function setTraining(status){
   if(!isRealPerson()){
-    alert('Select your name first so we know whose status to change.');
+    alert('Reload and pick your name first so we know whose status to change.');
     return;
   }
   const p = people.find(x=>x.id===activePersonId);
@@ -2756,7 +2817,7 @@ async function clearBodyPart(part){
 
 async function onBodyPartClick(part){
   if(!isRealPerson()){
-    alert('Select your name first so we know whose body map to update.');
+    alert('Reload and pick your name first so we know whose body map to update.');
     return;
   }
   const result = await toggleBodyMarkRemote(activePersonId, part);
@@ -2943,7 +3004,7 @@ function renderMeets(){
     const est = (p && ev.locationId)
       ? travelEstimates.find(t=> t.person_id===p.id && t.location_id===ev.locationId && t.daypart==='weekend_meet')
       : null;
-    const etaLabel = !p ? 'Select your name' : (!home ? 'Add home address' : (!ev.locationId ? '—' : (est ? `~${est.minutes} min` : '—')));
+    const etaLabel = !p ? 'Pick your name' : (!home ? 'Add home address' : (!ev.locationId ? '—' : (est ? `~${est.minutes} min` : '—')));
     const attendees = attendeesFor(ev);
     const attendingLabel = attendees.length ? attendees.map(a=>escapeHtml(a.name)).join(', ') : 'No one has RSVP’d yet';
     const directionsHref = loc.address ? (home ? mapsLink(home, loc.address) : mapsSearchLink(loc.address)) : '';
@@ -3099,6 +3160,7 @@ function renderAll(){
   renderTeamStatus();
   if(currentPage === 'personal') renderPersonal();
   if(currentPage === 'meets') renderMeets();
+  if(currentPage === 'training') renderTraining();
 }
 
 function wireUI(){
@@ -3139,7 +3201,7 @@ function wireUI(){
   document.addEventListener('keydown', e=>{
     if(e.key !== 'Escape') return;
     let closed = false;
-    document.querySelectorAll('.modal-overlay.show').forEach(o=>{ o.classList.remove('show'); closed = true; });
+    document.querySelectorAll('.modal-overlay.show:not(.modal-lock)').forEach(o=>{ o.classList.remove('show'); closed = true; });
     if(!closed) document.querySelectorAll('.pop-menu.show').forEach(m=> m.classList.remove('show'));
   });
   $('postModalOverlay').addEventListener('click', e=>{
@@ -3222,16 +3284,6 @@ function wireUI(){
     }
   });
 
-  $('personDropdownBtn').addEventListener('click', e=>{
-    e.stopPropagation();
-    const open = $('personDropdown').classList.toggle('open');
-    $('personDropdownMenu').classList.toggle('show', open);
-    $('personDropdownBtn').setAttribute('aria-expanded', String(open));
-  });
-  document.addEventListener('click', e=>{
-    if(!$('personDropdown').contains(e.target)) closePersonDropdown();
-  });
-
   $('newPersonBtn').addEventListener('click', ()=>{
     $('newPersonRow').classList.add('show');
     $('newPersonName').focus();
@@ -3286,7 +3338,7 @@ function wireUI(){
 
   $('editModeBtn').addEventListener('click', ()=>{
     if(!activePersonId){
-      alert('Select your name first so we know whose availability to change.');
+      alert('Reload and pick your name first so we know whose availability to change.');
       return;
     }
     setEditMode(!editMode);
@@ -3308,6 +3360,7 @@ function wireUI(){
   $('pageTabBody').addEventListener('click', ()=> setPage('body'));
   $('pageTabPersonal').addEventListener('click', ()=> setPage('personal'));
   $('pageTabMeets').addEventListener('click', ()=> setPage('meets'));
+  $('pageTabTraining').addEventListener('click', ()=> setPage('training'));
   $('savePersonalBtn').addEventListener('click', savePersonal);
 
   $('healthPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
@@ -3357,6 +3410,98 @@ function wireUI(){
   });
 }
 
+// Weekly plans from the Hunter XCTF training sheets, one per class year.
+const TRAINING_PLANS = {"Freshman":{"weeks":[{"miles":30,"name":"No race"},{"miles":25,"name":"Race week"},{"miles":20,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"5","shoes":"Vomero","notes":""},{"type":"Off","miles":"0","shoes":"","notes":"Cross train"},{"type":"Off","miles":"0","shoes":"","notes":"Cross train"}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"}]},{"day":"Wednesday","cells":[{"type":"Off","miles":"0","shoes":"","notes":"Cross train"},{"type":"Easy","miles":"4","shoes":"Vomero","notes":""},{"type":"Easy","miles":"4","shoes":"Vomero","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"5","shoes":"Vomero","notes":"Strides"},{"type":"Workout","miles":"5 (2 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Easy","miles":"4","shoes":"Vomero","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"}]},{"day":"Saturday","cells":[{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, Vomero","notes":"1.5 WU, 1.5 CD"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, Vomero","notes":"1.5 WU, 1.5 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"8","shoes":"Vomero","notes":"Strides"},{"type":"Easy","miles":"4","shoes":"Vomero","notes":"Strides"},{"type":"Off","miles":"0","shoes":"","notes":"Cross train/rest"}]}],"ref":{"shoes":"Vomero (easy runs) Rebel (workouts) Spikes (race)","core":"Core at least 2 times a week (Monday, Wednesday)","gym":"","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["6x800 or 5xk at 5k pace, 200 jog rest or 90 seconds standing rest","3xmile at 5k pace","3 mile tempo at 5k + 20 seconds pace"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["6(3min on, 1min off)","6x400 at 5k with 200 jog rest, 4x200","12xhill, jog down recovery"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x8 min at 5k+30 seconds pace, 2 min jog recovery","Progression, easy down to 5k-30 seconds pace","If tired, just jog easy"]}]}},"Sophomore":{"weeks":[{"miles":40,"name":"No race"},{"miles":35,"name":"Race week"},{"miles":30,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"6","shoes":"1080","notes":""},{"type":"Easy","miles":"5","shoes":"1080","notes":""},{"type":"Easy","miles":"4","shoes":"1080","notes":""}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"7 (4 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"7 (4 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"}]},{"day":"Wednesday","cells":[{"type":"Easy","miles":"5","shoes":"1080","notes":""},{"type":"Easy","miles":"5","shoes":"1080","notes":""},{"type":"Easy","miles":"4","shoes":"1080","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"6","shoes":"1080","notes":"Strides"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Easy","miles":"4","shoes":"1080","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"7 (4 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"}]},{"day":"Saturday","cells":[{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, 1080","notes":"1.5 WU, 1.5 CD"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, 1080","notes":"1.5 WU, 1.5 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"9","shoes":"1080","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"1080","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"1080","notes":"Strides"}]}],"ref":{"shoes":"1080 (easy runs) Rebel (workouts) Spikes (race)","core":"Core at least 2 times a week (Monday, Wednesday)","gym":"Gym once a week (Tuesday, Saturday, Sunday)","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["4xmile with 200 jog rest at 5k","6xk at faster than 5k with 200 jog rest","3x2k at 5k pace, 2min rest"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["8(2:30 min on, 1 min off)","12x400 at 5k with 200 jog rest","6xk at 5k +15 seconds pace, 90 seconds rest"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x9 min at 5k+25 seconds, 2 min jog recovery","Progression","If tired, just jog easy"]}]}},"Junior":{"weeks":[{"miles":50,"name":"No race"},{"miles":45,"name":"Race week"},{"miles":40,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"7","shoes":"Vomero+","notes":""},{"type":"Easy","miles":"7","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"7 (3 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"}]},{"day":"Wednesday","cells":[{"type":"Easy","miles":"7","shoes":"Vomero+","notes":""},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":""},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"7","shoes":"Vomero+","notes":"Strides"},{"type":"Workout","miles":"7 (3 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Shakeout","miles":"2","shoes":"Pegasus","notes":"Optional"},{"type":"Shakeout","miles":"2","shoes":"Pegasus","notes":"Optional"}]},{"day":"Saturday","cells":[{"type":"Shakeout","miles":"2","shoes":"Pegasus","notes":"Optional"},{"type":"Race","miles":"9 (3 R, 2WO)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"},{"type":"Race","miles":"7 (3 Race)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"11","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"}]}],"ref":{"shoes":"Vomero+ (easy runs) Vaporfly (workouts) Pegasus(WU/CD/Shakeout) Spikes (race)","core":"Core at least 3 times a week (Monday, Wednesday)","gym":"Gym once a week (Tuesday, Saturday, Sunday)","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["4xmile with 200 jog rest at 5k","6xk at faster than 5k with 200 jog rest","3x2k at 5k pace, 2min rest"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["8(2:30 min on, 1 min off)","12x400 at 5k with 200 jog rest","6xk at 5k +15 seconds pace, 90 seconds rest"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x10 min at 5k+25 seconds, 2:30 min jog recovery","Progression","If tired, just jog easy"]}]}},"Senior":{"weeks":[{"miles":60,"name":"No race"},{"miles":55,"name":"Race week"},{"miles":50,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Pegasus, Rebel","notes":"PM strides"},{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Pegasus, Rebel","notes":"PM strides"},{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Pegasus, Rebel","notes":"PM strides"}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"9 (5 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"}]},{"day":"Wednesday","cells":[{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Rebel, Vomero+","notes":""},{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Rebel, Vomero+","notes":""},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Peg, Vomero+","notes":"PM Strides"},{"type":"Workout","miles":"7 (3 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Easy","miles":"7","shoes":"Vomero+","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"9 (5 WO)","shoes":"Peg + Rebel","notes":"2 WU 2 CD"},{"type":"Shakeout","miles":"3","shoes":"Pegasus","notes":"Stride"},{"type":"Shakeout","miles":"3","shoes":"Pegasus","notes":"Stride"}]},{"day":"Saturday","cells":[{"type":"Shakeout","miles":"3","shoes":"Pegasus","notes":""},{"type":"Race","miles":"9 (3 R, 2WO)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"},{"type":"Race","miles":"7 (3 Race)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"12","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"10","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"10","shoes":"Vomero+","notes":"Strides"}]}],"ref":{"shoes":"Vomero+ (easy runs) Rebel (WO/easy) Vaporfly (workouts) Pegasus(WU/CD/Shakeout) Spikes (race)","core":"Core at least 3 times a week (Monday, Wednesday, Friday)","gym":"Gym 1-2 times a week (Tuesday, Saturday, Sunday)","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["5xmile with 200 jog rest at 5k","7xk at faster than 5k with 200 jog rest","4x2k at 5k pace, 2min rest"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["8(3 min on, 1 min off)","16x400 at 5k with 200 jog rest","8xk at 5k +15 seconds pace, 90 seconds rest"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x10 min at 5k+25 seconds, 2:30 min jog recovery","Progression","If tired, just jog easy"]}]}}};
+const TRAINING_GRADES = ['Freshman','Sophomore','Junior','Senior'];
+
+function personGrade(){
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  return p && TRAINING_GRADES.includes(p.class_year) ? p.class_year : null;
+}
+
+// A meet inside the next week means race-week mileage; otherwise a normal week.
+function defaultTrainingWeek(){
+  try{
+    return allMeetsSorted().some(ev=>{ const d = daysUntil(ev.date); return d >= 0 && d <= 6; }) ? 1 : 0;
+  }catch(e){ return 0; }
+}
+
+function renderTraining(){
+  const own = personGrade();
+  const grade = own || (TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman');
+  const week = trainingWeek === null ? defaultTrainingWeek() : trainingWeek;
+  const plan = TRAINING_PLANS[grade];
+
+  $('tpTitle').textContent = `${grade} training plan`;
+  if(own) $('tpHint').textContent = 'Based on your class year.';
+  else if(isRealPerson()) $('tpHint').textContent = 'Set your class on the Personal tab to see your own plan automatically.';
+  else $('tpHint').textContent = 'Reload and pick your name to see your own plan, or browse by class.';
+
+  const picker = $('tpGrades');
+  picker.style.display = own ? 'none' : '';
+  picker.innerHTML = TRAINING_GRADES.map(g=>`<button type="button" class="tp-grade ${g===grade?'active':''}" data-grade="${g}">${g}</button>`).join('');
+  picker.querySelectorAll('[data-grade]').forEach(b=> b.addEventListener('click', ()=>{ trainingGrade = b.dataset.grade; renderTraining(); }));
+
+  const weeks = $('tpWeeks');
+  weeks.innerHTML = plan.weeks.map((w,i)=>`<button type="button" role="tab" aria-selected="${i===week}" class="tp-week ${i===week?'active':''}" data-week="${i}">${w.name}<small>${w.miles} mi</small></button>`).join('');
+  weeks.querySelectorAll('[data-week]').forEach(b=> b.addEventListener('click', ()=>{ trainingWeek = parseInt(b.dataset.week, 10); renderTraining(); }));
+
+  $('tpDays').innerHTML = plan.days.map(d=>{
+    const c = d.cells[week];
+    const t = c.type.toLowerCase();
+    const cls = t === 'workout' || t === 'race' ? 'hard' : (t === 'off' ? 'off' : '');
+    const sub = [c.shoes && `Shoes: ${c.shoes}`, c.notes].filter(Boolean).join(' · ');
+    return `<div class="tp-day ${cls}">
+      <div class="tp-dname">${d.day.slice(0,3)}</div>
+      <div class="tp-dtype">${escapeHtml(c.type)}</div>
+      <div class="tp-dmiles">${escapeHtml(c.miles.replace(/^(\d+(?:\.\d+)?)/, '$1 mi'))}</div>
+      ${sub ? `<div class="tp-dsub">${escapeHtml(sub)}</div>` : ''}
+    </div>`;
+  }).join('');
+  $('tpTotal').textContent = `${plan.weeks[week].miles} miles total. WO = workout miles, WU/CD = warm-up/cool-down, LR = long run.`;
+
+  const r = plan.ref;
+  $('tpRef').innerHTML = r.sessions.map(sec=>`
+    <div class="tp-ref-title">${escapeHtml(sec.title[0].toUpperCase() + sec.title.slice(1))}</div>
+    ${sec.desc ? `<div class="tp-ref-desc">${escapeHtml(sec.desc)}</div>` : ''}
+    <ol class="tp-ref-list">${sec.items.map(i=>`<li>${escapeHtml(i)}</li>`).join('')}</ol>`).join('')
+    + [r.core && `<div class="tp-ref-line"><b>Core:</b> ${escapeHtml(r.core.replace(/^Core\s*/,''))}</div>`,
+       r.gym && `<div class="tp-ref-line"><b>Gym:</b> ${escapeHtml(r.gym.replace(/^Gym\s*/,''))}</div>`,
+       r.shoes && `<div class="tp-ref-line"><b>Shoes:</b> ${escapeHtml(r.shoes)}</div>`].filter(Boolean).join('');
+}
+
+function closeWelcome(){ $('welcomeOverlay').classList.remove('show'); }
+
+function chooseUser(personId){
+  selectPerson(personId);
+  closeWelcome();
+}
+
+function showWelcome(){
+  let last = null;
+  try{ last = localStorage.getItem(LAST_USER_KEY); }catch(e){}
+  const lastPerson = last === COACH_ID
+    ? { id: COACH_ID, name: 'Coach', color: COACH_COLOR }
+    : people.find(p=>p.id === last);
+
+  const lastBtn = $('welcomeLast');
+  lastBtn.hidden = !lastPerson;
+  if(lastPerson){
+    lastBtn.innerHTML = `<span class="dot" style="background:${lastPerson.color}"></span><span class="grow">Continue as ${escapeHtml(lastPerson.name)}</span>`;
+    lastBtn.onclick = ()=> chooseUser(lastPerson.id);
+  }
+  $('welcomeGuest').onclick = ()=>{ selectPerson(null); closeWelcome(); };
+
+  const sel = $('welcomeSelect');
+  sel.innerHTML = '<option value="">Select user…</option>'
+    + `<option value="${COACH_ID}">Coach</option>`
+    + people.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+  sel.value = '';
+  sel.onchange = ()=>{ if(sel.value) chooseUser(sel.value); };
+
+  $('welcomeOverlay').classList.add('show');
+}
+
 async function init(){
   const t = new Date();
   viewYear = t.getFullYear();
@@ -3369,6 +3514,7 @@ async function init(){
   setPage('calendar');
   await loadState();
   renderAll();
+  showWelcome();
 
   // Light background refresh so people see each other's changes without
   // reloading. Skips a cycle if a form is open so it doesn't yank the page
