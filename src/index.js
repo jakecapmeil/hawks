@@ -306,15 +306,65 @@ async function getPlan(db, params) {
   return new Response(JSON.stringify(plan), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
 
-async function setPlanRank(db, body) {
-  const personId = str(body?.personId, 100);
-  const raw = body?.rank;
-  const rank = raw === null || raw === undefined ? null : Number(raw);
-  if (!personId) return json({ error: 'Missing personId' }, 400);
-  if (rank !== null && !(Number.isInteger(rank) && rank >= 1 && rank <= 6)) return json({ error: 'rank must be an integer 1-6, or null to use the class-year default' }, 400);
-  const result = await db.prepare('UPDATE people SET plan_rank = ? WHERE id = ?').bind(rank, personId).run();
-  if (!result.meta.changes) return json({ error: 'Unknown person' }, 400);
-  return json({ ok: true, personId, rank });
+// --- Plan ranks (MCP only: ranks are secret, so there is no public endpoint) ---
+
+function parseRank(raw) {
+  if (raw === null || raw === undefined) return null;
+  const rank = Number(raw);
+  if (!(Number.isInteger(rank) && rank >= 1 && rank <= 6)) throw new McpToolError('rank must be an integer 1-6, or null to use the class-year default');
+  return rank;
+}
+
+// Accepts an id, a full or first name, or a unique piece of a name.
+async function resolvePerson(db, ref) {
+  const q = str(ref, 100).toLowerCase();
+  if (!q) throw new McpToolError('Missing person');
+  const rows = (await db.prepare('SELECT id, name, first_name, class_year, plan_rank FROM people').all()).results;
+  let hits = rows.filter((r) => r.id.toLowerCase() === q);
+  if (!hits.length) hits = rows.filter((r) => r.name.toLowerCase() === q || (r.first_name || '').toLowerCase() === q);
+  if (!hits.length) hits = rows.filter((r) => r.name.toLowerCase().includes(q));
+  if (hits.length !== 1) {
+    throw new McpToolError(hits.length ? `"${ref}" matches ${hits.map((h) => h.name).join(', ')}; be more specific or use the id` : `No one matches "${ref}"`);
+  }
+  return hits[0];
+}
+
+function planSummary(row) {
+  const explicit = PLANS[row.plan_rank] ? row.plan_rank : null;
+  const effective = explicit ?? CLASS_YEAR_RANK[row.class_year] ?? null;
+  return {
+    id: row.id,
+    name: row.name,
+    class_year: row.class_year || '',
+    rank: explicit,
+    effective_rank: effective,
+    source: explicit ? 'rank' : effective ? 'class year' : 'none',
+    weekly_miles: effective ? PLANS[effective].weeks[0].miles : null,
+    custom_shoes: !!(effective && PLAN_VARIANTS[row.id]?.[effective]),
+  };
+}
+
+async function mcpSetRanks(db, changes) {
+  if (!Array.isArray(changes) || !changes.length) throw new McpToolError('changes must be a non-empty list');
+  const resolved = [];
+  for (const c of changes) {
+    const row = await resolvePerson(db, c?.person ?? c?.personId);
+    resolved.push({ row, rank: parseRank(c?.rank) });
+  }
+  await db.batch(resolved.map(({ row, rank }) => db.prepare('UPDATE people SET plan_rank = ? WHERE id = ?').bind(rank, row.id)));
+  return resolved.map(({ row, rank }) => ({ ...planSummary({ ...row, plan_rank: rank }), previous_rank: row.plan_rank ?? null }));
+}
+
+async function mcpGetPlans(db) {
+  const rows = (await db.prepare('SELECT id, name, first_name, class_year, plan_rank FROM people ORDER BY name').all()).results;
+  return {
+    plans: Object.entries(PLANS).map(([rank, p]) => ({
+      rank: Number(rank),
+      weekly_miles: p.weeks.map((w) => w.miles),
+      class_year_default: Object.keys(CLASS_YEAR_RANK).filter((y) => CLASS_YEAR_RANK[y] === Number(rank)),
+    })),
+    people: rows.map(planSummary),
+  };
 }
 
 async function setTrainingStatus(db, body) {
@@ -745,14 +795,43 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: 'get_plans',
+    description: "Everyone's hidden training-plan ranking: the explicit rank (null = none set), the rank they actually get (explicit, else the class-year default), where it came from, weekly miles, and whether they have a custom-shoe variant. Also lists the six plans (1=30, 2=35, 3=40, 4=45, 5=50, 6=60 miles/week).",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'set_rank',
-    description: "Set a person's hidden training-plan ranking (1-6 by weekly mileage: 1=30, 2=35, 3=40, 4=45, 5=50, 6=60 miles; class-year defaults: Freshman=2, Sophomore=3, Junior=5, Senior=6). Takes effect the next time their Training tab loads. Pass null to go back to the plan for their class year. Never shown to anyone in the app.",
+    description: "Set one person's hidden training-plan ranking (1-6 by weekly mileage: 1=30, 2=35, 3=40, 4=45, 5=50, 6=60 miles; class-year defaults: Freshman=2, Sophomore=3, Junior=5, Senior=6). Takes effect the next time their Training tab loads. Pass null to go back to the class-year plan. Never shown to anyone in the app.",
     inputSchema: {
       type: 'object',
-      required: ['personId', 'rank'],
+      required: ['person', 'rank'],
       properties: {
-        personId: { type: 'string', description: "The person's id, from get_roster" },
+        person: { type: 'string', description: 'Name (first or full, or a unique part of it) or id' },
         rank: { type: ['integer', 'null'], minimum: 1, maximum: 6 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'set_ranks',
+    description: 'Set several people\'s hidden training-plan rankings at once, e.g. after a meet when a few people move up. All names are resolved first, so a typo changes nothing. Each rank is 1-6, or null for the class-year default.',
+    inputSchema: {
+      type: 'object',
+      required: ['changes'],
+      properties: {
+        changes: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            required: ['person', 'rank'],
+            properties: {
+              person: { type: 'string', description: 'Name (first or full, or a unique part of it) or id' },
+              rank: { type: ['integer', 'null'], minimum: 1, maximum: 6 },
+            },
+            additionalProperties: false,
+          },
+        },
       },
       additionalProperties: false,
     },
@@ -1054,8 +1133,12 @@ async function callMcpTool(name, args, env, ctx) {
       return await mcpUpdatePerson(db, a, env, ctx);
     case 'delete_person':
       return await unwrapJson(await deletePerson(db, a), 'delete_person failed');
+    case 'get_plans':
+      return await mcpGetPlans(db);
     case 'set_rank':
-      return await unwrapJson(await setPlanRank(db, a), 'set_rank failed');
+      return (await mcpSetRanks(db, [{ person: a.person ?? a.personId, rank: a.rank }]))[0];
+    case 'set_ranks':
+      return await mcpSetRanks(db, a.changes);
     case 'set_default_status':
       return await unwrapJson(await setDefaultStatus(db, a), 'set_default_status failed');
     case 'set_health_status':
