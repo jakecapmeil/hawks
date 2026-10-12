@@ -745,7 +745,7 @@ const MCP_TOOLS = [
   },
   {
     name: 'set_rank',
-    description: "Set a person's hidden training-plan ranking (1-6 by weekly mileage: 1=30, 2=35, 3=40, 4=45, 5=50, 6=60 miles; 1=Freshman plan, 3=Sophomore, 5=Junior, 6=Senior). Takes effect the next time their Training tab loads. Pass null to go back to the plan for their class year. Never shown to anyone in the app.",
+    description: "Set a person's hidden training-plan ranking (1-6 by weekly mileage: 1=30, 2=35, 3=40, 4=45, 5=50, 6=60 miles; class-year defaults: Freshman=2, Sophomore=3, Junior=5, Senior=6). Takes effect the next time their Training tab loads. Pass null to go back to the plan for their class year. Never shown to anyone in the app.",
     inputSchema: {
       type: 'object',
       required: ['personId', 'rank'],
