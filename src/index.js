@@ -1,4 +1,4 @@
-import { PLANS, CLASS_YEAR_RANK } from './plans.js';
+import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -290,7 +290,7 @@ async function setHealthStatus(db, body) {
 const VALID_TRAINING_STATUS = ['resting', 'running', 'crosstraining'];
 
 // The plan a person should see. Deliberately returns only the plan: no rank,
-// and nothing that says which of the ten it is.
+// and nothing that says which of the six it is.
 async function getPlan(db, params) {
   const personId = str(params.get('personId'), 100);
   const grade = str(params.get('grade'), 20);
@@ -302,7 +302,8 @@ async function getPlan(db, params) {
     rank = CLASS_YEAR_RANK[grade] ?? null;
   }
   if (!rank) return new Response(JSON.stringify({ error: 'no_plan' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-  return new Response(JSON.stringify(PLANS[rank]), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  const plan = (personId && PLAN_VARIANTS[personId]?.[rank]) || PLANS[rank];
+  return new Response(JSON.stringify(plan), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
 
 async function setPlanRank(db, body) {

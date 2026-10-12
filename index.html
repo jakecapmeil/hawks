@@ -485,10 +485,10 @@
   .welcome-opt .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .welcome-select{width:100%;flex:none;}
 
-  .meets-scroll{
-    max-height:min(70vh,640px);overflow-y:auto;-webkit-overflow-scrolling:touch;
-    display:flex;flex-direction:column;gap:10px;margin-top:4px;
-  }
+  .meets-list{display:flex;flex-direction:column;gap:10px;margin-top:4px;}
+  .meets-label{font-family:var(--font-ui);font-size:var(--fs-caption2);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:6px;}
+  .meets-label:first-child{margin-top:0;}
+  .meets-prev-btn{align-self:flex-start;margin-top:6px;}
   .meet-card{
     border:1px solid var(--line);border-radius:var(--r-control);padding:12px 14px;
   }
@@ -1087,10 +1087,10 @@
 
   <div class="page-tabs" role="tablist" aria-label="Sections">
     <button type="button" class="page-tab active" id="pageTabCalendar" role="tab" aria-selected="true" aria-controls="pageCalendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle class="fill" cx="8.5" cy="14.5" r="1.1"/><circle class="fill" cx="12" cy="14.5" r="1.1"/><circle class="fill" cx="15.5" cy="14.5" r="1.1"/></svg><span>Calendar</span></button>
+    <button type="button" class="page-tab" id="pageTabTraining" role="tab" aria-selected="false" aria-controls="pageTraining"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.500c0-1.7.5-3 1.8-3.400l3.2-1 1.4 1.800c.7.9 1.7 1.4 2.8 1.400H17c2.2 0 4 1.4 4 3.200V17H3z"/><path d="M8 11.100V8.500M3.5 19.500h17M12.7 13.300l.8-1.300M15 13.600l.8-1.3"/></svg><span>Training</span></button>
+    <button type="button" class="page-tab" id="pageTabMeets" role="tab" aria-selected="false" aria-controls="pageMeets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V3.5M4 21h4"/><path d="M6 4.5c3-1.6 5 1.4 8 0 1.8-.9 3-.6 4.5-.2v7.600c-1.5-.4-2.7-.7-4.5.2-3 1.4-5-1.6-8 0"/></svg><span>Meets</span></button>
     <button type="button" class="page-tab" id="pageTabBody" role="tab" aria-selected="false" aria-controls="pageBody"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.6" r="2.2"/><path d="M7 9.4c1.6.8 3.2 1 5 1s3.4-.2 5-1M12 10.6v4.2M12 14.8l-3 5.4M12 14.8l3 5.4"/><path d="M9.2 20.2H7.8M15 20.2h1.4"/></svg><span>Body</span></button>
     <button type="button" class="page-tab" id="pageTabPersonal" role="tab" aria-selected="false" aria-controls="pagePersonal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3.5"/><circle cx="9" cy="11" r="2.1"/><path d="M5.8 16.2c.6-1.6 1.9-2.4 3.2-2.4s2.6.8 3.2 2.4M14.5 10H18M14.5 13.5H17"/></svg><span>Personal</span></button>
-    <button type="button" class="page-tab" id="pageTabMeets" role="tab" aria-selected="false" aria-controls="pageMeets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V3.5M4 21h4"/><path d="M6 4.5c3-1.6 5 1.4 8 0 1.8-.9 3-.6 4.5-.2v7.600c-1.5-.4-2.7-.7-4.5.2-3 1.4-5-1.6-8 0"/></svg><span>Meets</span></button>
-    <button type="button" class="page-tab" id="pageTabTraining" role="tab" aria-selected="false" aria-controls="pageTraining"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.500c0-1.7.5-3 1.8-3.400l3.2-1 1.4 1.800c.7.9 1.7 1.4 2.8 1.400H17c2.2 0 4 1.4 4 3.200V17H3z"/><path d="M8 11.100V8.500M3.5 19.500h17M12.7 13.300l.8-1.300M15 13.600l.8-1.3"/></svg><span>Training</span></button>
   </div>
 
   <div id="pageCalendar">
@@ -1291,7 +1291,7 @@
     <div class="card">
       <div class="card-title">Meets</div>
       <div class="hint">Distance and time to arrive are estimated from your home address on the Personal tab. Reload and pick your name to see your own numbers.</div>
-      <div id="meetsList" class="meets-scroll"></div>
+      <div id="meetsList" class="meets-list"></div>
     </div>
   </div>
 
@@ -1403,7 +1403,7 @@ let selectedDate = null;
 let editMode = false;
 let showPastEvents = false;
 let currentPage = 'calendar';
-const PAGES = ['calendar','body','personal','meets','training'];
+const PAGES = ['calendar','training','meets','body','personal'];
 const LAST_USER_KEY = 'hawksLastUser';
 let trainingGrade = null;
 let trainingWeek = null;
@@ -2989,17 +2989,9 @@ function fetchMeetWeather(lat, lng, dateKey){
   return meetsWeatherCache.get(key);
 }
 
-function renderMeets(){
-  const list = $('meetsList');
-  const meets = allMeetsSorted();
-  if(!meets.length){
-    list.innerHTML = '<div class="meets-empty">No meets on the calendar yet.</div>';
-    return;
-  }
-  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
-  const home = p ? (p.home_address || '').trim() : '';
+let showPastMeets = false;
 
-  list.innerHTML = meets.map(ev=>{
+function meetCardHtml(ev, p, home){
     const loc = resolvedMeetLocation(ev);
     const timeRange = formatEventTimeRange(ev);
     const est = (p && ev.locationId)
@@ -3056,7 +3048,39 @@ function renderMeets(){
         <button class="rsvp-btn tap44 share-btn" data-copy-attendees="${ev.id}">Copy attendees</button>
       </div>
     </div>`;
-  }).join('');
+}
+
+function renderMeets(){
+  const list = $('meetsList');
+  const meets = allMeetsSorted();
+  if(!meets.length){
+    list.innerHTML = '<div class="meets-empty">No meets on the calendar yet.</div>';
+    return;
+  }
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  const home = p ? (p.home_address || '').trim() : '';
+
+  const upcoming = meets.filter(ev=> daysUntil(ev.date) >= 0).sort((x,y)=> x.date < y.date ? -1 : x.date > y.date ? 1 : 0);
+  const past = meets.filter(ev=> daysUntil(ev.date) < 0).sort((x,y)=> x.date < y.date ? 1 : x.date > y.date ? -1 : 0);
+  const shown = showPastMeets ? upcoming.concat(past) : upcoming;
+  const card = ev=> meetCardHtml(ev, p, home);
+
+  const parts = [];
+  if(upcoming.length){
+    parts.push('<div class="meets-label">Next meet</div>', card(upcoming[0]));
+    if(upcoming.length > 1) parts.push('<div class="meets-label">Coming up</div>', upcoming.slice(1).map(card).join(''));
+  } else {
+    parts.push('<div class="meets-empty">No upcoming meets.</div>');
+  }
+  if(past.length){
+    parts.push(`<button type="button" class="rsvp-btn tap44 meets-prev-btn" id="meetsPrevBtn" aria-expanded="${showPastMeets}">${showPastMeets ? 'Hide previous meets' : `Previous meets (${past.length})`}</button>`);
+    if(showPastMeets) parts.push('<div class="meets-label">Previous meets</div>', past.map(card).join(''));
+  }
+  list.innerHTML = parts.join('');
+
+  const prevBtn = $('meetsPrevBtn');
+  if(prevBtn) prevBtn.addEventListener('click', ()=>{ showPastMeets = !showPastMeets; renderMeets(); });
+
 
   list.querySelectorAll('.rsvp-btn[data-event]').forEach(btn=>{
     btn.addEventListener('click', ()=> cycleRsvp(btn.dataset.event));
@@ -3069,7 +3093,7 @@ function renderMeets(){
   });
 
   if(p && home){
-    meets.forEach(ev=>{
+    shown.forEach(ev=>{
       if(!ev.locationId) return;
       fetchMeetDistance(p.id, ev.locationId).then(res=>{
         const el = document.getElementById(`meetDist_${ev.id}`);
@@ -3080,7 +3104,7 @@ function renderMeets(){
     });
   }
 
-  meets.forEach(ev=>{
+  shown.forEach(ev=>{
     const loc = resolvedMeetLocation(ev);
     const d = daysUntil(ev.date);
     if(!loc.lat || !loc.lng || d < 0 || d > 14) return;

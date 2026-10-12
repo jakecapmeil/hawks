@@ -7,3 +7,25 @@ export const PLANS = {"1":{"weeks":[{"miles":30,"name":"No race"},{"miles":25,"n
 
 // Used when a person has no plan_rank set.
 export const CLASS_YEAR_RANK = { Freshman: 2, Sophomore: 3, Junior: 5, Senior: 6 };
+
+// Same plans with one person's shoes swapped in (nothing else changes). Only
+// ranks listed in `ranks` get a variant; other ranks fall back to the base plan.
+function withShoes(plan, swaps) {
+  const swap = (s) => swaps.reduce((out, [re, to]) => out.replace(re, to), s);
+  const copy = JSON.parse(JSON.stringify(plan));
+  copy.days.forEach((d) => d.cells.forEach((c) => { c.shoes = swap(c.shoes); }));
+  copy.ref.shoes = swap(copy.ref.shoes);
+  return copy;
+}
+
+// Vomero Plus for easy runs, Streakfly 2 for workouts, Pegasus Plus for WU/CD/shakeouts.
+const JAKE_SWAPS = [
+  [/Vomero\+|1080/g, 'Vomero Plus'],
+  [/Vaporflies|Vaporfly|Vap\b|Rebel/g, 'Streakfly 2'],
+  [/Pegasus|Peg\b/g, 'Pegasus Plus'],
+];
+const JAKE_RANKS = [3, 4, 5];
+
+export const PLAN_VARIANTS = {
+  p_1786158555950_476: Object.fromEntries(JAKE_RANKS.map((r) => [r, withShoes(PLANS[r], JAKE_SWAPS)])),
+};
