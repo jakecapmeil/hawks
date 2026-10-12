@@ -1518,6 +1518,7 @@ async function loadState(){
     posts = data.posts || [];
     locations = data.locations || [];
     travelEstimates = data.travelEstimates || [];
+    planCache = {};
   }catch(e){
     console.error('Load failed, starting empty', e);
     people = []; overrides = {}; comments = {}; events = {}; rsvps = {}; bodyMarks = {}; posts = [];
@@ -3117,6 +3118,7 @@ async function savePersonal(){
   };
 
   const res = await savePersonalRemote(fields);
+  planCache = {};
   if(!res || res.error) return;
 
   Object.assign(p, {
@@ -3410,14 +3412,10 @@ function wireUI(){
   });
 }
 
-// Weekly plans from the Hunter XCTF training sheets, one per class year.
-const TRAINING_PLANS = {"Freshman":{"weeks":[{"miles":30,"name":"No race"},{"miles":25,"name":"Race week"},{"miles":20,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"5","shoes":"Vomero","notes":""},{"type":"Off","miles":"0","shoes":"","notes":"Cross train"},{"type":"Off","miles":"0","shoes":"","notes":"Cross train"}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"}]},{"day":"Wednesday","cells":[{"type":"Off","miles":"0","shoes":"","notes":"Cross train"},{"type":"Easy","miles":"4","shoes":"Vomero","notes":""},{"type":"Easy","miles":"4","shoes":"Vomero","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"5","shoes":"Vomero","notes":"Strides"},{"type":"Workout","miles":"5 (2 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Easy","miles":"4","shoes":"Vomero","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"}]},{"day":"Saturday","cells":[{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, Vomero","notes":"1.5 WU, 1.5 CD"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, Vomero","notes":"1.5 WU, 1.5 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"8","shoes":"Vomero","notes":"Strides"},{"type":"Easy","miles":"4","shoes":"Vomero","notes":"Strides"},{"type":"Off","miles":"0","shoes":"","notes":"Cross train/rest"}]}],"ref":{"shoes":"Vomero (easy runs) Rebel (workouts) Spikes (race)","core":"Core at least 2 times a week (Monday, Wednesday)","gym":"","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["6x800 or 5xk at 5k pace, 200 jog rest or 90 seconds standing rest","3xmile at 5k pace","3 mile tempo at 5k + 20 seconds pace"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["6(3min on, 1min off)","6x400 at 5k with 200 jog rest, 4x200","12xhill, jog down recovery"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x8 min at 5k+30 seconds pace, 2 min jog recovery","Progression, easy down to 5k-30 seconds pace","If tired, just jog easy"]}]}},"Sophomore":{"weeks":[{"miles":40,"name":"No race"},{"miles":35,"name":"Race week"},{"miles":30,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"6","shoes":"1080","notes":""},{"type":"Easy","miles":"5","shoes":"1080","notes":""},{"type":"Easy","miles":"4","shoes":"1080","notes":""}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"7 (4 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"7 (4 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"}]},{"day":"Wednesday","cells":[{"type":"Easy","miles":"5","shoes":"1080","notes":""},{"type":"Easy","miles":"5","shoes":"1080","notes":""},{"type":"Easy","miles":"4","shoes":"1080","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"6","shoes":"1080","notes":"Strides"},{"type":"Workout","miles":"6 (3 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Easy","miles":"4","shoes":"1080","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"7 (4 WO)","shoes":"Rebel","notes":"1.5 WU 1.5 CD"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Off","miles":"0","shoes":"","notes":"Rest"}]},{"day":"Saturday","cells":[{"type":"Off","miles":"0","shoes":"","notes":"Rest"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, 1080","notes":"1.5 WU, 1.5 CD"},{"type":"Race","miles":"6 (3 Race)","shoes":"Spikes, 1080","notes":"1.5 WU, 1.5 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"9","shoes":"1080","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"1080","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"1080","notes":"Strides"}]}],"ref":{"shoes":"1080 (easy runs) Rebel (workouts) Spikes (race)","core":"Core at least 2 times a week (Monday, Wednesday)","gym":"Gym once a week (Tuesday, Saturday, Sunday)","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["4xmile with 200 jog rest at 5k","6xk at faster than 5k with 200 jog rest","3x2k at 5k pace, 2min rest"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["8(2:30 min on, 1 min off)","12x400 at 5k with 200 jog rest","6xk at 5k +15 seconds pace, 90 seconds rest"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x9 min at 5k+25 seconds, 2 min jog recovery","Progression","If tired, just jog easy"]}]}},"Junior":{"weeks":[{"miles":50,"name":"No race"},{"miles":45,"name":"Race week"},{"miles":40,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"7","shoes":"Vomero+","notes":""},{"type":"Easy","miles":"7","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"7 (3 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"}]},{"day":"Wednesday","cells":[{"type":"Easy","miles":"7","shoes":"Vomero+","notes":""},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":""},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"7","shoes":"Vomero+","notes":"Strides"},{"type":"Workout","miles":"7 (3 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Shakeout","miles":"2","shoes":"Pegasus","notes":"Optional"},{"type":"Shakeout","miles":"2","shoes":"Pegasus","notes":"Optional"}]},{"day":"Saturday","cells":[{"type":"Shakeout","miles":"2","shoes":"Pegasus","notes":"Optional"},{"type":"Race","miles":"9 (3 R, 2WO)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"},{"type":"Race","miles":"7 (3 Race)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"11","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":"Strides"}]}],"ref":{"shoes":"Vomero+ (easy runs) Vaporfly (workouts) Pegasus(WU/CD/Shakeout) Spikes (race)","core":"Core at least 3 times a week (Monday, Wednesday)","gym":"Gym once a week (Tuesday, Saturday, Sunday)","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["4xmile with 200 jog rest at 5k","6xk at faster than 5k with 200 jog rest","3x2k at 5k pace, 2min rest"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["8(2:30 min on, 1 min off)","12x400 at 5k with 200 jog rest","6xk at 5k +15 seconds pace, 90 seconds rest"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x10 min at 5k+25 seconds, 2:30 min jog recovery","Progression","If tired, just jog easy"]}]}},"Senior":{"weeks":[{"miles":60,"name":"No race"},{"miles":55,"name":"Race week"},{"miles":50,"name":"Taper"}],"days":[{"day":"Monday","cells":[{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Pegasus, Rebel","notes":"PM strides"},{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Pegasus, Rebel","notes":"PM strides"},{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Pegasus, Rebel","notes":"PM strides"}]},{"day":"Tuesday","cells":[{"type":"Workout","miles":"9 (5 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Workout","miles":"8 (4 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"}]},{"day":"Wednesday","cells":[{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Rebel, Vomero+","notes":""},{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Rebel, Vomero+","notes":""},{"type":"Easy","miles":"6","shoes":"Vomero+","notes":""}]},{"day":"Thursday","cells":[{"type":"Easy","miles":"9 (3AM, 6PM)","shoes":"Peg, Vomero+","notes":"PM Strides"},{"type":"Workout","miles":"7 (3 WO)","shoes":"Peg + Vap","notes":"2 WU 2 CD"},{"type":"Easy","miles":"7","shoes":"Vomero+","notes":"Strides"}]},{"day":"Friday","cells":[{"type":"Workout","miles":"9 (5 WO)","shoes":"Peg + Rebel","notes":"2 WU 2 CD"},{"type":"Shakeout","miles":"3","shoes":"Pegasus","notes":"Stride"},{"type":"Shakeout","miles":"3","shoes":"Pegasus","notes":"Stride"}]},{"day":"Saturday","cells":[{"type":"Shakeout","miles":"3","shoes":"Pegasus","notes":""},{"type":"Race","miles":"9 (3 R, 2WO)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"},{"type":"Race","miles":"7 (3 Race)","shoes":"Spikes, Peg","notes":"2 WU, 2 CD"}]},{"day":"Sunday","cells":[{"type":"LR","miles":"12","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"10","shoes":"Vomero+","notes":"Strides"},{"type":"Easy","miles":"10","shoes":"Vomero+","notes":"Strides"}]}],"ref":{"shoes":"Vomero+ (easy runs) Rebel (WO/easy) Vaporfly (workouts) Pegasus(WU/CD/Shakeout) Spikes (race)","core":"Core at least 3 times a week (Monday, Wednesday, Friday)","gym":"Gym 1-2 times a week (Tuesday, Saturday, Sunday)","sessions":[{"title":"Tuesday workouts","desc":"Hard, race pace","items":["5xmile with 200 jog rest at 5k","7xk at faster than 5k with 200 jog rest","4x2k at 5k pace, 2min rest"]},{"title":"Thursday workouts","desc":"Medium, steady + speed","items":["8(3 min on, 1 min off)","16x400 at 5k with 200 jog rest","8xk at 5k +15 seconds pace, 90 seconds rest"]},{"title":"Sunday long run","desc":"Medium, steady","items":["3x10 min at 5k+25 seconds, 2:30 min jog recovery","Progression","If tired, just jog easy"]}]}}};
+// Training plans live on the server. Which plan a person gets is decided there
+// (see /api/plan), so nothing in the page says which one it is or that others exist.
 const TRAINING_GRADES = ['Freshman','Sophomore','Junior','Senior'];
-
-function personGrade(){
-  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
-  return p && TRAINING_GRADES.includes(p.class_year) ? p.class_year : null;
-}
+let planCache = {};
 
 // A meet inside the next week means race-week mileage; otherwise a normal week.
 function defaultTrainingWeek(){
@@ -3426,27 +3424,52 @@ function defaultTrainingWeek(){
   }catch(e){ return 0; }
 }
 
-function renderTraining(){
-  const own = personGrade();
-  const grade = own || (TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman');
-  const week = trainingWeek === null ? defaultTrainingWeek() : trainingWeek;
-  const plan = TRAINING_PLANS[grade];
+// Resolves to the plan object, or null when there's no plan for this request.
+async function fetchPlan(key, query){
+  if(key in planCache) return planCache[key];
+  let plan = null;
+  try{
+    const res = await fetch('/api/plan?' + query, { cache: 'no-store' });
+    if(res.ok) plan = await res.json();
+  }catch(e){ return undefined; }
+  planCache[key] = plan;
+  return plan;
+}
 
-  $('tpTitle').textContent = `${grade} training plan`;
-  if(own) $('tpHint').textContent = 'Based on your class year.';
-  else if(isRealPerson()) $('tpHint').textContent = 'Set your class on the Personal tab to see your own plan automatically.';
+async function renderTraining(){
+  const own = isRealPerson();
+  const grade = TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman';
+  const key = own ? 'p:' + activePersonId : 'g:' + grade;
+  const query = own ? 'personId=' + encodeURIComponent(activePersonId) : 'grade=' + encodeURIComponent(grade);
+  const plan = await fetchPlan(key, query);
+  // Someone switched person/tab while the request was out; a newer render owns the page.
+  if(currentPage !== 'training' || key !== (isRealPerson() ? 'p:' + activePersonId : 'g:' + (TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman'))) return;
+
+  const showPicker = !own || !plan;
+  $('tpTitle').textContent = own && plan ? 'Your training plan' : 'Training plans';
+  if(own && plan) $('tpHint').textContent = 'Your weekly plan.';
+  else if(own) $('tpHint').textContent = 'Set your class on the Personal tab to get your plan. You can browse by class below.';
   else $('tpHint').textContent = 'Reload and pick your name to see your own plan, or browse by class.';
 
   const picker = $('tpGrades');
-  picker.style.display = own ? 'none' : '';
+  picker.style.display = showPicker ? '' : 'none';
   picker.innerHTML = TRAINING_GRADES.map(g=>`<button type="button" class="tp-grade ${g===grade?'active':''}" data-grade="${g}">${g}</button>`).join('');
   picker.querySelectorAll('[data-grade]').forEach(b=> b.addEventListener('click', ()=>{ trainingGrade = b.dataset.grade; renderTraining(); }));
 
+  // Own person with no plan: browse by class instead of leaving the tab empty.
+  const shown = plan || (own ? await fetchPlan('g:' + grade, 'grade=' + encodeURIComponent(grade)) : null);
+  if(!shown){
+    $('tpWeeks').innerHTML = ''; $('tpDays').innerHTML = ''; $('tpTotal').textContent = ''; $('tpRef').innerHTML = '';
+    if(plan === undefined) $('tpHint').textContent = 'Couldn’t load the plan. Check your connection and try again.';
+    return;
+  }
+  const week = trainingWeek === null ? defaultTrainingWeek() : trainingWeek;
+
   const weeks = $('tpWeeks');
-  weeks.innerHTML = plan.weeks.map((w,i)=>`<button type="button" role="tab" aria-selected="${i===week}" class="tp-week ${i===week?'active':''}" data-week="${i}">${w.name}<small>${w.miles} mi</small></button>`).join('');
+  weeks.innerHTML = shown.weeks.map((w,i)=>`<button type="button" role="tab" aria-selected="${i===week}" class="tp-week ${i===week?'active':''}" data-week="${i}">${w.name}<small>${w.miles} mi</small></button>`).join('');
   weeks.querySelectorAll('[data-week]').forEach(b=> b.addEventListener('click', ()=>{ trainingWeek = parseInt(b.dataset.week, 10); renderTraining(); }));
 
-  $('tpDays').innerHTML = plan.days.map(d=>{
+  $('tpDays').innerHTML = shown.days.map(d=>{
     const c = d.cells[week];
     const t = c.type.toLowerCase();
     const cls = t === 'workout' || t === 'race' ? 'hard' : (t === 'off' ? 'off' : '');
@@ -3458,9 +3481,9 @@ function renderTraining(){
       ${sub ? `<div class="tp-dsub">${escapeHtml(sub)}</div>` : ''}
     </div>`;
   }).join('');
-  $('tpTotal').textContent = `${plan.weeks[week].miles} miles total. WO = workout miles, WU/CD = warm-up/cool-down, LR = long run.`;
+  $('tpTotal').textContent = `${shown.weeks[week].miles} miles total. WO = workout miles, WU/CD = warm-up/cool-down, LR = long run.`;
 
-  const r = plan.ref;
+  const r = shown.ref;
   $('tpRef').innerHTML = r.sessions.map(sec=>`
     <div class="tp-ref-title">${escapeHtml(sec.title[0].toUpperCase() + sec.title.slice(1))}</div>
     ${sec.desc ? `<div class="tp-ref-desc">${escapeHtml(sec.desc)}</div>` : ''}

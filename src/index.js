@@ -1,3 +1,5 @@
+import { PLANS, CLASS_YEAR_RANK } from './plans.js';
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -286,6 +288,33 @@ async function setHealthStatus(db, body) {
 }
 
 const VALID_TRAINING_STATUS = ['resting', 'running', 'crosstraining'];
+
+// The plan a person should see. Deliberately returns only the plan: no rank,
+// and nothing that says which of the ten it is.
+async function getPlan(db, params) {
+  const personId = str(params.get('personId'), 100);
+  const grade = str(params.get('grade'), 20);
+  let rank = null;
+  if (personId) {
+    const row = await db.prepare('SELECT class_year, plan_rank FROM people WHERE id = ?').bind(personId).first();
+    if (row) rank = PLANS[row.plan_rank] ? row.plan_rank : (CLASS_YEAR_RANK[row.class_year] ?? null);
+  } else if (grade) {
+    rank = CLASS_YEAR_RANK[grade] ?? null;
+  }
+  if (!rank) return new Response(JSON.stringify({ error: 'no_plan' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  return new Response(JSON.stringify(PLANS[rank]), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+}
+
+async function setPlanRank(db, body) {
+  const personId = str(body?.personId, 100);
+  const raw = body?.rank;
+  const rank = raw === null || raw === undefined ? null : Number(raw);
+  if (!personId) return json({ error: 'Missing personId' }, 400);
+  if (rank !== null && !(Number.isInteger(rank) && rank >= 1 && rank <= 6)) return json({ error: 'rank must be an integer 1-6, or null to use the class-year default' }, 400);
+  const result = await db.prepare('UPDATE people SET plan_rank = ? WHERE id = ?').bind(rank, personId).run();
+  if (!result.meta.changes) return json({ error: 'Unknown person' }, 400);
+  return json({ ok: true, personId, rank });
+}
 
 async function setTrainingStatus(db, body) {
   const personId = str(body?.personId, 100);
@@ -715,6 +744,19 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: 'set_rank',
+    description: "Set a person's hidden training-plan ranking (1-6 by weekly mileage: 1=30, 2=35, 3=40, 4=45, 5=50, 6=60 miles; 1=Freshman plan, 3=Sophomore, 5=Junior, 6=Senior). Takes effect the next time their Training tab loads. Pass null to go back to the plan for their class year. Never shown to anyone in the app.",
+    inputSchema: {
+      type: 'object',
+      required: ['personId', 'rank'],
+      properties: {
+        personId: { type: 'string', description: "The person's id, from get_roster" },
+        rank: { type: ['integer', 'null'], minimum: 1, maximum: 6 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'set_default_status',
     description: "Set a person's default availability (used on any day without a specific override).",
     inputSchema: {
@@ -863,7 +905,7 @@ async function mcpGetRoster(db) {
   const rows = await db.prepare(
     `SELECT id, name, phone, email, first_name, class_year, track_id, date_entered, borough,
             home_address, out_mon, out_tue, out_wed, out_thu, out_fri, personal_notes,
-            default_status, health_status, training_status
+            default_status, health_status, training_status, plan_rank
      FROM people ORDER BY name`
   ).all();
   return rows.results;
@@ -1011,6 +1053,8 @@ async function callMcpTool(name, args, env, ctx) {
       return await mcpUpdatePerson(db, a, env, ctx);
     case 'delete_person':
       return await unwrapJson(await deletePerson(db, a), 'delete_person failed');
+    case 'set_rank':
+      return await unwrapJson(await setPlanRank(db, a), 'set_rank failed');
     case 'set_default_status':
       return await unwrapJson(await setDefaultStatus(db, a), 'set_default_status failed');
     case 'set_health_status':
@@ -1270,6 +1314,10 @@ export default {
     try {
       if (pathname === '/api/state' && request.method === 'GET') {
         return json(await getState(env.DB));
+      }
+
+      if (pathname === '/api/plan' && request.method === 'GET') {
+        return await getPlan(env.DB, reqUrl.searchParams);
       }
 
       if (pathname === '/api/distance' && request.method === 'GET') {
