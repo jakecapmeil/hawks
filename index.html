@@ -3436,7 +3436,16 @@ async function askCoachNow(){
   const res = await apiPost('/api/coach/ask', { personId: activePersonId, question: q });
   $('askBtn').disabled = false; $('askStatus').textContent = '';
   const out = $('askAnswer'); out.style.display = '';
-  out.textContent = res?.answer || res?.error || 'Couldn’t reach Hawks. Check your connection.';
+  if(res?.answer) out.innerHTML = miniMarkdown(res.answer);
+  else out.textContent = res?.error || 'Couldn’t reach Hawks. Check your connection.';
+}
+
+// Escape first, then allow only bold, inline code and bullet lines.
+function miniMarkdown(text){
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<span class="badge" style="height:auto;">$1</span>')
+    .replace(/^\s*[*-]\s+/gm, '• ');
 }
 
 const PR_EVENTS = ['400','800','1600','3200','5K','XC 5K'];
