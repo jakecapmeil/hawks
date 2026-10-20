@@ -1,4 +1,5 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
+import { COACH_TOOLS, callCoachTool, personForToken, workoutsForApp, issueCoachToken, teamTraining } from './coach.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -471,6 +472,7 @@ async function deletePerson(db, body) {
     db.prepare('DELETE FROM comments WHERE person_id = ?').bind(personId),
     db.prepare('DELETE FROM rsvps WHERE person_id = ?').bind(personId),
     db.prepare('DELETE FROM body_marks WHERE person_id = ?').bind(personId),
+    db.prepare('DELETE FROM workouts WHERE person_id = ?').bind(personId),
     db.prepare('UPDATE posts SET person_id = NULL WHERE person_id = ?').bind(personId),
     db.prepare('DELETE FROM people WHERE id = ?').bind(personId),
   ]);
@@ -973,6 +975,15 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: 'get_team_training',
+    description: "Claude Coach results for the whole team: for each person, whether they've connected Claude Coach, this week's miles vs plan, load, average plan score (0-100), days run, and their graded runs over the last N days (default 7). Use it to see who's putting in the work.",
+    inputSchema: {
+      type: 'object',
+      properties: { days: { type: 'integer', minimum: 1, maximum: 60 } },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'get_state',
     description: 'Full snapshot of everything the app tracks: roster, availability overrides, daily comments, events, RSVPs, body marks, announcements, locations, and travel estimates. Use this when you need more than get_roster/list_events give you — e.g. RSVPs, comments, body marks, posts, or location ids.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -1135,6 +1146,8 @@ async function callMcpTool(name, args, env, ctx) {
       return await unwrapJson(await deletePerson(db, a), 'delete_person failed');
     case 'get_plans':
       return await mcpGetPlans(db);
+    case 'get_team_training':
+      return await teamTraining(db, a.days);
     case 'set_rank':
       return (await mcpSetRanks(db, [{ person: a.person ?? a.personId, rank: a.rank }]))[0];
     case 'set_ranks':
@@ -1174,7 +1187,18 @@ async function handleMcp(request, env, ctx) {
   if (!env.MCP_AUTH_TOKEN || token !== env.MCP_AUTH_TOKEN) {
     return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } }, 401);
   }
+  return await serveMcp(request, 'hawks-calendar', MCP_TOOLS, (name, args) => callMcpTool(name, args, env, ctx));
+}
 
+// Claude Coach: one runner's own Claude, scoped to just their workouts. The
+// token is in the path because claude.ai custom connectors can't send headers.
+async function handleCoachMcp(request, env, token) {
+  const person = await personForToken(env.DB, token);
+  if (!person) return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unknown coach link. Get a new one from Hawks > Personal > Claude Coach.' } }, 401);
+  return await serveMcp(request, 'hawks-coach', COACH_TOOLS, (name, args) => callCoachTool(env.DB, person, name, args));
+}
+
+async function serveMcp(request, serverName, tools, call) {
   let rpc;
   try {
     rpc = await request.json();
@@ -1192,16 +1216,16 @@ async function handleMcp(request, env, ctx) {
       return respond({
         protocolVersion: '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'hawks-calendar', version: '1.0.0' },
+        serverInfo: { name: serverName, version: '1.0.0' },
       });
     }
     if (method === 'notifications/initialized') return new Response(null, { status: 202 });
     if (method === 'ping') return respond({});
-    if (method === 'tools/list') return respond({ tools: MCP_TOOLS });
+    if (method === 'tools/list') return respond({ tools });
     if (method === 'tools/call') {
       const { name, arguments: toolArgs } = params || {};
       try {
-        const data = await callMcpTool(name, toolArgs, env, ctx);
+        const data = await call(name, toolArgs);
         return respond({ content: [{ type: 'text', text: JSON.stringify(data) }] });
       } catch (err) {
         return respond({ content: [{ type: 'text', text: err.message || 'Tool failed' }], isError: true });
@@ -1415,6 +1439,19 @@ export default {
         return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
       }
 
+      const coachMatch = pathname.match(/^\/mcp\/coach\/([a-f0-9]{20,64})$/);
+      if (coachMatch && request.method === 'POST') {
+        return await handleCoachMcp(request, env, coachMatch[1]);
+      }
+      if (coachMatch) {
+        return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
+      }
+
+      if (pathname === '/api/workouts' && request.method === 'GET') {
+        const data = await workoutsForApp(env.DB, str(reqUrl.searchParams.get('personId'), 100));
+        return data ? json(data) : json({ error: 'Unknown person' }, 404);
+      }
+
       const icsMatch = pathname.match(/^\/api\/calendar\/([^/]+)\.ics$/);
       if (icsMatch && request.method === 'GET') {
         const feed = await buildIcsFeed(env.DB, icsMatch[1]);
@@ -1449,6 +1486,10 @@ export default {
         if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
         if (pathname === '/api/people/personal') return await upsertPersonal(env.DB, body, env, ctx);
         if (pathname === '/api/travel-estimate') return await upsertTravelEstimate(env.DB, body);
+        if (pathname === '/api/coach/link') {
+          const token = await issueCoachToken(env.DB, str(body.personId, 100), body.regenerate === true);
+          return token ? json({ url: `${reqUrl.origin}/mcp/coach/${token}` }) : json({ error: 'Unknown person' }, 400);
+        }
       }
     } catch (err) {
       console.error(err);

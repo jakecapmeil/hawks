@@ -461,6 +461,20 @@
   .tp-dmiles{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-footnote);font-variant-numeric:tabular-nums;white-space:nowrap;}
   .tp-dsub{grid-column:2 / 4;font-family:var(--font-ui);font-size:var(--fs-caption);color:var(--ink-soft);line-height:1.35;}
   .tp-day.hard .tp-dsub{color:var(--gold-ink);}
+  .coach-steps{margin:8px 0 0;padding-left:20px;font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);display:flex;flex-direction:column;gap:6px;}
+  .coach-steps b{color:var(--ink);}
+  .coach-prompt{width:100%;min-height:140px;font-family:ui-monospace,Menlo,monospace;font-size:12px;}
+  .coach-week{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 12px;}
+  .coach-stat{background:var(--gold-bg);border-radius:10px;padding:8px;text-align:center;font-family:var(--font-ui);}
+  .coach-stat b{display:block;font-size:var(--fs-callout);color:var(--ink);}
+  .coach-stat small{font-size:11px;color:var(--ink-soft);}
+  .coach-run{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line, rgba(127,127,127,.2));font-family:var(--font-ui);}
+  .coach-grade{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;background:var(--gold-bg);color:var(--gold-ink);}
+  .coach-grade.g-D,.coach-grade.g-F{background:var(--pain);color:#fff;}
+  .coach-run-main{flex:1;min-width:0;}
+  .coach-run-top{font-weight:600;font-size:var(--fs-subhead);}
+  .coach-run-meta{font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:2px;}
+  .coach-run-note{font-size:var(--fs-footnote);margin-top:4px;}
   .tp-total{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:10px;}
   .tp-ref-title{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-footnote);margin:12px 0 2px;}
   .tp-ref-desc{font-family:var(--font-ui);font-size:var(--fs-caption);color:var(--ink-soft);margin-bottom:4px;}
@@ -1285,6 +1299,26 @@
         <button id="copyCalendarFeedBtn">Copy</button>
       </div>
     </div>
+    <div class="card" id="coachCard" style="display:none;">
+      <div class="card-title">Claude Coach</div>
+      <div class="hint">Claude reads your runs from Strava, grades each one against your Hawks plan, and saves the grades to your Training tab. Takes about 3 minutes to set up. You need a Claude account (free works) and Strava.</div>
+      <ol class="coach-steps">
+        <li><b>Connect Strava in Claude.</b> In claude.ai go to Settings → Connectors, find <b>Strava</b> and connect it.</li>
+        <li><b>Add your Hawks link.</b> Same page: Add custom connector → name it <b>Hawks Coach</b> → paste the link below. Keep it private; it's your login.</li>
+        <li><b>Paste the prompt.</b> Start a new chat in Claude and paste the setup prompt. It syncs your last 2 weeks, then you just say <b>"coach me"</b> after each run.</li>
+      </ol>
+      <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Your Hawks Coach link</div>
+      <div class="copy-row" style="margin-top:6px;">
+        <textarea id="coachUrl" readonly rows="1" placeholder="Tap Get link"></textarea>
+        <button id="coachUrlBtn">Get link</button>
+      </div>
+      <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Setup prompt</div>
+      <textarea id="coachPrompt" class="coach-prompt" readonly></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+        <button id="copyCoachPromptBtn">Copy prompt</button>
+        <button class="ghost" id="resetCoachBtn" type="button">Reset link</button>
+      </div>
+    </div>
   </div>
 
   <div id="pageMeets" style="display:none;">
@@ -1303,6 +1337,12 @@
       <div class="tp-weeks" id="tpWeeks" role="tablist" aria-label="Week type"></div>
       <div class="tp-days" id="tpDays"></div>
       <div class="tp-total" id="tpTotal"></div>
+    </div>
+    <div class="card" id="coachRunsCard" style="display:none;">
+      <div class="card-title">Your runs</div>
+      <div class="hint" id="coachRunsHint"></div>
+      <div class="coach-week" id="coachWeek"></div>
+      <div id="coachRuns"></div>
     </div>
     <div class="card">
       <div class="card-title">Workout menu</div>
@@ -2894,6 +2934,7 @@ function renderPersonal(){
   $('personalForm').classList.toggle('show', !!p);
   $('travelCard').style.display = p ? '' : 'none';
   $('calendarFeedCard').style.display = p ? '' : 'none';
+  $('coachCard').style.display = p ? '' : 'none';
   if(!p) return;
 
   $('personalFirstName').value = p.first_name || '';
@@ -2913,6 +2954,113 @@ function renderPersonal(){
   renderTravelList(p);
 
   $('calendarFeedUrl').value = `${location.origin}/api/calendar/${p.id}.ics`;
+  renderCoachSetup(p);
+}
+
+// --- Claude Coach -----------------------------------------------------------
+// The runner's own Claude does the work: Strava connector in, Hawks Coach
+// connector (a per-person MCP link) out. The server does the scoring math.
+let coachLinks = {};
+
+function coachPrompt(name){
+  return `You are my running coach for the Hawks cross country team. You have two connectors: Strava (my runs) and Hawks Coach (my team training plan and the place my graded runs go). Follow these steps exactly, every time I say "coach me" (or when this runs as a scheduled task).
+
+STEP 1 - CONTEXT. Call the Hawks Coach tool get_coach_context. It tells you today's date, my plan for this week day by day, what is already logged, the Strava ids already logged, and the scoring rubric. Read the rubric and follow it.
+
+STEP 2 - PULL RUNS. Use the Strava connector to get my activities from the last 14 days (the first time) or since the newest logged run (after that). Skip any activity whose id is in already_logged_strava_ids. For each new one, get the details: name, sport type, start date (local), distance, moving time, elapsed time, average and max heart rate, average cadence, elevation gain, and laps/splits if the connector has them.
+
+STEP 3 - CLASSIFY. For each activity pick exactly one category from the rubric: easy, recovery, long, workout, race, shakeout or crosstrain. Use the laps and pace changes to spot workouts; use HR as a share of max HR to tell easy from hard. Compare with the planned type for that date.
+
+STEP 4 - CONVERT. distance_mi = meters / 1609.34 (2 decimals). elev_gain_ft = meters x 3.281. Strava run cadence counts one foot, so double it to get steps per minute (84 -> 168). Times in whole seconds. Leave out anything Strava doesn't have; never guess numbers.
+
+STEP 5 - NOTE. Write a 1-3 sentence coaching note per activity as the rubric describes.
+
+STEP 6 - SAVE. Call log_workouts once with all the new activities. Hawks calculates effort, load, plan match and the letter grade.
+
+STEP 7 - REPORT. Reply to me with a short coach's report: a table of each new run (date, category, miles, pace, avg HR, grade), this week's miles vs plan and average plan score from the response, what's coming up next on my plan, and one or two specific things to focus on. If nothing new was found, say so and preview the next planned day.
+
+RULES: Only ever log my own Strava activities. Never invent or estimate data. If a connector is missing or fails, stop and tell me which one so I can fix it in Settings > Connectors. Keep the tone of a supportive high school XC coach.
+
+FIRST RUN ONLY: Do steps 1-7 now for the last 14 days. Then tell me I'm set up, and that I can say "coach me" after each run. If this Claude app supports scheduled tasks, offer to schedule this every evening at 8pm.
+
+My name is ${name}.`;
+}
+
+async function renderCoachSetup(p){
+  $('coachPrompt').value = coachPrompt(p.first_name || p.name);
+  const url = coachLinks[p.id] || '';
+  $('coachUrl').value = url;
+  $('coachUrlBtn').textContent = url ? 'Copy' : 'Get link';
+}
+
+async function fetchCoachLink(regenerate){
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  if(!p) return null;
+  const res = await apiPost('/api/coach/link', { personId: p.id, regenerate });
+  if(!res || !res.url) return null;
+  coachLinks[p.id] = res.url;
+  renderCoachSetup(p);
+  return res.url;
+}
+
+function copyField(inputId, btnId){
+  const input = $(inputId);
+  input.select();
+  input.setSelectionRange(0, 99999);
+  try{ navigator.clipboard.writeText(input.value); }catch(e){ document.execCommand('copy'); }
+  const btn = $(btnId);
+  const orig = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(()=>{ btn.textContent = orig; }, 1200);
+}
+
+function fmtDuration(sec){
+  if(!sec) return '';
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s2 = sec%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s2).padStart(2,'0')}` : `${m}:${String(s2).padStart(2,'0')}`;
+}
+
+async function renderCoachRuns(){
+  const card = $('coachRunsCard');
+  if(!isRealPerson()){ card.style.display = 'none'; return; }
+  const personId = activePersonId;
+  let data = null;
+  try{
+    const res = await fetch('/api/workouts?personId=' + encodeURIComponent(personId), { cache: 'no-store' });
+    if(res.ok) data = await res.json();
+  }catch(e){}
+  if(currentPage !== 'training' || personId !== activePersonId) return;
+  if(!data){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  const w = data.this_week;
+  if(!data.workouts.length){
+    $('coachRunsHint').textContent = data.connected
+      ? 'Nothing logged yet. Open Claude and say "coach me" to sync your Strava runs.'
+      : 'Set up Claude Coach on the Personal tab and your graded Strava runs will show up here.';
+    $('coachWeek').innerHTML = '';
+    $('coachRuns').innerHTML = '';
+    return;
+  }
+  $('coachRunsHint').textContent = 'Graded by Claude Coach against your plan. Say "coach me" in Claude to sync new runs.';
+  $('coachWeek').innerHTML = [
+    [`${w.miles_done}`, `of ${w.planned_miles} mi`],
+    [w.avg_plan_score ?? '–', 'plan score'],
+    [w.load, 'load'],
+    [w.days.filter(d=>d.logged.length).length, 'days run'],
+  ].map(([v,l])=>`<div class="coach-stat"><b>${escapeHtml(String(v))}</b><small>${l}</small></div>`).join('');
+  $('coachRuns').innerHTML = data.workouts.map(r=>{
+    const d = new Date(r.date + 'T12:00:00');
+    const when = d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+    const meta = [r.distance_mi != null && `${r.distance_mi.toFixed(1)} mi`, fmtDuration(r.moving_sec), r.pace_per_mi && `${r.pace_per_mi}/mi`, r.avg_hr && `${r.avg_hr} bpm`, r.effort && `effort ${r.effort}/10`, r.planned_type && `plan: ${r.planned_type}${r.planned_miles ? ' ' + r.planned_miles + ' mi' : ''}`].filter(Boolean).join(' · ');
+    return `<div class="coach-run">
+      <div class="coach-grade g-${r.rating || 'none'}">${escapeHtml(r.rating || '–')}</div>
+      <div class="coach-run-main">
+        <div class="coach-run-top">${escapeHtml(when)} · ${escapeHtml(r.category[0].toUpperCase() + r.category.slice(1))}</div>
+        <div class="coach-run-meta">${escapeHtml(meta)}</div>
+        ${r.summary ? `<div class="coach-run-note">${escapeHtml(r.summary)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function resolvedMeetLocation(ev){
@@ -3424,6 +3572,16 @@ function wireUI(){
     setTimeout(()=>{ btn.textContent = orig; }, 1200);
   });
 
+  $('coachUrlBtn').addEventListener('click', async ()=>{
+    if(!$('coachUrl').value && !(await fetchCoachLink(false))) return;
+    copyField('coachUrl', 'coachUrlBtn');
+  });
+  $('copyCoachPromptBtn').addEventListener('click', ()=> copyField('coachPrompt', 'copyCoachPromptBtn'));
+  $('resetCoachBtn').addEventListener('click', async ()=>{
+    if(!confirm('Make a new Hawks Coach link? The old one stops working, so you’ll need to update the connector in Claude.')) return;
+    await fetchCoachLink(true);
+  });
+
   $('copyCalendarFeedBtn').addEventListener('click', ()=>{
     const input = $('calendarFeedUrl');
     input.select();
@@ -3461,6 +3619,7 @@ async function fetchPlan(key, query){
 }
 
 async function renderTraining(){
+  renderCoachRuns();
   const own = isRealPerson();
   const grade = TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman';
   const key = own ? 'p:' + activePersonId : 'g:' + grade;
