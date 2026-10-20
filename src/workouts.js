@@ -1,5 +1,5 @@
 // Workout library. Built from the Hawks plan menus (Tue/Thu/Sun sessions across
-// plans 1-6), Jake's own XC Coach Log sessions, and standard high school
+// plans 1-6), Jake's own XC Coach Log and Strava sessions, and standard high school
 // distance training (Daniels, Lydiard, Canova-style race-specific work).
 //
 // Paces are written relative to current 5K race pace so one library fits every
@@ -295,6 +295,51 @@ export const WORKOUTS = [
   W({ id: 'tt-5k-sim', name: '5K course rehearsal', type: 'time_trial', races: ['5K', 'XC'], phase: ['peak'], level: 3, total_min: 55,
     main: '2 mi wu, 2 mi on the actual race course at goal pace, 2 min rest, 1 mi at goal pace, 2 mi cd', work: '3 mi', paces: 'Goal 5K pace.',
     purpose: 'Learn the course (Van Cortlandt hills, the flats) at race pace.', cues: 'Note where to push and where to hold on.', progress: 'Do it 10-14 days before the big race.', source: 'Standard XC' }),
+
+  // ---------------------------------------------------------------- Jake's own sessions (from his Strava, Oct 2025 - May 2026)
+  W({ id: 'jake-2to1-tempo', name: '2:1 tempo (5x 2 min tempo / 1 min surge)', type: 'tempo', races: ['1600', '3200', '5K', 'XC'], phase: ['base', 'build'], level: 2, total_min: 40,
+    main: '1 mi wu + strides, then 15 min continuous: 5x(2 min at tempo, 1 min surge at 5K-3200 pace) with no rest, 1 mi cd', work: '15 min', paces: 'Jake (Mar 1 2026): 2 min at ~6:50/mi, 1 min at ~5:30-6:00/mi.',
+    purpose: 'Tempo with built-in surges. Teaches you to lift the pace and settle back without dropping to a jog.',
+    cues: 'Settle back to tempo, not to easy, after each surge. The last rep is the test.', progress: '6 sets, or 3 min tempo / 1 min surge.', source: "Jake's Strava (Mar 1 2026)" }),
+  W({ id: 'jake-3to1-fartlek', name: '3:1 fartlek (6x 3 min steady / 1 min hard)', type: 'fartlek', races: ['3200', '5K', 'XC'], phase: ['base', 'build'], level: 2, total_min: 45,
+    main: '1.5 mi wu, then 6x(3 min steady, 1 min hard) continuous, 0.75 mi cd', work: '24 min', paces: 'Jake (Mar 22 2026): 3 min at ~7:00/mi, 1 min at ~5:00-5:30/mi.',
+    purpose: 'Aerobic strength with surges. Great on a hilly loop for XC.', cues: 'Surges on uphills are allowed: run them by effort.', progress: 'Make the steady part closer to tempo.', source: "Jake's Strava (Mar 22 2026)" }),
+  W({ id: 'jake-mile-800-800', name: 'Mile - 800 - 800', type: 'vo2', races: ['1600', '3200', '5K'], phase: ['build'], level: 2, total_min: 40,
+    main: '1 mi wu, 1 mile at 5K pace, 800 at 3200 pace, 800 at 3200 pace, 3-4 min jog between, 1 mi cd', work: '2 mi', paces: 'Jake (Feb 27 2026): 6:00, 2:40, 2:40.',
+    purpose: 'Short season-opener session: a 5K-pace mile, then faster 800s on tired legs.', cues: 'Hold the 800s even with each other.', progress: 'Mile - 800 - 800 - 400.', source: "Jake's Strava (Feb 27 2026)" }),
+  W({ id: 'jake-mile-tempo-800s', name: 'Mile tempo + 3x800', type: 'threshold', races: ['1600', '3200', '5K', 'XC'], phase: ['build', 'peak'], level: 2, total_min: 45,
+    main: '0.5 mi wu, 1 mile at threshold, 3 min jog, 3x800 at 3200-5K pace with 2-3 min jog, 4x75m strides, cd', work: '1 mi + 2400', paces: 'Jake (Oct 29 2025): mile 6:39, 800s at ~2:45-2:50 (5:40/mi).',
+    purpose: 'Combo session: threshold to pre-load fatigue, then faster reps.', cues: 'Do not race the mile. The 800s are the point.', progress: '4x800.', source: "Jake's Strava (Oct 29 2025)" }),
+  W({ id: 'jake-800s-600s', name: '4x800 + 2x600', type: 'vo2', races: ['1600', '3200', '5K', 'XC'], phase: ['peak'], level: 2, total_min: 50,
+    main: '1.5 mi wu, 4x800 with 400 jog, then 2x600 with 400 jog, cd', work: '4400m', paces: 'Jake (Nov 18 2025): 800s at 2:42-2:53, 600s at 2:45 (~5:40/mi).',
+    purpose: 'Late-season VO2 volume.', cues: 'The 600s should match 800 pace, not slow down.', progress: '5x800 + 2x600.', source: "Jake's Strava (Nov 18 2025)" }),
+  W({ id: 'jake-6x400', name: '6x400 at ~1:12, 200 jog', type: 'track', races: ['800', '1600', '3200'], phase: ['build', 'peak'], level: 1, total_min: 35,
+    main: '1-1.5 mi wu + strides, 6x400 with 200 jog (optionally + 1x200), 4-5 strides, cd', work: '2400m', paces: 'Jake (Mar-Apr 2026): 1:09-1:17, target ~1:15 (mile pace + 1-2 s).',
+    purpose: 'The staple track-season session: mile-pace rhythm.', cues: 'Hit the target, not faster: faster than coach wants costs you the later reps.', progress: '8x400, or cut jog to 100.', source: "Jake's Strava (Mar 29, Apr 12, Apr 23 2026)" }),
+  W({ id: 'jake-200s', name: '6-8x200 at 30-32', type: 'track', races: ['800', '1600'], phase: ['build', 'peak', 'taper'], level: 1, total_min: 35,
+    main: '1-1.5 mi wu, 6-8x200 with 200 jog, finish with a 300, cd', work: '1.6K', paces: 'Jake (Apr 2026): 200s in 30-34 s, 300 in 47 s.',
+    purpose: 'Speed and turnover for 800/1600 racing.', cues: 'Relaxed and quick. Same time on every rep.', progress: '10x200, or 4x300.', source: "Jake's Strava (Apr 16, Apr 30 2026)" }),
+  W({ id: 'jake-steady-cutdown', name: '2 mi steady + 800-600-300-300', type: 'race_specific', races: ['1600', '3200'], phase: ['peak'], level: 2, total_min: 50,
+    main: '1 mi wu, 2 mi steady, then 800, 600, 2x300 cutting down, strides, cd', work: '2 mi + 2000m', paces: 'Jake (Apr 15 2026): miles 7:42/7:38, 600 2:04, 300s ~1:00.',
+    purpose: 'Strength into speed: aerobic miles then a cutdown on tired legs.', cues: 'Each rep faster than the last.', progress: 'Add a 400 at the end.', source: "Jake's Strava (Apr 15 2026)" }),
+  W({ id: 'jake-3x800', name: '3x800 at ~2:50', type: 'vo2', races: ['1600', '3200', '5K'], phase: ['build', 'peak'], level: 1, total_min: 40,
+    main: '2 mi wu, 3x800 with 2-3 min jog, strides, cd', work: '2400m', paces: 'Jake (May 2026): 2:33-2:53.',
+    purpose: 'Short VO2 session for track season.', cues: 'Even splits. Back off if you start coughing hard.', progress: '4x800.', source: "Jake's Strava (May 5, May 11 2026)" }),
+  W({ id: 'jake-800s-200s', name: '2x800 + 4x200', type: 'race_specific', races: ['800', '1600'], phase: ['peak', 'taper'], level: 2, total_min: 45,
+    main: '0.5 mi wu, 2x800 at goal 1600 pace with 3 min rest, 4x200 at 800 pace, 2 mi easy', work: '2400m', paces: 'Jake (May 7 2026): 800s 2:27-2:28 (~4:55/mi), 200s 27-29 s.',
+    purpose: 'Mile race prep: goal pace then speed.', cues: 'Smooth through 600 of each 800.', progress: '3x800.', source: "Jake's Strava (May 7 2026)" }),
+  W({ id: 'jake-mixed-200-400', name: '800, then 200-200-200-400-200-200', type: 'track', races: ['800', '1600'], phase: ['peak'], level: 2, total_min: 55,
+    main: '2 mi easy, 800 at 3200 pace, then 200-200-200-400-200-200 with 200 jog, 2 mi easy', work: '2000m', paces: 'Jake (May 12 2026): 800 2:51, 200s 33-34, 400 1:07.',
+    purpose: 'Mixed speed set with a fast 400 in the middle.', cues: 'The 400 should be the fastest pace of the day.', progress: 'Make it 2 sets.', source: "Jake's Strava (May 12 2026)" }),
+  W({ id: 'jake-hill-35s', name: '8-12x35s hill', type: 'hills', races: ['800', '1600', '3200', '5K', 'XC'], phase: ['base'], level: 1, total_min: 35,
+    main: '1-1.5 mi wu, 8-12x35 s up a steady hill with walk/jog-down, cd', work: '5-7 min', paces: 'Hard by effort; HR climbs from ~130 to ~160 over the set.',
+    purpose: 'Winter base strength and power when there is no track.', cues: 'Same effort every rep, tall posture, drive arms.', progress: 'Add 2 reps every week.', source: "Jake's Strava (Nov 20, Dec 4 2025, Feb 10, Mar 5 2026)" }),
+  W({ id: 'jake-steady-5', name: '5 mi steady + strides', type: 'steady', races: ['3200', '5K', 'XC'], phase: ['base', 'build'], level: 2, total_min: 50,
+    main: '5 miles steady, then 4x100 strides', work: '5 mi', paces: 'Jake (Mar-Apr 2026): ~7:40-7:57/mi, HR 170-174.',
+    purpose: 'Aerobic strength in track season.', cues: 'Jake ran these at HR 170+: they should be closer to 160 to stay steady, not tempo.', progress: '6 miles.', source: "Jake's Strava (Mar 25, Apr 22 2026)" }),
+  W({ id: 'jake-progression-4', name: '4 mi progression', type: 'progression', races: ['3200', '5K', 'XC'], phase: ['build'], level: 2, total_min: 30,
+    main: '4 miles getting faster each mile, last mile at threshold', work: '4 mi', paces: 'Jake (Apr 19 2026): ~7:30 down to ~6:45/mi.',
+    purpose: 'A short, sharp aerobic session.', cues: 'Start slower than you want.', progress: '5 miles.', source: "Jake's Strava (Apr 19 2026)" }),
 ];
 
 export function findWorkouts({ type, race, phase, level, max_min, min_min, q } = {}) {
