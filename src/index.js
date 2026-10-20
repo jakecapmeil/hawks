@@ -1552,6 +1552,14 @@ export default {
               if (!person) return json({ error: 'Unknown person' }, 400);
               const { rubric, already_logged, ...context } = await getCoachContext(env.DB, person);
               context.workout_library = WORKOUTS.map((w) => ({ id: w.id, name: w.name, type: w.type, races: w.races, min: w.total_min, level: w.level, main: w.main }));
+              // Older history, compact: every session with splits or a library
+              // workout, and 16 weeks of weekly totals.
+              const past = await getLog(env.DB, personId, todayInTz(new Date(Date.now() - 112 * 86400000)), todayInTz());
+              context.weekly_totals_16_weeks = past.weeks;
+              const sessions = (await env.DB.prepare(
+                "SELECT date, library_id, splits, summary, difficulty FROM training_days WHERE person_id = ? AND (library_id != '' OR splits != '') ORDER BY date"
+              ).bind(personId).all()).results;
+              context.all_workout_sessions = sessions.map((d) => ({ date: d.date, workout: d.library_id || null, splits: d.splits || null, summary: (d.summary || '').slice(0, 200), difficulty: d.difficulty }));
               return json({ answer: await askCoach(env, env.DB, person, body.question, context, todayInTz()) });
             }
           } catch (err) {

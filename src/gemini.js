@@ -35,7 +35,9 @@ async function generate(env, { system, prompt, schema, maxTokens = 1024 }) {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.4,
-        maxOutputTokens: maxTokens,
+        // Thinking models spend part of this budget reasoning before they
+        // answer, so it's set well above the visible answer length.
+        maxOutputTokens: maxTokens + 4096,
         ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}),
       },
     }),
@@ -46,7 +48,9 @@ async function generate(env, { system, prompt, schema, maxTokens = 1024 }) {
     throw new AiError('The AI request failed.');
   }
   const data = await res.json();
-  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
+  const cand = data.candidates?.[0];
+  const text = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
+  if (cand?.finishReason === 'MAX_TOKENS' && schema) throw new AiError('The AI ran out of room; try again.');
   if (!text) throw new AiError('The AI returned nothing.');
   if (!schema) return text;
   try {
