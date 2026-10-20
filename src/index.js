@@ -1,7 +1,9 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
 import { logTools, callLogTool, LogError, getLog, saveDay, libraryMeta, setFiveK, fiveKFor, setPrs, getPrs } from './log.js';
 import { WORKOUTS, pacesFrom5k } from './workouts.js';
-import { todayInTz } from './coach.js';
+import { todayInTz, getCoachContext } from './coach.js';
+import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
+import { aiEnabled, askCoach, AiError } from './gemini.js';
 import { COACH_TOOLS, callCoachTool, personForToken, workoutsForApp, issueCoachToken, teamTraining } from './coach.js';
 
 function json(data, status = 200) {
@@ -1375,12 +1377,15 @@ async function buildIcsFeed(db, personId) {
 // SHIPPED DISABLED ON PURPOSE. This can email every RSVP'd student
 // unattended, so it must not be able to fire without the coach's explicit
 // go-ahead on recipients, timing, and channel:
-//   1. No cron trigger is registered for this in wrangler.jsonc — Cloudflare
-//      never calls `scheduled` below unless one is added there and deployed.
+//   1. `scheduled` only runs this for MEET_REMINDER_CRON, and that schedule
+//      is NOT registered in wrangler.jsonc (the only registered cron is the
+//      intervals.icu sync). Cloudflare never fires it until a human adds it.
 //   2. Even if it were somehow invoked, it no-ops without RESEND_API_KEY,
 //      which is not set.
 // Both guards must be deliberately removed/added by a human before this can
 // send anything.
+const MEET_REMINDER_CRON = '0 11 * * *';
+
 async function sendMeetDayReminders(env) {
   if (!env.RESEND_API_KEY) return { sent: 0, reason: 'not_configured' };
 
@@ -1426,7 +1431,11 @@ async function sendMeetDayReminders(env) {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(sendMeetDayReminders(env).catch(err => console.error('meet-day reminder failed', err)));
+    if (event.cron === SYNC_CRON) {
+      ctx.waitUntil(syncDue(env).catch(err => console.error('intervals sync failed', err)));
+    } else if (event.cron === MEET_REMINDER_CRON) {
+      ctx.waitUntil(sendMeetDayReminders(env).catch(err => console.error('meet-day reminder failed', err)));
+    }
   },
 
   async fetch(request, env, ctx) {
@@ -1471,6 +1480,11 @@ export default {
           if (err instanceof LogError) return json({ error: err.message }, 400);
           throw err;
         }
+      }
+
+      if (pathname === '/api/intervals/status' && request.method === 'GET') {
+        const st = await icuStatus(env.DB, str(reqUrl.searchParams.get('personId'), 100));
+        return st ? json({ ...st, ai: aiEnabled(env) }) : json({ error: 'Unknown person' }, 404);
       }
 
       if (pathname === '/api/library' && request.method === 'GET') {
@@ -1524,6 +1538,24 @@ export default {
             return json(await saveDay(env.DB, str(body.personId, 100), str(body.date, 10), body.fields || {}));
           } catch (err) {
             if (err instanceof LogError) return json({ error: err.message }, 400);
+            throw err;
+          }
+        }
+        if (pathname.startsWith('/api/intervals/') || pathname === '/api/coach/ask') {
+          const personId = str(body.personId, 100);
+          try {
+            if (pathname === '/api/intervals/connect') return json(await icuConnect(env, personId, body.athleteId, body.apiKey));
+            if (pathname === '/api/intervals/disconnect') return json(await icuDisconnect(env, personId));
+            if (pathname === '/api/intervals/sync') return json(await syncPerson(env, personId, { days: body.days === 60 ? 60 : undefined }));
+            if (pathname === '/api/coach/ask') {
+              const person = await env.DB.prepare('SELECT id, name, first_name, class_year, plan_rank FROM people WHERE id = ?').bind(personId).first();
+              if (!person) return json({ error: 'Unknown person' }, 400);
+              const { rubric, already_logged, ...context } = await getCoachContext(env.DB, person);
+              context.workout_library = WORKOUTS.map((w) => ({ id: w.id, name: w.name, type: w.type, races: w.races, min: w.total_min, level: w.level, main: w.main }));
+              return json({ answer: await askCoach(env, env.DB, person, body.question, context, todayInTz()) });
+            }
+          } catch (err) {
+            if (err instanceof IntervalsError || err instanceof AiError) return json({ error: err.message }, 400);
             throw err;
           }
         }

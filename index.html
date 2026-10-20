@@ -1526,6 +1526,37 @@
         <button id="copyCalendarFeedBtn">Copy</button>
       </div>
     </div>
+    <div class="card" id="icuCard" style="display:none;">
+      <div class="section-head">
+        <div>
+          <div class="card-title">Watch sync</div>
+          <div class="hint">Pulls your Garmin or COROS runs into your log automatically through intervals.icu (free). No Claude or Strava needed.</div>
+        </div>
+        <span id="icuBadge"></span>
+      </div>
+      <div id="icuSetup" class="stack">
+        <ol class="coach-steps">
+          <li>Make a free account at <b>intervals.icu</b> and connect <b>Garmin</b> or <b>COROS</b> there (Settings → Connections). Don't use its Strava link: Strava won't share those runs.</li>
+          <li>On intervals.icu, open <b>Settings</b>. Copy your <b>athlete id</b> (looks like i12345) and, under <b>Developer Settings</b>, your <b>API key</b>.</li>
+          <li>Paste both here. Hawks checks them, then syncs about every hour.</li>
+        </ol>
+        <div class="field-grid">
+          <label class="field"><span>Athlete id</span><input type="text" id="icuAthlete" placeholder="i12345" maxlength="14" autocomplete="off"></label>
+          <label class="field"><span>API key</span><input type="password" id="icuKey" placeholder="Paste key" maxlength="200" autocomplete="off"></label>
+        </div>
+        <div class="cluster"><button id="icuConnectBtn" type="button">Connect</button><span class="hint" id="icuMsg"></span></div>
+      </div>
+      <div id="icuLinked" class="stack" style="display:none;">
+        <div class="hint" id="icuInfo"></div>
+        <div class="cluster">
+          <button id="icuSyncBtn" type="button">Sync now</button>
+          <button class="ghost" id="icuBackfillBtn" type="button">Pull last 60 days</button>
+          <button class="ghost" id="icuDisconnectBtn" type="button">Disconnect</button>
+        </div>
+        <div class="hint" id="icuSyncMsg"></div>
+      </div>
+    </div>
+
     <div class="card" id="coachCard" style="display:none;">
       <div class="card-title">Claude Coach</div>
       <div class="hint">Claude reads runs from your watch's connector, grades each one against your Hawks plan, and saves them to your Training log. About 3 minutes to set up with a free Claude account.</div>
@@ -1534,6 +1565,7 @@
           <button type="button" class="seg-btn" data-src="coros">COROS</button>
           <button type="button" class="seg-btn" data-src="garmin">Garmin</button>
           <button type="button" class="seg-btn" data-src="strava">Strava</button>
+          <button type="button" class="seg-btn" data-src="intervals">Watch sync</button>
         </div>
       </div>
       <ol class="coach-steps" id="coachSteps" style="margin-top:var(--sp-3);"></ol>
@@ -1586,6 +1618,20 @@
         <div class="tp-total" id="tpTotal"></div>
       </section>
       <div class="split-side">
+        <section class="card" id="askCard" style="display:none;">
+          <div class="section-head">
+            <div>
+              <div class="card-title">Ask Coach</div>
+              <div class="hint">AI answers from your plan, log, PRs and the workout library.</div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="chip-scroll" id="askSuggest"></div>
+            <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. What should I do tomorrow if my legs are tired?"></textarea>
+            <div class="cluster"><button id="askBtn" type="button">Ask</button><span class="hint" id="askStatus"></span></div>
+            <div class="inset" id="askAnswer" style="display:none;white-space:pre-wrap;font-size:var(--fs-subhead);line-height:1.5;"></div>
+          </div>
+        </section>
         <section class="card" id="coachRunsCard" style="display:none;">
           <div class="section-head">
             <div>
@@ -3299,6 +3345,7 @@ function renderPersonal(){
   $('travelCard').style.display = p ? '' : 'none';
   $('calendarFeedCard').style.display = p ? '' : 'none';
   $('coachCard').style.display = p ? '' : 'none';
+  $('icuCard').style.display = p ? '' : 'none';
   if(!p) return;
 
   $('personalFirstName').value = p.first_name || '';
@@ -3320,6 +3367,76 @@ function renderPersonal(){
   $('calendarFeedUrl').value = `${location.origin}/api/calendar/${p.id}.ics`;
   renderCoachSetup(p);
   renderPrs(p);
+  renderIcu(p);
+}
+
+// --- Watch sync (intervals.icu) and Ask Coach (Gemini) -----------------------
+let icuState = {};
+async function fetchIcuStatus(personId){
+  try{
+    const res = await fetch('/api/intervals/status?personId=' + encodeURIComponent(personId), { cache:'no-store' });
+    if(res.ok) icuState[personId] = await res.json();
+  }catch(e){}
+  return icuState[personId];
+}
+
+function timeAgo(ms){
+  const m = Math.round((Date.now() - ms) / 60000);
+  if(m < 1) return 'just now';
+  if(m < 60) return m + ' min ago';
+  const h = Math.round(m / 60);
+  return h < 24 ? h + ' hr ago' : Math.round(h / 24) + ' days ago';
+}
+
+async function renderIcu(p){
+  $('icuCard').style.display = p ? '' : 'none';
+  if(!p) return;
+  const st = await fetchIcuStatus(p.id);
+  if(!st || activePersonId !== p.id) return;
+  const err = st.status && st.status.startsWith('error');
+  $('icuBadge').innerHTML = st.connected ? `<span class="badge ${err ? 'tone-int-4' : 'tone-int-1'}">${err ? 'Needs attention' : 'Connected'}</span>` : '';
+  $('icuSetup').style.display = st.connected ? 'none' : '';
+  $('icuLinked').style.display = st.connected ? '' : 'none';
+  if(st.connected){
+    $('icuInfo').textContent = `Athlete ${st.athlete}. ${st.synced_at ? 'Last synced ' + timeAgo(st.synced_at) : 'Not synced yet'}.${st.status && st.status !== 'ok' && st.status !== 'connected' ? ' ' + st.status : ''}${st.ai ? ' Runs are labelled by AI.' : ''}`;
+  }
+}
+
+async function icuAction(path, body, msgId, btnId){
+  const btn = $(btnId); const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Working…'; $(msgId).textContent = '';
+  const res = await apiPost(path, { personId: activePersonId, ...body });
+  btn.disabled = false; btn.textContent = orig;
+  if(!res || res.error){ $(msgId).textContent = res?.error || 'Couldn’t reach Hawks. Check your connection.'; return null; }
+  return res;
+}
+
+async function icuSync(days){
+  const res = await icuAction('/api/intervals/sync', days ? { days } : {}, 'icuSyncMsg', days ? 'icuBackfillBtn' : 'icuSyncBtn');
+  if(res) $('icuSyncMsg').textContent = res.imported ? `Imported ${res.imported} new ${res.imported === 1 ? 'activity' : 'activities'}.${res.ai_note ? ' ' + res.ai_note : ''}` : 'Up to date.';
+  const p = people.find(x=>x.id===activePersonId); if(p) renderIcu(p);
+}
+
+const ASK_SUGGESTIONS = ['How was my week?', 'What should I run tomorrow?', 'Give me a workout for my next race', 'Am I running my easy days too hard?'];
+async function renderAsk(){
+  const card = $('askCard');
+  if(!isRealPerson()){ card.style.display = 'none'; return; }
+  const st = icuState[activePersonId] || await fetchIcuStatus(activePersonId);
+  card.style.display = st?.ai ? '' : 'none';
+  if(!$('askSuggest').children.length){
+    $('askSuggest').innerHTML = ASK_SUGGESTIONS.map(q=>`<button type="button" class="chip" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('');
+    $('askSuggest').querySelectorAll('[data-q]').forEach(b=> b.addEventListener('click', ()=>{ $('askInput').value = b.dataset.q; askCoachNow(); }));
+  }
+}
+
+async function askCoachNow(){
+  const q = $('askInput').value.trim();
+  if(!q || !isRealPerson()) return;
+  $('askBtn').disabled = true; $('askStatus').textContent = 'Thinking…';
+  const res = await apiPost('/api/coach/ask', { personId: activePersonId, question: q });
+  $('askBtn').disabled = false; $('askStatus').textContent = '';
+  const out = $('askAnswer'); out.style.display = '';
+  out.textContent = res?.answer || res?.error || 'Couldn’t reach Hawks. Check your connection.';
 }
 
 const PR_EVENTS = ['400','800','1600','3200','5K','XC 5K'];
@@ -3377,6 +3494,13 @@ const COACH_SOURCES = {
     detail: 'name, sport, local start date, distance, moving and elapsed time, average and max heart rate, cadence, elevation gain, and laps/splits.',
     extra: '',
   },
+  intervals: {
+    label: 'Hawks Watch sync',
+    connect: '<b>Turn on Watch sync</b> (the card above). Your Garmin or COROS runs then land in Hawks on their own, so Claude only needs the Hawks Coach connector.',
+    pull: 'My runs already sync into Hawks from my watch (Watch sync via intervals.icu), so do not use another connector. Take the new activities from recent_workouts in get_coach_context',
+    detail: 'everything is already there (distance, times, HR, cadence, and splits on the training log). Review any run whose summary is empty or whose category looks wrong, and re-send it with log_workouts using source "intervals" and activity_id = its strava_id without the "intervals:" prefix.',
+    extra: '',
+  },
   strava: {
     label: 'Strava',
     connect: '<b>Connect Strava in Claude.</b> Claude → Settings → Connectors, find <b>Strava</b> and connect it. Strava\'s connector needs a Strava subscription.',
@@ -3396,7 +3520,7 @@ STEP 1 - CONTEXT. Call the Hawks Coach tool get_coach_context. It tells you toda
 
 STEP 1b - PRs AND GOALS (first run, or whenever prs comes back empty). Before anything else, ask me in one message: my PRs for ${PR_LIST} (time, and roughly when/where if I remember), which race I'm training for next, and my goal time for it. Wait for my answer. Save the PRs with set_prs (skip events I've never run). If five_k_time is empty, set it with set_5k_time from my best recent 5K or XC 5K; if I have no 5K, estimate it (3200 time x 1.65, or 1600 time x 3.5) and tell me it's an estimate. Mention I can update PRs any time on the Hawks Personal tab or by telling you a new PR.
 
-STEP 2 - PULL RUNS. ${src.pull} from the last 14 days (the first time) or since the newest logged run (after that). Skip any activity whose id is already in already_logged.${key}. For each new one, get: ${src.detail}
+${key === 'intervals' ? `STEP 2 - REVIEW RUNS. ${src.pull} (last 14 days the first time, otherwise since your last review); ${src.detail}` : `STEP 2 - PULL RUNS. ${src.pull} from the last 14 days (the first time) or since the newest logged run (after that). Skip any activity whose id is already in already_logged.${key}. For each new one, get: ${src.detail}`}
 
 STEP 3 - CLASSIFY. For each activity pick exactly one category from the rubric: easy, recovery, long, workout, race, shakeout or crosstrain. Use the laps and pace changes to spot workouts; use HR as a share of max HR to tell easy from hard. Compare with the planned type for that date.
 
@@ -3404,7 +3528,7 @@ STEP 4 - CONVERT. distance_mi = meters / 1609.34 (2 decimals). elev_gain_ft = me
 
 STEP 5 - NOTE. Write a 1-3 sentence coaching note per activity as the rubric describes.
 
-STEP 6 - SAVE. Call log_workouts once with all the new activities, each with source "${key}" and its activity_id. Hawks calculates effort, load, plan match and the letter grade.
+STEP 6 - SAVE. Call log_workouts once with ${key === 'intervals' ? 'only the runs you re-labelled or wrote notes for' : 'all the new activities'}, each with source "${key}" and its activity_id. Hawks calculates effort, load, plan match and the letter grade.
 
 STEP 6b - LOG THE DAYS. For each date from step 2, and any planned run day with no activity, call log_day: status vs plan, difficulty 1-10, types, planned, summary, splits for reps, coach_note and load_note, as the rubric describes. If a run was a library workout, set library_id and call get_workout_history to compare with last time.
 
@@ -4032,6 +4156,22 @@ function wireUI(){
   });
 
   $('savePrsBtn').addEventListener('click', savePrs);
+  $('icuConnectBtn').addEventListener('click', async ()=>{
+    const res = await icuAction('/api/intervals/connect', { athleteId: $('icuAthlete').value.trim(), apiKey: $('icuKey').value.trim() }, 'icuMsg', 'icuConnectBtn');
+    if(!res) return;
+    $('icuKey').value = '';
+    const p = people.find(x=>x.id===activePersonId); if(p) await renderIcu(p);
+    icuSync(60);
+  });
+  $('icuSyncBtn').addEventListener('click', ()=> icuSync());
+  $('icuBackfillBtn').addEventListener('click', ()=> icuSync(60));
+  $('icuDisconnectBtn').addEventListener('click', async ()=>{
+    if(!confirm('Disconnect intervals.icu? Runs already imported stay in your log.')) return;
+    await icuAction('/api/intervals/disconnect', {}, 'icuSyncMsg', 'icuDisconnectBtn');
+    const p = people.find(x=>x.id===activePersonId); if(p) renderIcu(p);
+  });
+  $('askBtn').addEventListener('click', askCoachNow);
+  $('askInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); askCoachNow(); } });
   $('coachSource').querySelectorAll('[data-src]').forEach(b=> b.addEventListener('click', ()=>{
     coachSource = b.dataset.src;
     try{ localStorage.setItem('hawksCoachSource', coachSource); }catch(e){}
@@ -4305,6 +4445,7 @@ async function renderTraining(){
   if(trainingView === 'log') return renderTrainingLog();
   if(trainingView === 'library') return renderLibrary();
   renderCoachRuns();
+  renderAsk();
   const own = isRealPerson();
   const grade = TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman';
   const key = own ? 'p:' + activePersonId : 'g:' + grade;

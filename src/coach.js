@@ -14,7 +14,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 export const CATEGORIES = ['easy', 'recovery', 'long', 'workout', 'race', 'shakeout', 'crosstrain'];
 const HARD = new Set(['workout', 'race']);
 const DEFAULT_MAX_HR = 200;
-export const SOURCES = ['coros', 'strava', 'garmin'];
+export const SOURCES = ['coros', 'strava', 'garmin', 'intervals'];
 
 // Shown to Claude in get_coach_context so it labels runs the same way the
 // scoring below expects.
@@ -263,10 +263,38 @@ export async function getCoachContext(db, person) {
   };
 }
 
+// The same run can arrive twice: once from the intervals.icu sync and once
+// from the runner's own Claude reading COROS or Strava. If a run from another
+// source matches on date, distance (3%) and moving time (3%), reuse its row so
+// the newer write (usually Claude's, with a better note) updates it in place.
+async function mergeDuplicates(db, personId, clean) {
+  const dates = [...new Set(clean.map((w) => w.date))];
+  if (!dates.length) return;
+  const rows = (await db.prepare(
+    `SELECT strava_id, date, distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft FROM workouts WHERE person_id = ? AND date IN (${dates.map(() => '?').join(',')})`
+  ).bind(personId, ...dates).all()).results;
+  const close = (a, b) => a && b && Math.abs(a - b) / Math.max(a, b) <= 0.03;
+  for (const w of clean) {
+    if (rows.some((r) => r.strava_id === w.strava_id)) continue;
+    const twin = rows.find((r) => r.date === w.date && close(r.distance_mi, w.distance_mi) && close(r.moving_sec, w.moving_sec)
+      && !clean.some((o) => o !== w && o.strava_id === r.strava_id));
+    if (twin) w.strava_id = twin.strava_id;
+  }
+  // Score with the best numbers we have: fill gaps from the stored row.
+  for (const w of clean) {
+    const row = rows.find((r) => r.strava_id === w.strava_id);
+    if (!row) continue;
+    for (const k of ['distance_mi', 'moving_sec', 'elapsed_sec', 'avg_hr', 'max_hr', 'avg_cadence', 'elev_gain_ft']) {
+      if (w[k] === null || w[k] === undefined) w[k] = row[k];
+    }
+  }
+}
+
 export async function logWorkouts(db, person, list) {
   if (!Array.isArray(list) || !list.length) throw new CoachError('workouts must be a non-empty array');
   if (list.length > 60) throw new CoachError('Send at most 60 workouts per call');
   const clean = list.map(cleanWorkout);
+  await mergeDuplicates(db, person.id, clean);
 
   // Max HR can come from this batch too, so a first sync is scored sensibly.
   const batchMax = Math.max(0, ...clean.map((w) => w.max_hr || 0));
@@ -290,11 +318,14 @@ export async function logWorkouts(db, person, list) {
          avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(person_id, strava_id) DO UPDATE SET
-         date=excluded.date, name=excluded.name, sport=excluded.sport, category=excluded.category,
-         distance_mi=excluded.distance_mi, moving_sec=excluded.moving_sec, elapsed_sec=excluded.elapsed_sec,
-         avg_hr=excluded.avg_hr, max_hr=excluded.max_hr, avg_cadence=excluded.avg_cadence, elev_gain_ft=excluded.elev_gain_ft,
+         date=excluded.date, name=COALESCE(NULLIF(excluded.name, ''), name), sport=excluded.sport, category=excluded.category,
+         distance_mi=COALESCE(excluded.distance_mi, distance_mi), moving_sec=COALESCE(excluded.moving_sec, moving_sec),
+         elapsed_sec=COALESCE(excluded.elapsed_sec, elapsed_sec),
+         avg_hr=COALESCE(excluded.avg_hr, avg_hr), max_hr=COALESCE(excluded.max_hr, max_hr),
+         avg_cadence=COALESCE(excluded.avg_cadence, avg_cadence), elev_gain_ft=COALESCE(excluded.elev_gain_ft, elev_gain_ft),
          planned_type=excluded.planned_type, planned_miles=excluded.planned_miles, effort=excluded.effort,
-         plan_score=excluded.plan_score, load=excluded.load, rating=excluded.rating, summary=excluded.summary, library_id=excluded.library_id,
+         plan_score=excluded.plan_score, load=excluded.load, rating=excluded.rating,
+         summary=COALESCE(NULLIF(excluded.summary, ''), summary), library_id=COALESCE(NULLIF(excluded.library_id, ''), library_id),
          updated_at=excluded.updated_at`
     ).bind(
       'w_' + crypto.randomUUID(), person.id, w.strava_id, w.date, w.name, w.sport, w.category, w.distance_mi,

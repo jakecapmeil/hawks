@@ -13,6 +13,11 @@
       "migrations_dir": "./migrations"
     }
   ],
+  // Only the intervals.icu sync is scheduled. The meet-day email job has its
+  // own cron in src/index.js that is deliberately NOT listed here.
+  "triggers": {
+    "crons": ["17 * * * *"]
+  },
   "observability": {
     "enabled": true
   }
