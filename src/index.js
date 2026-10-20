@@ -1,5 +1,5 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
-import { logTools, callLogTool, LogError, getLog, saveDay, libraryMeta, setFiveK, fiveKFor } from './log.js';
+import { logTools, callLogTool, LogError, getLog, saveDay, libraryMeta, setFiveK, fiveKFor, setPrs, getPrs } from './log.js';
 import { WORKOUTS, pacesFrom5k } from './workouts.js';
 import { todayInTz } from './coach.js';
 import { COACH_TOOLS, callCoachTool, personForToken, workoutsForApp, issueCoachToken, teamTraining } from './coach.js';
@@ -28,7 +28,7 @@ async function getState(db) {
     db.prepare(
       `SELECT id, name, color, phone, email, default_status, health_status, training_status,
               first_name, class_year, track_id, date_entered, borough, home_address,
-              out_mon, out_tue, out_wed, out_thu, out_fri, personal_notes
+              out_mon, out_tue, out_wed, out_thu, out_fri, personal_notes, prs
        FROM people`
     ).all(),
     db.prepare('SELECT person_id, date, status FROM availability_overrides').all(),
@@ -1475,7 +1475,7 @@ export default {
 
       if (pathname === '/api/library' && request.method === 'GET') {
         const fiveK = await fiveKFor(env.DB, str(reqUrl.searchParams.get('personId'), 100));
-        return json({ ...libraryMeta(), workouts: WORKOUTS, five_k_time: fiveK, paces: pacesFrom5k(fiveK) });
+        return json({ ...libraryMeta(), workouts: WORKOUTS, five_k_time: fiveK, paces: pacesFrom5k(fiveK), prs: await getPrs(env.DB, str(reqUrl.searchParams.get('personId'), 100)) });
       }
 
       if (pathname === '/api/workouts' && request.method === 'GET') {
@@ -1517,8 +1517,9 @@ export default {
         if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
         if (pathname === '/api/people/personal') return await upsertPersonal(env.DB, body, env, ctx);
         if (pathname === '/api/travel-estimate') return await upsertTravelEstimate(env.DB, body);
-        if (pathname === '/api/log/day' || pathname === '/api/people/5k') {
+        if (pathname === '/api/log/day' || pathname === '/api/people/5k' || pathname === '/api/people/prs') {
           try {
+            if (pathname === '/api/people/prs') return json(await setPrs(env.DB, str(body.personId, 100), body.prs));
             if (pathname === '/api/people/5k') return json(await setFiveK(env.DB, str(body.personId, 100), body.time));
             return json(await saveDay(env.DB, str(body.personId, 100), str(body.date, 10), body.fields || {}));
           } catch (err) {

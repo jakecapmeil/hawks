@@ -6,6 +6,7 @@ import { WORKOUTS, WORKOUT_TYPES, RACES, PHASES, PACE_ZONES, pacesFrom5k, findWo
 export class LogError extends Error {}
 
 export const DAY_TYPES = ['easy', 'recovery', 'long', 'tempo', 'threshold', 'intervals', 'track', 'fartlek', 'hills', 'strides', 'race', 'shakeout', 'crosstrain', 'strength', 'rest'];
+export const PR_EVENTS = ['400', '800', '1600', '3200', '5K', 'XC 5K'];
 export const DAY_STATUSES = ['as_planned', 'harder', 'easier', 'missed', 'adjusted', 'rest'];
 
 // Strava workout category -> day type.
@@ -180,6 +181,40 @@ export async function setFiveK(db, personId, time) {
   return { five_k_time: t, paces: pacesFrom5k(t) };
 }
 
+const PR_TIME = /^(\d{1,2}:)?\d{1,2}(\.\d{1,2})?$|^\d{1,2}:\d{2}(\.\d{1,2})?$/;
+
+export function parsePrs(raw) {
+  try {
+    const o = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw;
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function getPrs(db, personId) {
+  const row = await db.prepare('SELECT prs FROM people WHERE id = ?').bind(personId).first();
+  return parsePrs(row?.prs);
+}
+
+// Merges: pass an event with a null/empty time to clear it.
+export async function setPrs(db, personId, prs) {
+  if (!prs || typeof prs !== 'object' || Array.isArray(prs)) throw new LogError(`prs must be an object keyed by event: ${PR_EVENTS.join(', ')}`);
+  const current = await getPrs(db, personId);
+  for (const [event, v] of Object.entries(prs)) {
+    if (!PR_EVENTS.includes(event)) throw new LogError(`Unknown event "${event}". Use: ${PR_EVENTS.join(', ')}`);
+    const time = clip(typeof v === 'string' ? v : v?.time, 10);
+    if (!time) { delete current[event]; continue; }
+    if (!PR_TIME.test(time)) throw new LogError(`${event}: time must look like 58.4, 2:15 or 19:38`);
+    const date = clip(v?.date, 10);
+    if (date && !isDate(date)) throw new LogError(`${event}: date must be YYYY-MM-DD`);
+    current[event] = { time, ...(date ? { date } : {}), ...(v?.meet ? { meet: clip(v.meet, 100) } : {}) };
+  }
+  const res = await db.prepare('UPDATE people SET prs = ? WHERE id = ?').bind(JSON.stringify(current), personId).run();
+  if (!res.meta.changes) throw new LogError('Unknown person');
+  return { prs: current };
+}
+
 export function libraryMeta() {
   return { types: WORKOUT_TYPES, races: RACES, phases: PHASES, pace_zones: PACE_ZONES.map((z) => z.label), day_types: DAY_TYPES, statuses: DAY_STATUSES };
 }
@@ -262,6 +297,22 @@ export function logTools(withPerson) {
       inputSchema: { type: 'object', required: [...req, 'id'], properties: { ...person, id: { type: 'string' } }, additionalProperties: false },
     },
     {
+      name: 'set_prs',
+      description: `Save the runner's personal records (merged into what's there; an empty time clears one). Events: ${PR_EVENTS.join(', ')}. Ask for PRs during setup if they're missing.`,
+      inputSchema: {
+        type: 'object', required: [...req, 'prs'],
+        properties: {
+          ...person,
+          prs: {
+            type: 'object',
+            description: 'Keyed by event, e.g. {"1600": {"time": "5:12", "date": "2026-05-07", "meet": "PSAL Champs"}}',
+            additionalProperties: { type: 'object', properties: { time: { type: 'string' }, date: { type: 'string' }, meet: { type: 'string' } }, required: ['time'] },
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
       name: 'set_5k_time',
       description: "Set the runner's current 5K fitness (race or equivalent, mm:ss). Returns their pace for every training zone. Update it after a race or time trial.",
       inputSchema: { type: 'object', required: [...req, 'time'], properties: { ...person, time: { type: 'string', description: 'e.g. 19:25' } }, additionalProperties: false },
@@ -284,6 +335,7 @@ export async function callLogTool(db, personId, name, a, today) {
     case 'get_workout': return await getLibraryWorkout(db, personId, a.id);
     case 'get_workout_history': return await workoutHistory(db, personId, a.id);
     case 'set_5k_time': return await setFiveK(db, personId, a.time);
+    case 'set_prs': return await setPrs(db, personId, a.prs);
     default: return undefined;
   }
 }

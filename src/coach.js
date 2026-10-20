@@ -4,7 +4,7 @@
 // note; the numbers (effort, load, plan match, grade) are worked out here so
 // every run is scored the same way no matter whose Claude sent it.
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
-import { logTools, callLogTool, LogError, getDays, fiveKFor } from './log.js';
+import { logTools, callLogTool, LogError, getDays, fiveKFor, getPrs, PR_EVENTS } from './log.js';
 import { pacesFrom5k } from './workouts.js';
 
 export class CoachError extends Error {}
@@ -224,6 +224,7 @@ export async function personForToken(db, token) {
 
 export async function getCoachContext(db, person) {
   const today = todayInTz();
+  const prsNow = await getPrs(db, person.id);
   const logged = await db.prepare(
     'SELECT strava_id FROM workouts WHERE person_id = ? AND date >= ?'
   ).bind(person.id, addDays(today, -30)).all();
@@ -236,6 +237,8 @@ export async function getCoachContext(db, person) {
     this_week: await weekSummary(db, person, today),
     recent_workouts: await listWorkouts(db, person.id, addDays(today, -14), today),
     already_logged_strava_ids: logged.results.map((x) => x.strava_id),
+    prs: await getPrs(db, person.id),
+    missing_prs: PR_EVENTS.filter((e) => !(e in prsNow)),
     five_k_time: (await fiveKFor(db, person.id)) || null,
     paces: pacesFrom5k(await fiveKFor(db, person.id)),
     training_log_last_14_days: await getDays(db, person.id, addDays(today, -13), today),
