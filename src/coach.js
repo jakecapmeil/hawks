@@ -4,6 +4,8 @@
 // note; the numbers (effort, load, plan match, grade) are worked out here so
 // every run is scored the same way no matter whose Claude sent it.
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
+import { logTools, callLogTool, LogError, getDays, fiveKFor } from './log.js';
+import { pacesFrom5k } from './workouts.js';
 
 export class CoachError extends Error {}
 
@@ -36,7 +38,11 @@ PLAN MATCH (0-100) compares the run to that day's plan:
 - Easy-day guard: an easy, recovery or long run at effort 6+ loses 15 more (easy days should be easy).
 GRADE: A 90+, B 80+, C 70+, D 60+, F below 60. Runs on days with no plan get no grade.
 
-YOUR NOTE (summary, 1-3 sentences): what the session was, how it compared to the plan, and one useful coaching point (pacing, HR drift, cadence under ~165 spm, too fast on an easy day, a strong workout). Be honest but encouraging, like a good high school XC coach.`;
+YOUR NOTE (summary, 1-3 sentences): what the session was, how it compared to the plan, and one useful coaching point (pacing, HR drift, cadence under ~165 spm, too fast on an easy day, a strong workout). Be honest but encouraging, like a good high school XC coach.
+
+DAILY LOG (log_day) — after logging runs, write one log_day per date like a coach's log: status (as_planned, harder, easier, missed, adjusted, rest), difficulty 1-10 for the whole day, types, planned (the plan's session), summary (dose and pace vs prescription, HR drift, conditions), splits for reps, coach_note (what you'd change for the next days and why), load_note (rolling read on the last 7-10 days). A planned run day with no activity is "missed".
+
+WORKOUT LIBRARY — when suggesting or adjusting a workout, pick it with find_workouts (filter by the race they're training for, phase, level and time available) and give paces from get_workout. Set library_id on the run and the day so get_workout_history can compare it next time. Judge improvement by comparing the same workout over time, not single runs.`;
 
 const r = (n) => (n === null || n === undefined || Number.isNaN(n) ? null : Math.round(n));
 
@@ -157,6 +163,7 @@ function cleanWorkout(raw) {
     avg_cadence: r(num(raw.avg_cadence, { max: 260 })),
     elev_gain_ft: r(num(raw.elev_gain_ft, { max: 50000 })),
     summary: clip(raw.summary, 1000),
+    library_id: clip(raw.library_id, 60),
   };
 }
 
@@ -229,6 +236,9 @@ export async function getCoachContext(db, person) {
     this_week: await weekSummary(db, person, today),
     recent_workouts: await listWorkouts(db, person.id, addDays(today, -14), today),
     already_logged_strava_ids: logged.results.map((x) => x.strava_id),
+    five_k_time: (await fiveKFor(db, person.id)) || null,
+    paces: pacesFrom5k(await fiveKFor(db, person.id)),
+    training_log_last_14_days: await getDays(db, person.id, addDays(today, -13), today),
     rubric: COACH_RUBRIC,
   };
 }
@@ -257,19 +267,19 @@ export async function logWorkouts(db, person, list) {
     results.push({ strava_id: w.strava_id, date: w.date, category: w.category, planned: planned ? `${planned.type} ${planned.detail}` : null, effort, load, plan_score, rating });
     return db.prepare(
       `INSERT INTO workouts (id, person_id, strava_id, date, name, sport, category, distance_mi, moving_sec, elapsed_sec,
-         avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(person_id, strava_id) DO UPDATE SET
          date=excluded.date, name=excluded.name, sport=excluded.sport, category=excluded.category,
          distance_mi=excluded.distance_mi, moving_sec=excluded.moving_sec, elapsed_sec=excluded.elapsed_sec,
          avg_hr=excluded.avg_hr, max_hr=excluded.max_hr, avg_cadence=excluded.avg_cadence, elev_gain_ft=excluded.elev_gain_ft,
          planned_type=excluded.planned_type, planned_miles=excluded.planned_miles, effort=excluded.effort,
-         plan_score=excluded.plan_score, load=excluded.load, rating=excluded.rating, summary=excluded.summary,
+         plan_score=excluded.plan_score, load=excluded.load, rating=excluded.rating, summary=excluded.summary, library_id=excluded.library_id,
          updated_at=excluded.updated_at`
     ).bind(
       'w_' + crypto.randomUUID(), person.id, w.strava_id, w.date, w.name, w.sport, w.category, w.distance_mi,
       w.moving_sec, w.elapsed_sec, w.avg_hr, w.max_hr, w.avg_cadence, w.elev_gain_ft,
-      planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, now, now
+      planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, w.library_id, now, now
     );
   });
   await db.batch(stmts);
@@ -357,6 +367,7 @@ export const COACH_TOOLS = [
               avg_cadence: { type: 'integer', description: 'Steps per minute. Strava reports one foot for runs, so double it (e.g. 84 -> 168).' },
               elev_gain_ft: { type: 'integer', description: 'Feet (Strava meters x 3.281)' },
               summary: { type: 'string', description: '1-3 sentence coaching note, per the rubric' },
+              library_id: { type: 'string', description: 'Workout library id if this run was a library workout (see find_workouts)' },
             },
             additionalProperties: false,
           },
@@ -379,7 +390,15 @@ export const COACH_TOOLS = [
   },
 ];
 
+COACH_TOOLS.push(...logTools(false));
+
 export async function callCoachTool(db, person, name, args) {
+  try {
+    const out = await callLogTool(db, person.id, name, args || {}, todayInTz());
+    if (out !== undefined) return out;
+  } catch (err) {
+    throw err instanceof LogError ? new CoachError(err.message) : err;
+  }
   switch (name) {
     case 'get_coach_context': return await getCoachContext(db, person);
     case 'log_workouts': return await logWorkouts(db, person, args?.workouts);

@@ -461,6 +461,45 @@
   .tp-dmiles{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-footnote);font-variant-numeric:tabular-nums;white-space:nowrap;}
   .tp-dsub{grid-column:2 / 4;font-family:var(--font-ui);font-size:var(--fs-caption);color:var(--ink-soft);line-height:1.35;}
   .tp-day.hard .tp-dsub{color:var(--gold-ink);}
+  .tl-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+  .tl-head button{height:var(--btn-h-sm);padding:0 12px;}
+  .tl-month{font-family:var(--font-ui);font-weight:700;font-size:var(--fs-callout);}
+  .tl-grid{display:grid;grid-template-columns:repeat(7,1fr) 1.1fr;gap:3px;}
+  .tl-dow{font-family:var(--font-ui);font-size:var(--fs-caption2);color:var(--ink-soft);text-align:center;font-weight:600;}
+  .tl-cell{min-height:52px;border:1px solid var(--line);border-radius:8px;padding:3px;font-family:var(--font-ui);cursor:pointer;background:var(--card);display:flex;flex-direction:column;gap:1px;min-width:0;text-align:left;color:var(--ink);}
+  .tl-cell.out{opacity:.35;}
+  .tl-cell.sel{outline:2px solid var(--gold);}
+  .tl-cell.today .tl-num{color:var(--gold);}
+  .tl-num{font-size:10px;font-weight:700;color:var(--ink-soft);}
+  .tl-mi{font-size:var(--fs-footnote);font-weight:700;font-variant-numeric:tabular-nums;}
+  .tl-tag{font-size:9px;line-height:1.1;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tl-cell[data-d="1"],.tl-cell[data-d="2"],.tl-cell[data-d="3"]{background:color-mix(in srgb, #22c55e 14%, var(--card));}
+  .tl-cell[data-d="4"],.tl-cell[data-d="5"]{background:color-mix(in srgb, #eab308 16%, var(--card));}
+  .tl-cell[data-d="6"],.tl-cell[data-d="7"]{background:color-mix(in srgb, var(--sore) 20%, var(--card));}
+  .tl-cell[data-d="8"],.tl-cell[data-d="9"],.tl-cell[data-d="10"]{background:color-mix(in srgb, var(--pain) 22%, var(--card));}
+  .tl-cell.st-missed{border-style:dashed;}
+  .tl-week{font-family:var(--font-ui);font-size:var(--fs-caption);font-weight:700;display:flex;flex-direction:column;justify-content:center;align-items:center;background:var(--gold-bg);border-radius:8px;color:var(--gold-ink);}
+  .tl-week small{font-size:9px;font-weight:500;}
+  .tl-legend{display:flex;gap:10px;flex-wrap:wrap;font-family:var(--font-ui);font-size:var(--fs-caption2);color:var(--ink-soft);margin-top:8px;}
+  .tl-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:3px;vertical-align:-1px;}
+  .tl-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+  .tl-form .full{grid-column:1 / 3;}
+  .tl-form label{font-family:var(--font-ui);font-size:var(--fs-caption);color:var(--ink-soft);display:flex;flex-direction:column;gap:3px;}
+  .tl-types{display:flex;flex-wrap:wrap;gap:5px;}
+  .tl-type{font-family:var(--font-ui);font-size:var(--fs-caption);padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;}
+  .tl-type.on{background:var(--gold);border-color:var(--gold);color:#fff;}
+  .tl-strava{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:6px;}
+  .lib-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;}
+  .lib-item{border-top:1px solid var(--line);padding:10px 0;font-family:var(--font-ui);}
+  .lib-item summary{cursor:pointer;list-style:none;}
+  .lib-item summary::-webkit-details-marker{display:none;}
+  .lib-name{font-weight:700;font-size:var(--fs-subhead);}
+  .lib-meta{font-size:var(--fs-caption);color:var(--ink-soft);margin-top:2px;}
+  .lib-body{font-size:var(--fs-footnote);margin-top:8px;display:flex;flex-direction:column;gap:5px;}
+  .lib-body b{color:var(--ink);}
+  .lib-paces{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-top:6px;}
+  .lib-pace{background:var(--gold-bg);border-radius:8px;padding:6px 8px;font-family:var(--font-ui);font-size:var(--fs-caption);}
+  .lib-pace b{display:block;font-size:var(--fs-footnote);}
   .coach-steps{margin:8px 0 0;padding-left:20px;font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);display:flex;flex-direction:column;gap:6px;}
   .coach-steps b{color:var(--ink);}
   .coach-prompt{width:100%;min-height:140px;font-family:ui-monospace,Menlo,monospace;font-size:12px;}
@@ -1330,6 +1369,75 @@
   </div>
 
   <div id="pageTraining" style="display:none;">
+    <div class="tp-weeks" id="tpViews" role="tablist" aria-label="Training view" style="margin-top:0;">
+      <button type="button" class="tp-week active" data-tview="plan">Plan</button>
+      <button type="button" class="tp-week" data-tview="log">Log</button>
+      <button type="button" class="tp-week" data-tview="library">Workouts</button>
+    </div>
+    <div id="tpLogView" style="display:none;">
+      <div class="card">
+        <div class="tl-head">
+          <button class="ghost" id="tlPrev" type="button" aria-label="Previous month">‹</button>
+          <div class="tl-month" id="tlMonth"></div>
+          <button class="ghost" id="tlNext" type="button" aria-label="Next month">›</button>
+        </div>
+        <div class="hint" id="tlHint"></div>
+        <div class="tl-grid" id="tlGrid"></div>
+        <div class="tl-legend">
+          <span><i style="background:color-mix(in srgb,#22c55e 40%,transparent)"></i>Easy 1-3</span>
+          <span><i style="background:color-mix(in srgb,#eab308 45%,transparent)"></i>Moderate 4-5</span>
+          <span><i style="background:color-mix(in srgb,var(--sore) 50%,transparent)"></i>Hard 6-7</span>
+          <span><i style="background:color-mix(in srgb,var(--pain) 50%,transparent)"></i>Very hard 8-10</span>
+        </div>
+      </div>
+      <div class="card" id="tlDayCard" style="display:none;">
+        <div class="card-title" id="tlDayTitle"></div>
+        <div class="tl-strava" id="tlStrava"></div>
+        <div class="tl-form">
+          <label>Miles<input type="number" step="0.01" min="0" id="tlMiles"></label>
+          <label>Minutes<input type="number" step="1" min="0" id="tlMinutes"></label>
+          <label>Runs<input type="number" step="1" min="0" max="10" id="tlRuns"></label>
+          <label>Difficulty (1-10)<input type="number" step="1" min="1" max="10" id="tlDifficulty"></label>
+          <label class="full">Type<div class="tl-types" id="tlTypes"></div></label>
+          <label>Status<select id="tlStatus">
+            <option value="">–</option><option value="as_planned">As planned</option><option value="harder">Harder than planned</option>
+            <option value="easier">Easier than planned</option><option value="adjusted">Adjusted</option><option value="missed">Missed</option><option value="rest">Rest day</option>
+          </select></label>
+          <label>Library workout<select id="tlLibrary"><option value="">–</option></select></label>
+          <label class="full">Planned<input type="text" id="tlPlanned" maxlength="500" placeholder="What the plan said"></label>
+          <label class="full">Splits<input type="text" id="tlSplits" maxlength="500" placeholder="e.g. 6:47, 6:33, 6:24, 5:57"></label>
+          <label class="full">What happened<textarea id="tlSummary" rows="3" maxlength="4000"></textarea></label>
+          <label class="full">Coach note<textarea id="tlCoach" rows="2" maxlength="4000" placeholder="Claude fills this in"></textarea></label>
+          <label>Feel (1-5)<input type="number" min="1" max="5" step="1" id="tlFeel"></label>
+          <label>Sleep (hrs)<input type="number" min="0" max="24" step="0.5" id="tlSleep"></label>
+          <label class="full" style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" id="tlStrength"> Strength / core</label>
+          <label class="full">Notes<textarea id="tlNotes" rows="2" maxlength="2000"></textarea></label>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+          <button id="tlSave" type="button">Save day</button>
+          <span class="hint" id="tlSaved" style="display:none;">Saved.</span>
+        </div>
+      </div>
+    </div>
+    <div id="tpLibraryView" style="display:none;">
+      <div class="card">
+        <div class="card-title">Workout library</div>
+        <div class="hint" id="libHint">Built from the Hawks plans, past training logs and standard distance training. Paces are from your 5K time.</div>
+        <div class="copy-row" style="margin-top:8px;" id="libFiveKRow">
+          <input type="text" id="libFiveK" placeholder="Your 5K time, e.g. 19:25" maxlength="8" style="flex:1;">
+          <button id="libFiveKBtn" type="button">Set</button>
+        </div>
+        <div class="lib-paces" id="libPaces"></div>
+        <div class="lib-filters">
+          <select id="libType"><option value="">All types</option></select>
+          <select id="libRace"><option value="">Any race</option></select>
+          <select id="libPhase"><option value="">Any phase</option></select>
+          <select id="libLen"><option value="">Any length</option><option value="35">Up to 35 min</option><option value="50">Up to 50 min</option><option value="65">Up to 65 min</option><option value="999">Over 65 min</option></select>
+        </div>
+        <div id="libList"></div>
+      </div>
+    </div>
+    <div id="tpPlanView">
     <div class="card">
       <div class="card-title" id="tpTitle">Training plan</div>
       <div class="hint" id="tpHint"></div>
@@ -1347,6 +1455,7 @@
     <div class="card">
       <div class="card-title">Workout menu</div>
       <div id="tpRef"></div>
+    </div>
     </div>
   </div>
 
@@ -2977,7 +3086,9 @@ STEP 5 - NOTE. Write a 1-3 sentence coaching note per activity as the rubric des
 
 STEP 6 - SAVE. Call log_workouts once with all the new activities. Hawks calculates effort, load, plan match and the letter grade.
 
-STEP 7 - REPORT. Reply to me with a short coach's report: a table of each new run (date, category, miles, pace, avg HR, grade), this week's miles vs plan and average plan score from the response, what's coming up next on my plan, and one or two specific things to focus on. If nothing new was found, say so and preview the next planned day.
+STEP 6b - LOG THE DAYS. For each date from step 2, and any planned run day with no activity, call log_day: status vs plan, difficulty 1-10, types, planned, summary, splits for reps, coach_note and load_note, as the rubric describes. If a run was a library workout, set library_id and call get_workout_history to compare with last time.
+
+STEP 7 - REPORT. Reply to me with a short coach's report: a table of each new run (date, category, miles, pace, avg HR, grade), this week's miles vs plan and average plan score from the response, what's coming up next on my plan (with my paces from get_workout if it's a workout), and one or two specific things to focus on. When I ask for a workout, use find_workouts filtered by my race, the season phase and the time I have. If nothing new was found, say so and preview the next planned day.
 
 RULES: Only ever log my own Strava activities. Never invent or estimate data. If a connector is missing or fails, stop and tell me which one so I can fix it in Settings > Connectors. Keep the tone of a supportive high school XC coach.
 
@@ -3572,6 +3683,17 @@ function wireUI(){
     setTimeout(()=>{ btn.textContent = orig; }, 1200);
   });
 
+  $('tpViews').querySelectorAll('[data-tview]').forEach(b=> b.addEventListener('click', ()=> setTrainingView(b.dataset.tview)));
+  $('tlPrev').addEventListener('click', ()=>{ tlMonthIdx--; if(tlMonthIdx < 0){ tlMonthIdx = 11; tlYear--; } tlSelected = null; renderTrainingLog(); });
+  $('tlNext').addEventListener('click', ()=>{ tlMonthIdx++; if(tlMonthIdx > 11){ tlMonthIdx = 0; tlYear++; } tlSelected = null; renderTrainingLog(); });
+  $('tlSave').addEventListener('click', saveTrainingDay);
+  ['libType','libRace','libPhase','libLen'].forEach(id=> $(id).addEventListener('change', renderLibrary));
+  $('libFiveKBtn').addEventListener('click', async ()=>{
+    const res = await apiPost('/api/people/5k', { personId: activePersonId, time: $('libFiveK').value.trim() });
+    if(res && res.error){ alert(res.error); return; }
+    library = null; renderLibrary();
+  });
+
   $('coachUrlBtn').addEventListener('click', async ()=>{
     if(!$('coachUrl').value && !(await fetchCoachLink(false))) return;
     copyField('coachUrl', 'coachUrlBtn');
@@ -3618,7 +3740,178 @@ async function fetchPlan(key, query){
   return plan;
 }
 
+// --- Training views: Plan / Log / Workouts -----------------------------------
+let trainingView = 'plan';
+try{ trainingView = localStorage.getItem('hawksTrainingView') || 'plan'; }catch(e){}
+let tlYear = null, tlMonthIdx = null, tlSelected = null, tlDays = {};
+let library = null, libOpen = '';
+const TL_TYPES = ['easy','recovery','long','tempo','threshold','intervals','track','fartlek','hills','strides','race','shakeout','crosstrain','strength','rest'];
+const TL_STATUS = { as_planned:'As planned', harder:'Harder', easier:'Easier', adjusted:'Adjusted', missed:'Missed', rest:'Rest' };
+
+function setTrainingView(v){
+  trainingView = v;
+  try{ localStorage.setItem('hawksTrainingView', v); }catch(e){}
+  renderTraining();
+}
+
+function dateKeyOf(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+async function loadLibrary(){
+  if(library && library._for === (activePersonId||'')) return library;
+  try{
+    const res = await fetch('/api/library?personId=' + encodeURIComponent(isRealPerson() ? activePersonId : ''), { cache:'no-store' });
+    if(res.ok){ library = await res.json(); library._for = activePersonId || ''; }
+  }catch(e){}
+  return library;
+}
+
+async function renderTrainingLog(){
+  if(!isRealPerson()){
+    $('tlHint').textContent = 'Reload and pick your name to keep a training log.';
+    $('tlGrid').innerHTML = ''; $('tlDayCard').style.display = 'none'; $('tlMonth').textContent = '';
+    return;
+  }
+  if(tlYear === null){ const t = new Date(); tlYear = t.getFullYear(); tlMonthIdx = t.getMonth(); }
+  const first = new Date(tlYear, tlMonthIdx, 1);
+  const start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));
+  const last = new Date(tlYear, tlMonthIdx + 1, 0);
+  const end = new Date(last); end.setDate(last.getDate() + (6 - (last.getDay() + 6) % 7));
+  $('tlMonth').textContent = first.toLocaleDateString(undefined, { month:'long', year:'numeric' });
+  const personId = activePersonId;
+  let data = null;
+  try{
+    const res = await fetch(`/api/log?personId=${encodeURIComponent(personId)}&from=${dateKeyOf(start)}&to=${dateKeyOf(end)}`, { cache:'no-store' });
+    if(res.ok) data = await res.json();
+  }catch(e){}
+  if(currentPage !== 'training' || trainingView !== 'log' || personId !== activePersonId) return;
+  if(!data){ $('tlHint').textContent = 'Couldn’t load your log. Check your connection.'; return; }
+  tlDays = {}; data.days.forEach(d=>{ tlDays[d.date] = d; });
+  const monthMiles = data.days.filter(d=> d.date.slice(0,7) === dateKeyOf(first).slice(0,7)).reduce((a,d)=>a+(d.miles||0),0);
+  $('tlHint').textContent = `${Math.round(monthMiles*10)/10} miles this month. Tap a day to log it. Claude Coach fills days in from Strava.`;
+
+  const today = todayKey();
+  let html = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun','Week'].map(d=>`<div class="tl-dow">${d}</div>`).join('');
+  for(let d = new Date(start); d <= end; ){
+    let weekMiles = 0, weekRuns = 0;
+    for(let i=0;i<7;i++){
+      const key = dateKeyOf(d);
+      const day = tlDays[key];
+      const mi = day?.miles;
+      weekMiles += mi || 0; if(mi) weekRuns++;
+      const tag = day ? (day.status === 'missed' ? 'missed' : day.types.filter(t=>t!=='strides').slice(0,2).join(' · ')) : '';
+      const cls = ['tl-cell', d.getMonth() !== tlMonthIdx ? 'out' : '', key === today ? 'today' : '', key === tlSelected ? 'sel' : '', day?.status ? 'st-' + day.status : ''].filter(Boolean).join(' ');
+      html += `<button type="button" class="${cls}" data-date="${key}" ${day?.difficulty ? `data-d="${day.difficulty}"` : ''}>
+        <span class="tl-num">${d.getDate()}</span>
+        ${mi ? `<span class="tl-mi">${Math.round(mi*10)/10}</span>` : ''}
+        ${tag ? `<span class="tl-tag">${escapeHtml(tag)}</span>` : ''}
+        ${day?.runs > 1 ? `<span class="tl-tag">${day.runs} runs</span>` : ''}
+      </button>`;
+      d.setDate(d.getDate() + 1);
+    }
+    html += `<div class="tl-week">${Math.round(weekMiles*10)/10}<small>mi · ${weekRuns}d</small></div>`;
+  }
+  $('tlGrid').innerHTML = html;
+  $('tlGrid').querySelectorAll('[data-date]').forEach(b=> b.addEventListener('click', ()=>{ tlSelected = b.dataset.date; renderTrainingLog(); }));
+  renderTrainingDay();
+}
+
+async function renderTrainingDay(){
+  const card = $('tlDayCard');
+  if(!tlSelected){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  const day = tlDays[tlSelected] || { types: [], strava: [] };
+  const d = new Date(tlSelected + 'T12:00:00');
+  $('tlDayTitle').textContent = d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' }) + (day.status ? ` · ${TL_STATUS[day.status] || ''}` : '');
+  const fromStrava = day.strava && day.strava.length;
+  $('tlStrava').innerHTML = fromStrava
+    ? 'From Strava: ' + day.strava.map(r=>`${escapeHtml(r.name || r.category)} ${r.miles != null ? r.miles.toFixed(2) + ' mi' : ''}${r.rating ? ' (' + r.rating + ')' : ''}`).join(', ') + '. Miles and runs come from these.'
+    : '';
+  $('tlMiles').value = day.miles ?? ''; $('tlMiles').disabled = !!fromStrava;
+  $('tlMinutes').value = day.minutes ?? ''; $('tlMinutes').disabled = !!fromStrava;
+  $('tlRuns').value = day.runs ?? ''; $('tlRuns').disabled = !!fromStrava;
+  $('tlDifficulty').value = day.difficulty ?? '';
+  $('tlStatus').value = day.status || '';
+  $('tlPlanned').value = day.planned || '';
+  $('tlSplits').value = day.splits || '';
+  $('tlSummary').value = day.summary || '';
+  $('tlCoach').value = day.coach_note || '';
+  $('tlFeel').value = day.feel ?? '';
+  $('tlSleep').value = day.sleep_hours ?? '';
+  $('tlStrength').checked = !!day.strength;
+  $('tlNotes').value = day.notes || '';
+  $('tlSaved').style.display = 'none';
+  const types = new Set(day.types || []);
+  $('tlTypes').innerHTML = TL_TYPES.map(t=>`<button type="button" class="tl-type ${types.has(t)?'on':''}" data-type="${t}">${t}</button>`).join('');
+  $('tlTypes').querySelectorAll('[data-type]').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
+  const lib = await loadLibrary();
+  if(lib){
+    $('tlLibrary').innerHTML = '<option value="">–</option>' + lib.workouts.map(w=>`<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+    $('tlLibrary').value = day.library_id || '';
+  }
+}
+
+async function saveTrainingDay(){
+  if(!isRealPerson() || !tlSelected) return;
+  const num = (id)=>{ const v = $(id).value.trim(); return v === '' ? null : Number(v); };
+  const fields = {
+    difficulty: num('tlDifficulty'),
+    types: [...$('tlTypes').querySelectorAll('.tl-type.on')].map(b=>b.dataset.type),
+    status: $('tlStatus').value,
+    planned: $('tlPlanned').value,
+    library_id: $('tlLibrary').value,
+    splits: $('tlSplits').value,
+    summary: $('tlSummary').value,
+    coach_note: $('tlCoach').value,
+    feel: num('tlFeel'),
+    sleep_hours: num('tlSleep'),
+    strength: $('tlStrength').checked,
+    notes: $('tlNotes').value,
+  };
+  if(!$('tlMiles').disabled){ fields.manual_miles = num('tlMiles'); fields.minutes = num('tlMinutes'); fields.runs = num('tlRuns'); }
+  const res = await apiPost('/api/log/day', { personId: activePersonId, date: tlSelected, fields });
+  if(res && res.error){ alert(res.error); return; }
+  $('tlSaved').style.display = '';
+  setTimeout(()=>{ renderTrainingLog(); }, 400);
+}
+
+async function renderLibrary(){
+  const lib = await loadLibrary();
+  if(currentPage !== 'training' || trainingView !== 'library') return;
+  if(!lib){ $('libList').innerHTML = '<div class="hint">Couldn’t load the library.</div>'; return; }
+  $('libFiveKRow').style.display = isRealPerson() ? '' : 'none';
+  if(isRealPerson() && document.activeElement !== $('libFiveK')) $('libFiveK').value = lib.five_k_time || '';
+  $('libPaces').innerHTML = (lib.paces || []).map(p=>`<div class="lib-pace"><b>${p.per_mile}/mi</b>${escapeHtml(p.label)}${p.per_400 ? ` · ${p.per_400}/400` : ''}</div>`).join('');
+  const fill = (id, entries)=>{ const el = $(id); if(el.options.length <= 1) el.insertAdjacentHTML('beforeend', entries.map(([v,l])=>`<option value="${v}">${escapeHtml(l)}</option>`).join('')); };
+  fill('libType', Object.entries(lib.types));
+  fill('libRace', lib.races.map(r=>[r, r === 'XC' ? 'XC (5K)' : r]));
+  fill('libPhase', lib.phases.map(p=>[p, p[0].toUpperCase()+p.slice(1)]));
+  const type = $('libType').value, race = $('libRace').value, phase = $('libPhase').value, len = Number($('libLen').value || 0);
+  const list = lib.workouts.filter(w=> (!type || w.type === type) && (!race || w.races.includes(race)) && (!phase || w.phase.includes(phase))
+    && (!len || (len === 999 ? w.total_min > 65 : w.total_min <= len)));
+  const lvl = ['', 'Beginner', 'Intermediate', 'Advanced'];
+  $('libList').innerHTML = `<div class="hint" style="margin-bottom:4px;">${list.length} workouts</div>` + list.map(w=>`
+    <details class="lib-item" data-id="${w.id}" ${libOpen === w.id ? 'open' : ''}>
+      <summary><div class="lib-name">${escapeHtml(w.name)}</div>
+        <div class="lib-meta">${escapeHtml(lib.types[w.type])} · ${w.total_min} min · ${lvl[w.level]} · ${escapeHtml(w.races.length === lib.races.length ? 'All races' : w.races.join(', '))}</div></summary>
+      <div class="lib-body">
+        <div><b>Session:</b> ${escapeHtml(w.main)}</div>
+        <div><b>Paces:</b> ${escapeHtml(w.paces)}</div>
+        <div><b>Why:</b> ${escapeHtml(w.purpose)}</div>
+        <div><b>Cues:</b> ${escapeHtml(w.cues)}</div>
+        <div><b>Next time:</b> ${escapeHtml(w.progress)}</div>
+        <div class="lib-meta">Phase: ${escapeHtml(w.phase.join(', '))} · Source: ${escapeHtml(w.source)}</div>
+      </div>
+    </details>`).join('');
+  $('libList').querySelectorAll('details').forEach(el=> el.addEventListener('toggle', ()=>{ if(el.open) libOpen = el.dataset.id; }));
+}
+
 async function renderTraining(){
+  $('tpViews').querySelectorAll('[data-tview]').forEach(b=>{ const on = b.dataset.tview === trainingView; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
+  $('tpPlanView').style.display = trainingView === 'plan' ? '' : 'none';
+  $('tpLogView').style.display = trainingView === 'log' ? '' : 'none';
+  $('tpLibraryView').style.display = trainingView === 'library' ? '' : 'none';
+  if(trainingView === 'log') return renderTrainingLog();
+  if(trainingView === 'library') return renderLibrary();
   renderCoachRuns();
   const own = isRealPerson();
   const grade = TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman';

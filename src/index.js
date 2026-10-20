@@ -1,4 +1,7 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
+import { logTools, callLogTool, LogError, getLog, saveDay, libraryMeta, setFiveK, fiveKFor } from './log.js';
+import { WORKOUTS, pacesFrom5k } from './workouts.js';
+import { todayInTz } from './coach.js';
 import { COACH_TOOLS, callCoachTool, personForToken, workoutsForApp, issueCoachToken, teamTraining } from './coach.js';
 
 function json(data, status = 200) {
@@ -644,7 +647,7 @@ async function clearWeekTemplate(db, body) {
 // tool set this small).
 // ---------------------------------------------------------------------------
 
-const MCP_TOOLS = [
+const MCP_TOOLS_BASE = [
   {
     name: 'get_roster',
     description: "List everyone on the Hawks roster with their contact info, school info, home address, and out-periods.",
@@ -990,6 +993,8 @@ const MCP_TOOLS = [
   },
 ];
 
+const MCP_TOOLS = [...MCP_TOOLS_BASE, ...logTools(true)];
+
 class McpToolError extends Error {}
 
 async function mcpGetRoster(db) {
@@ -1176,8 +1181,17 @@ async function callMcpTool(name, args, env, ctx) {
       return await unwrapJson(await applyWeekTemplate(db, a), 'apply_week_template failed');
     case 'clear_week_template':
       return await unwrapJson(await clearWeekTemplate(db, a), 'clear_week_template failed');
-    default:
+    default: {
+      if (logTools(true).some((t) => t.name === name)) {
+        const personId = name === 'find_workouts' ? null : (await resolvePerson(db, a.person)).id;
+        try {
+          return await callLogTool(db, personId, name, a, todayInTz());
+        } catch (err) {
+          throw err instanceof LogError ? new McpToolError(err.message) : err;
+        }
+      }
       throw new McpToolError(`Unknown tool: ${name}`);
+    }
   }
 }
 
@@ -1447,6 +1461,23 @@ export default {
         return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
       }
 
+      if (pathname === '/api/log' && request.method === 'GET') {
+        const p = reqUrl.searchParams;
+        try {
+          const personId = str(p.get('personId'), 100);
+          const data = await getLog(env.DB, personId, str(p.get('from'), 10), str(p.get('to'), 10));
+          return json({ ...data, five_k_time: await fiveKFor(env.DB, personId) });
+        } catch (err) {
+          if (err instanceof LogError) return json({ error: err.message }, 400);
+          throw err;
+        }
+      }
+
+      if (pathname === '/api/library' && request.method === 'GET') {
+        const fiveK = await fiveKFor(env.DB, str(reqUrl.searchParams.get('personId'), 100));
+        return json({ ...libraryMeta(), workouts: WORKOUTS, five_k_time: fiveK, paces: pacesFrom5k(fiveK) });
+      }
+
       if (pathname === '/api/workouts' && request.method === 'GET') {
         const data = await workoutsForApp(env.DB, str(reqUrl.searchParams.get('personId'), 100));
         return data ? json(data) : json({ error: 'Unknown person' }, 404);
@@ -1486,6 +1517,15 @@ export default {
         if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
         if (pathname === '/api/people/personal') return await upsertPersonal(env.DB, body, env, ctx);
         if (pathname === '/api/travel-estimate') return await upsertTravelEstimate(env.DB, body);
+        if (pathname === '/api/log/day' || pathname === '/api/people/5k') {
+          try {
+            if (pathname === '/api/people/5k') return json(await setFiveK(env.DB, str(body.personId, 100), body.time));
+            return json(await saveDay(env.DB, str(body.personId, 100), str(body.date, 10), body.fields || {}));
+          } catch (err) {
+            if (err instanceof LogError) return json({ error: err.message }, 400);
+            throw err;
+          }
+        }
         if (pathname === '/api/coach/link') {
           const token = await issueCoachToken(env.DB, str(body.personId, 100), body.regenerate === true);
           return token ? json({ url: `${reqUrl.origin}/mcp/coach/${token}` }) : json({ error: 'Unknown person' }, 400);
