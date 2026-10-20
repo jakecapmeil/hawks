@@ -1,5 +1,5 @@
-// Claude Coach. Each runner's own Claude pulls their runs from the Strava
-// connector and logs them here through a per-person MCP endpoint
+// Claude Coach. Each runner's own Claude pulls their runs from whatever
+// activity connector they have (COROS, Strava, or a Garmin one) // connector and logs them here through a per-person MCP endpoint
 // (/mcp/coach/<coach_token>). Claude only labels each run and writes a short
 // note; the numbers (effort, load, plan match, grade) are worked out here so
 // every run is scored the same way no matter whose Claude sent it.
@@ -14,6 +14,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 export const CATEGORIES = ['easy', 'recovery', 'long', 'workout', 'race', 'shakeout', 'crosstrain'];
 const HARD = new Set(['workout', 'race']);
 const DEFAULT_MAX_HR = 200;
+export const SOURCES = ['coros', 'strava', 'garmin'];
 
 // Shown to Claude in get_coach_context so it labels runs the same way the
 // scoring below expects.
@@ -144,11 +145,22 @@ function gradeOf(score) {
   return score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
 }
 
+// Some services count one foot (84), others both (168). Runners never run
+// under ~120 steps/min, so anything below that is one-foot and gets doubled.
+function cadenceSpm(c) {
+  if (c === null) return null;
+  return r(c < 120 ? c * 2 : c);
+}
+
 function cleanWorkout(raw) {
   const date = clip(raw?.date, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new CoachError('Each workout needs date as YYYY-MM-DD (the local start date)');
-  const strava_id = clip(raw?.strava_id, 40);
-  if (!strava_id) throw new CoachError(`Workout on ${date} is missing strava_id`);
+  // The column is still called strava_id; other sources are stored as
+  // "coros:<id>" / "garmin:<id>" so ids from different services never collide.
+  const source = SOURCES.includes(raw?.source) ? raw.source : 'strava';
+  const rawId = clip(raw?.activity_id ?? raw?.strava_id, 40);
+  if (!rawId) throw new CoachError(`Workout on ${date} is missing activity_id`);
+  const strava_id = source === 'strava' ? rawId : `${source}:${rawId}`;
   const category = clip(raw?.category, 20).toLowerCase();
   if (!CATEGORIES.includes(category)) throw new CoachError(`Workout ${strava_id}: category must be one of ${CATEGORIES.join(', ')}`);
   return {
@@ -160,7 +172,7 @@ function cleanWorkout(raw) {
     elapsed_sec: r(num(raw.elapsed_sec, { max: 172800 })),
     avg_hr: r(num(raw.avg_hr, { min: 30, max: 250 })),
     max_hr: r(num(raw.max_hr, { min: 30, max: 250 })),
-    avg_cadence: r(num(raw.avg_cadence, { max: 260 })),
+    avg_cadence: cadenceSpm(num(raw.avg_cadence, { max: 260 })),
     elev_gain_ft: r(num(raw.elev_gain_ft, { max: 50000 })),
     summary: clip(raw.summary, 1000),
     library_id: clip(raw.library_id, 60),
@@ -236,7 +248,12 @@ export async function getCoachContext(db, person) {
     max_hr_used: await maxHrFor(db, person.id),
     this_week: await weekSummary(db, person, today),
     recent_workouts: await listWorkouts(db, person.id, addDays(today, -14), today),
-    already_logged_strava_ids: logged.results.map((x) => x.strava_id),
+    already_logged: SOURCES.reduce((o, src) => {
+      o[src] = logged.results.map((x) => x.strava_id)
+        .filter((id) => (src === 'strava' ? !id.includes(':') : id.startsWith(src + ':')))
+        .map((id) => (src === 'strava' ? id : id.slice(src.length + 1)));
+      return o;
+    }, {}),
     prs: await getPrs(db, person.id),
     missing_prs: PR_EVENTS.filter((e) => !(e in prsNow)),
     five_k_time: (await fiveKFor(db, person.id)) || null,
@@ -339,12 +356,12 @@ export async function issueCoachToken(db, personId, regenerate) {
 export const COACH_TOOLS = [
   {
     name: 'get_coach_context',
-    description: "Start here every time. Returns who you're coaching, today's date, this week's Hawks training plan day by day (planned type and miles) with what's already logged, the last 14 days of logged runs, the Strava ids already logged (skip those), and the scoring rubric to follow when picking categories.",
+    description: "Start here every time. Returns who you're coaching, today's date, this week's Hawks training plan day by day (planned type and miles) with what's already logged, the last 14 days of logged runs, the activity ids already logged per source (skip those), the runner's PRs, and the scoring rubric to follow when picking categories.",
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'log_workouts',
-    description: 'Save Strava activities to Hawks. Send the raw numbers, your category, and a short coaching note for each; Hawks works out effort (1-10), training load, plan match (0-100) and the letter grade, saves it to the Training tab, and returns the scores plus the updated week. Re-sending a strava_id updates it.',
+    description: 'Save activities from the runner\'s COROS, Strava or Garmin connector to Hawks. Send the raw numbers, your category, and a short coaching note for each; Hawks works out effort (1-10), training load, plan match (0-100) and the letter grade, saves it to the Training tab, and returns the scores plus the updated week. Re-sending the same source + activity_id updates it.',
     inputSchema: {
       type: 'object',
       required: ['workouts'],
@@ -355,20 +372,21 @@ export const COACH_TOOLS = [
           maxItems: 60,
           items: {
             type: 'object',
-            required: ['strava_id', 'date', 'category'],
+            required: ['source', 'activity_id', 'date', 'category'],
             properties: {
-              strava_id: { type: 'string', description: 'Strava activity id' },
+              source: { type: 'string', enum: SOURCES, description: 'Which connector the activity came from' },
+              activity_id: { type: 'string', description: "The activity's id in that service" },
               date: { type: 'string', description: 'Local start date, YYYY-MM-DD' },
-              name: { type: 'string', description: 'Activity title from Strava' },
-              sport: { type: 'string', description: 'Strava sport type, e.g. Run, TrailRun, Ride, Swim, Workout' },
+              name: { type: 'string', description: 'Activity title' },
+              sport: { type: 'string', description: 'Sport type, e.g. Run, TrailRun, Ride, Swim, Workout' },
               category: { type: 'string', enum: CATEGORIES },
-              distance_mi: { type: 'number', description: 'Miles (Strava meters / 1609.34)' },
+              distance_mi: { type: 'number', description: 'Miles (meters / 1609.34, km x 0.6214)' },
               moving_sec: { type: 'integer' },
               elapsed_sec: { type: 'integer' },
               avg_hr: { type: 'integer' },
               max_hr: { type: 'integer' },
-              avg_cadence: { type: 'integer', description: 'Steps per minute. Strava reports one foot for runs, so double it (e.g. 84 -> 168).' },
-              elev_gain_ft: { type: 'integer', description: 'Feet (Strava meters x 3.281)' },
+              avg_cadence: { type: 'integer', description: 'Average cadence as the connector reports it; Hawks doubles one-foot values (under 120) automatically.' },
+              elev_gain_ft: { type: 'integer', description: 'Feet (meters x 3.281)' },
               summary: { type: 'string', description: '1-3 sentence coaching note, per the rubric' },
               library_id: { type: 'string', description: 'Workout library id if this run was a library workout (see find_workouts)' },
             },

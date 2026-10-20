@@ -1528,12 +1528,15 @@
     </div>
     <div class="card" id="coachCard" style="display:none;">
       <div class="card-title">Claude Coach</div>
-      <div class="hint">Claude reads your runs from Strava, grades each one against your Hawks plan, and saves the grades to your Training tab. Takes about 3 minutes to set up. You need a Claude account (free works) and Strava.</div>
-      <ol class="coach-steps">
-        <li><b>Connect Strava in Claude.</b> In claude.ai go to Settings → Connectors, find <b>Strava</b> and connect it.</li>
-        <li><b>Add your Hawks link.</b> Same page: Add custom connector → name it <b>Hawks Coach</b> → paste the link below. Keep it private; it's your login.</li>
-        <li><b>Paste the prompt.</b> Start a new chat in Claude and paste the setup prompt. It syncs your last 2 weeks, then you just say <b>"coach me"</b> after each run.</li>
-      </ol>
+      <div class="hint">Claude reads runs from your watch's connector, grades each one against your Hawks plan, and saves them to your Training log. About 3 minutes to set up with a free Claude account.</div>
+      <div class="field" style="margin-top:var(--sp-3);"><span>Your watch</span>
+        <div class="seg" id="coachSource" role="tablist" aria-label="Watch">
+          <button type="button" class="seg-btn" data-src="coros">COROS</button>
+          <button type="button" class="seg-btn" data-src="garmin">Garmin</button>
+          <button type="button" class="seg-btn" data-src="strava">Strava</button>
+        </div>
+      </div>
+      <ol class="coach-steps" id="coachSteps" style="margin-top:var(--sp-3);"></ol>
       <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Your Hawks Coach link</div>
       <div class="copy-row" style="margin-top:6px;">
         <textarea id="coachUrl" readonly rows="1" placeholder="Tap Get link"></textarea>
@@ -1620,7 +1623,7 @@
       <div class="split-side">
         <section class="card tl-empty" id="tlEmpty">
           <div class="card-title" style="margin-bottom:var(--sp-2);">Pick a day</div>
-          <div class="hint">Tap any day to see its runs and log how it went. Claude Coach fills days in from Strava.</div>
+          <div class="hint">Tap any day to see its runs and log how it went. Claude Coach fills days in from your watch.</div>
         </section>
         <section class="card" id="tlDayCard" style="display:none;">
           <div class="section-head">
@@ -3352,40 +3355,78 @@ async function savePrs(){
 }
 
 // --- Claude Coach -----------------------------------------------------------
-// The runner's own Claude does the work: Strava connector in, Hawks Coach
-// connector (a per-person MCP link) out. The server does the scoring math.
+// The runner's own Claude does the work: their watch's connector in (COROS,
+// Strava, or a Garmin one), the Hawks Coach connector (a per-person MCP link)
+// out. The server does the scoring math.
 let coachLinks = {};
+let coachSource = 'coros';
+try{ coachSource = localStorage.getItem('hawksCoachSource') || 'coros'; }catch(e){}
+
+const COACH_SOURCES = {
+  coros: {
+    label: 'COROS',
+    connect: '<b>Connect COROS in Claude.</b> Claude → Settings → Connectors → <b>Discover</b>, search <b>COROS</b>, Connect, and log in to COROS. It\'s free and official.',
+    pull: 'Use the COROS connector to get my activities',
+    detail: 'name, sport, local start date, distance, moving and total time, average and max heart rate, cadence, elevation gain, and the lap summary. COROS caps .FIT downloads at 50 a day, so only pull a .FIT file when you need split-by-split detail for a workout.',
+    extra: '\n\nCOROS EXTRAS: When I ask for a workout, or tomorrow\'s plan is a workout, offer to create it in my COROS workout library and put it on my COROS calendar (up to 14 days ahead) so it\'s on my watch. Use my Hawks paces. COROS can\'t delete workouts through you; tell me to do that in the COROS app.',
+  },
+  garmin: {
+    label: 'Garmin',
+    connect: '<b>Get your Garmin runs into Claude.</b> Garmin has no official Claude connector. Easiest: turn on Garmin → Strava auto-sync and connect <b>Strava</b> in Claude (Strava\'s connector needs a Strava subscription). Or add a community Garmin connector as a custom connector; those log in to Garmin with your password, so use one you trust.',
+    pull: 'Use my Garmin connector (or Strava, if that is how my Garmin runs reach you) to get my activities',
+    detail: 'name, sport, local start date, distance, moving and elapsed time, average and max heart rate, cadence, elevation gain, and laps/splits.',
+    extra: '',
+  },
+  strava: {
+    label: 'Strava',
+    connect: '<b>Connect Strava in Claude.</b> Claude → Settings → Connectors, find <b>Strava</b> and connect it. Strava\'s connector needs a Strava subscription.',
+    pull: 'Use the Strava connector to get my activities',
+    detail: 'name, sport type, local start date, distance, moving and elapsed time, average and max heart rate, average cadence, elevation gain, and laps/splits.',
+    extra: '',
+  },
+};
 
 function coachPrompt(name){
   const PR_LIST = PR_EVENTS.join(', ');
-  return `You are my running coach for the Hawks cross country team. You have two connectors: Strava (my runs) and Hawks Coach (my team training plan and the place my graded runs go). Follow these steps exactly, every time I say "coach me" (or when this runs as a scheduled task).
+  const src = COACH_SOURCES[coachSource] || COACH_SOURCES.coros;
+  const key = COACH_SOURCES[coachSource] ? coachSource : 'coros';
+  return `You are my running coach for the Hawks cross country team. You have two connectors: ${src.label} (my runs) and Hawks Coach (my team training plan, training log, workout library, and the place my graded runs go). Follow these steps exactly, every time I say "coach me" (or when this runs as a scheduled task).
 
-STEP 1 - CONTEXT. Call the Hawks Coach tool get_coach_context. It tells you today's date, my plan for this week day by day, what is already logged, the Strava ids already logged, my PRs, and the scoring rubric. Read the rubric and follow it.
+STEP 1 - CONTEXT. Call the Hawks Coach tool get_coach_context. It tells you today's date, my plan for this week day by day, my recent training log, which activity ids are already logged (already_logged, per source), my PRs and paces, and the scoring rubric. Read the rubric and follow it.
 
 STEP 1b - PRs AND GOALS (first run, or whenever prs comes back empty). Before anything else, ask me in one message: my PRs for ${PR_LIST} (time, and roughly when/where if I remember), which race I'm training for next, and my goal time for it. Wait for my answer. Save the PRs with set_prs (skip events I've never run). If five_k_time is empty, set it with set_5k_time from my best recent 5K or XC 5K; if I have no 5K, estimate it (3200 time x 1.65, or 1600 time x 3.5) and tell me it's an estimate. Mention I can update PRs any time on the Hawks Personal tab or by telling you a new PR.
 
-STEP 2 - PULL RUNS. Use the Strava connector to get my activities from the last 14 days (the first time) or since the newest logged run (after that). Skip any activity whose id is in already_logged_strava_ids. For each new one, get the details: name, sport type, start date (local), distance, moving time, elapsed time, average and max heart rate, average cadence, elevation gain, and laps/splits if the connector has them.
+STEP 2 - PULL RUNS. ${src.pull} from the last 14 days (the first time) or since the newest logged run (after that). Skip any activity whose id is already in already_logged.${key}. For each new one, get: ${src.detail}
 
 STEP 3 - CLASSIFY. For each activity pick exactly one category from the rubric: easy, recovery, long, workout, race, shakeout or crosstrain. Use the laps and pace changes to spot workouts; use HR as a share of max HR to tell easy from hard. Compare with the planned type for that date.
 
-STEP 4 - CONVERT. distance_mi = meters / 1609.34 (2 decimals). elev_gain_ft = meters x 3.281. Strava run cadence counts one foot, so double it to get steps per minute (84 -> 168). Times in whole seconds. Leave out anything Strava doesn't have; never guess numbers.
+STEP 4 - CONVERT. distance_mi = meters / 1609.34 (2 decimals). elev_gain_ft = meters x 3.281. Times in whole seconds. Send cadence as the connector gives it (Hawks fixes one-foot values). Leave out anything the connector doesn't have; never guess numbers.
 
 STEP 5 - NOTE. Write a 1-3 sentence coaching note per activity as the rubric describes.
 
-STEP 6 - SAVE. Call log_workouts once with all the new activities. Hawks calculates effort, load, plan match and the letter grade.
+STEP 6 - SAVE. Call log_workouts once with all the new activities, each with source "${key}" and its activity_id. Hawks calculates effort, load, plan match and the letter grade.
 
 STEP 6b - LOG THE DAYS. For each date from step 2, and any planned run day with no activity, call log_day: status vs plan, difficulty 1-10, types, planned, summary, splits for reps, coach_note and load_note, as the rubric describes. If a run was a library workout, set library_id and call get_workout_history to compare with last time.
 
-STEP 7 - REPORT. Reply to me with a short coach's report: a table of each new run (date, category, miles, pace, avg HR, grade), this week's miles vs plan and average plan score from the response, what's coming up next on my plan (with my paces from get_workout if it's a workout), and one or two specific things to focus on. When I ask for a workout, use find_workouts filtered by my race, the season phase and the time I have. If nothing new was found, say so and preview the next planned day.
+STEP 7 - REPORT. Reply to me with a short coach's report: a table of each new run (date, category, miles, pace, avg HR, grade), this week's miles vs plan and average plan score from the response, what's coming up next on my plan (with my paces from get_workout if it's a workout), and one or two specific things to focus on. When I ask for a workout, use find_workouts filtered by my race, the season phase and the time I have. If nothing new was found, say so and preview the next planned day.${src.extra}
 
-RULES: Only ever log my own Strava activities. Never invent or estimate data. If a connector is missing or fails, stop and tell me which one so I can fix it in Settings > Connectors. Keep the tone of a supportive high school XC coach.
+RULES: Only ever log my own activities. Never invent or estimate data. If a connector is missing or fails, stop and tell me which one so I can fix it in Settings > Connectors. Keep the tone of a supportive high school XC coach.
 
 FIRST RUN ONLY: Start with step 1 and 1b (ask for my PRs and goal race), then do steps 2-7 for the last 14 days. Then tell me I'm set up, and that I can say "coach me" after each run. If this Claude app supports scheduled tasks, offer to schedule this every evening at 8pm.
 
 My name is ${name}.`;
 }
 
+function renderCoachSteps(){
+  const src = COACH_SOURCES[coachSource] || COACH_SOURCES.coros;
+  $('coachSource').querySelectorAll('[data-src]').forEach(b=> b.classList.toggle('active', b.dataset.src === coachSource));
+  $('coachSteps').innerHTML = `<li>${src.connect}</li>
+    <li><b>Add your Hawks link.</b> Same Connectors page: Add custom connector → name it <b>Hawks Coach</b> → paste the link below. Keep it private; it's your login.</li>
+    <li><b>Paste the prompt.</b> Start a new chat and paste the setup prompt. Claude asks for your PRs and goal race, syncs your last 2 weeks, then you just say <b>"coach me"</b> after each run.</li>`;
+}
+
 async function renderCoachSetup(p){
+  renderCoachSteps();
   $('coachPrompt').value = coachPrompt(p.first_name || p.name);
   const url = coachLinks[p.id] || '';
   $('coachUrl').value = url;
@@ -3450,7 +3491,7 @@ async function renderCoachRuns(){
   const recent = data.workouts.slice(0, 8);
   if(!recent.length){
     $('coachRunsHint').textContent = data.connected
-      ? 'Nothing logged yet. Say "coach me" in Claude to sync your Strava runs.'
+      ? 'Nothing logged yet. Say "coach me" in Claude to sync your runs.'
       : 'Set up Claude Coach on the Personal tab to see graded runs here.';
     $('coachRuns').innerHTML = '';
     return;
@@ -3991,6 +4032,12 @@ function wireUI(){
   });
 
   $('savePrsBtn').addEventListener('click', savePrs);
+  $('coachSource').querySelectorAll('[data-src]').forEach(b=> b.addEventListener('click', ()=>{
+    coachSource = b.dataset.src;
+    try{ localStorage.setItem('hawksCoachSource', coachSource); }catch(e){}
+    const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+    if(p) renderCoachSetup(p);
+  }));
   $('coachUrlBtn').addEventListener('click', async ()=>{
     if(!$('coachUrl').value && !(await fetchCoachLink(false))) return;
     copyField('coachUrl', 'coachUrlBtn');
