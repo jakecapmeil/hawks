@@ -1,7 +1,7 @@
 // Daily training log: one row per person per day, merged with whatever Claude
 // Coach logged from Strava that day. Same idea as the XC Coach Log in Notion:
 // planned vs actual, status, difficulty, notes, and a rolling load note.
-import { WORKOUTS, WORKOUT_TYPES, RACES, PHASES, PACE_ZONES, pacesFrom5k, findWorkouts, workoutTargets, parseReps } from './workouts.js';
+import { WORKOUTS, WORKOUT_TYPES, RACES, PHASES, PACE_ZONES, pacesFrom5k, findWorkouts, workoutTargets, parseReps, snap100, trackMiles, TRACK_MILE_M } from './workouts.js';
 import { getFitness } from './fitness.js';
 
 // Marks Fitness States stale so the next read recomputes them.
@@ -64,19 +64,21 @@ export function parseSplitReps(raw) {
   }
 }
 
-export function splitsText(reps) {
+// On the track a mile is 1600 m and reps read as the lines (nearest 100 m).
+export function splitsText(reps, track = false) {
   return reps.map((r) => {
-    const pace = (r.s / r.m) * 1609.344;
-    return `${Math.round(r.m)}m ${fmtSec(r.s)} (${fmtSec(Math.round(pace))}/mi)${r.rest ? `, rest ${r.rest}` : ''}`;
+    const m = track ? snap100(r.m) : r.m;
+    const pace = (r.s / m) * (track ? TRACK_MILE_M : 1609.344);
+    return `${Math.round(m)}m ${fmtSec(r.s)} (${fmtSec(Math.round(pace))}/mi)${r.rest ? `, rest ${r.rest}` : ''}`;
   }).join('; ');
 }
 
 // Watch laps (work reps) for the day, when nobody built splits by hand.
-function lapsOf(rs) {
+function lapsOf(rs, track) {
   for (const w of rs) {
     try {
       const laps = JSON.parse(w.laps || '[]');
-      if (Array.isArray(laps) && laps.length) return laps.map((l) => ({ m: l.m, s: l.s, hr: l.hr || null, rest: '' }));
+      if (Array.isArray(laps) && laps.length) return laps.map((l) => ({ m: track || w.surface === 'track' ? snap100(l.m) : l.m, s: l.s, hr: l.hr || null, rest: '' }));
     } catch { /* ignore */ }
   }
   return [];
@@ -113,9 +115,11 @@ export function sessionsOf(rs) {
       title: main.name || '',
       miles: round1(miles),
       minutes: Math.round(sec / 60),
+      // Track miles are 1600 m, so pace uses the track mileage as is.
       pace: miles > 0.2 ? fmtSec(Math.round(sec / miles)) : null,
       avg_hr: hr.length ? Math.round(hr.reduce((a, w) => a + w.avg_hr * w.moving_sec, 0) / hr.reduce((a, w) => a + w.moving_sec, 0)) : null,
       effort: items.reduce((m, w) => Math.max(m, w.effort || 0), 0) || null,
+      track: items.some((w) => w.surface === 'track'),
       report: main.summary || items.find((w) => w.summary)?.summary || '',
       activities: items.map((w) => ({ id: w.strava_id, name: w.name, category: w.category, miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null, start: w.start_local || '' })),
     };
@@ -162,7 +166,7 @@ export async function getDays(db, personId, from, to) {
     db.prepare('SELECT * FROM training_days WHERE person_id = ? AND date >= ? AND date <= ?').bind(personId, from, to).all(),
     db.prepare(
       `SELECT strava_id, date, name, category, distance_mi, moving_sec, elapsed_sec, avg_hr, effort, load, library_id, summary,
-              start_local, laps, planned_type, planned_miles
+              start_local, laps, planned_type, planned_miles, surface
        FROM workouts WHERE person_id = ? AND date >= ? AND date <= ? ORDER BY start_local, created_at`
     ).bind(personId, from, to).all(),
   ]);
@@ -181,9 +185,12 @@ export async function getDays(db, personId, from, to) {
     const types = new Set(parseTypes(e?.types));
     rs.forEach((w) => types.add(CATEGORY_TYPE[w.category] || 'easy'));
     const maxEffort = rs.reduce((m, w) => Math.max(m, w.effort || 0), 0);
-    const reps = parseSplitReps(e?.split_reps);
+    const track = e?.surface === 'track' || rs.some((w) => w.surface === 'track');
+    const reps = parseSplitReps(e?.split_reps).map((r) => (track ? { ...r, m: snap100(r.m) } : r));
+    const laps = lapsOf(rs, track);
     return {
       date,
+      track,
       // Watch days are locked: miles, minutes, runs and difficulty come from
       // the synced activities and can't be typed over.
       locked: rs.length > 0,
@@ -197,7 +204,7 @@ export async function getDays(db, personId, from, to) {
       library_id: e?.library_id || rs.find((w) => w.library_id)?.library_id || '',
       splits: e?.splits || '',
       // Hand-built reps win, then the watch laps, then whatever the splits text says.
-      split_reps: reps.length ? reps : lapsOf(rs).length ? lapsOf(rs) : parseReps(e?.splits).map((r) => ({ ...r, rest: '' })),
+      split_reps: reps.length ? reps : laps.length ? laps : parseReps(e?.splits).map((r) => ({ ...r, m: track ? snap100(r.m) : r.m, rest: '' })),
       day_line: e?.day_line || '',
       plan: dayPlanTag(rs, stravaMiles, maxEffort),
       sessions: sessionsOf(rs),
@@ -236,6 +243,7 @@ const DAY_FIELDS = {
     return reps.length ? JSON.stringify(reps) : '';
   },
   day_line: (v) => clip(v, 300),
+  surface: (v) => (v === 'track' ? 'track' : ''),
   summary: (v) => clip(v, 4000),
   coach_note: (v) => clip(v, 4000),
   load_note: (v) => clip(v, 4000),
@@ -249,7 +257,12 @@ export async function saveDay(db, personId, date, fields) {
   if (!isDate(date)) throw new LogError('date must be YYYY-MM-DD');
   const person = await db.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first();
   if (!person) throw new LogError('Unknown person');
-  if (fields && 'split_reps' in fields && !('splits' in fields)) fields = { ...fields, splits: splitsText(parseSplitReps(fields.split_reps)) };
+  if (fields && 'split_reps' in fields && !('splits' in fields)) {
+    const track = 'surface' in fields ? fields.surface === 'track'
+      : (await db.prepare('SELECT surface FROM training_days WHERE person_id = ? AND date = ?').bind(personId, date).first())?.surface === 'track';
+    const reps = parseSplitReps(fields.split_reps).map((r) => (track ? { ...r, m: snap100(r.m) } : r));
+    fields = { ...fields, split_reps: reps, splits: splitsText(reps, track) };
+  }
   const cols = [];
   const vals = [];
   for (const [k, fn] of Object.entries(DAY_FIELDS)) {
@@ -262,6 +275,27 @@ export async function saveDay(db, personId, date, fields) {
      ON CONFLICT(person_id, date) DO UPDATE SET ${cols.map((c) => `${c}=excluded.${c}`).join(', ')}, updated_at=excluded.updated_at`
   ).bind(personId, date, ...vals, now).run();
   return (await getDays(db, personId, date, date))[0];
+}
+
+// "On the track" toggle for a day: the day's running sessions snap to the
+// lines (miles in eighths, no elevation) or go back to the GPS numbers.
+export async function setDayTrack(db, personId, date, track) {
+  if (!isDate(date)) throw new LogError('date must be YYYY-MM-DD');
+  const rows = (await db.prepare(
+    "SELECT strava_id, category, distance_mi, raw_distance_mi, elev_gain_ft, raw_elev_ft FROM workouts WHERE person_id = ? AND date = ? AND category != 'crosstrain'"
+  ).bind(personId, date).all()).results;
+  // Only the workout itself moves to the track; the warm-up jog usually didn't.
+  const hard = rows.filter((w) => ['workout', 'race'].includes(w.category));
+  const target = hard.length ? hard : rows;
+  await db.batch(target.map((w) => {
+    const gps = w.raw_distance_mi ?? w.distance_mi;
+    return db.prepare('UPDATE workouts SET surface = ?, distance_mi = ?, raw_distance_mi = ?, elev_gain_ft = ?, raw_elev_ft = ? WHERE person_id = ? AND strava_id = ?')
+      .bind(track ? 'track' : '', track && gps != null ? trackMiles(gps) : gps, gps, track ? 0 : (w.raw_elev_ft ?? w.elev_gain_ft), w.raw_elev_ft ?? w.elev_gain_ft, personId, w.strava_id);
+  }));
+  const day = await db.prepare('SELECT split_reps FROM training_days WHERE person_id = ? AND date = ?').bind(personId, date).first();
+  const fields = { surface: track ? 'track' : '' };
+  if (day?.split_reps) fields.split_reps = parseSplitReps(day.split_reps);
+  return await saveDay(db, personId, date, fields);
 }
 
 // Mon-Sun weekly totals over a date range, for trends.

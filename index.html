@@ -1265,6 +1265,12 @@
   .week-day.today .wd-name{color:var(--gold);}
 
   /* ---- Log: sessions, lock, splits -------------------------------------- */
+  .track-toggle{display:flex;align-items:center;gap:var(--sp-3);margin-top:var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--line);border-radius:var(--r-control);cursor:pointer;}
+  .track-toggle input{width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;}
+  .track-toggle span{display:flex;flex-direction:column;gap:1px;min-width:0;}
+  .track-toggle b{font-size:var(--fs-subhead);}
+  .track-toggle small{font-size:var(--fs-caption);color:var(--ink-soft);line-height:1.3;}
+  .track-toggle:has(input:checked){border-color:var(--gold);background:var(--gold-bg);}
   .lock-note{display:flex;align-items:center;gap:6px;font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:var(--sp-2);}
   .lock-note svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0;}
   #tlManual{margin-top:var(--sp-3);}
@@ -1429,7 +1435,7 @@
 
     .you-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-5);align-items:start;}
     .you-grid > .card{margin-bottom:0;}
-    .you-grid > .setup-card{grid-row:span 2;}
+    #youSettingsView > #setupCard{grid-row:span 2;}
     .split-team{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);}
     .split-fit{grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);}
     .wo-tiles{grid-template-columns:repeat(6,minmax(0,1fr));}
@@ -1740,6 +1746,7 @@
           <div class="plan-note" id="tlPlanNote" style="display:none;"></div>
           <div class="hawky-line" id="tlDayLine" style="display:none;"></div>
           <div class="stat-grid" id="tlDayStats"></div>
+          <label class="track-toggle" id="tlTrackWrap"><input type="checkbox" id="tlTrack"><span><b>On the track</b><small id="tlTrackHint">Reps round to the nearest 100 m, miles to eighths, no elevation.</small></span></label>
           <div class="lock-note" id="tlLockNote" style="display:none;"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Miles, time and difficulty come from your watch.</div>
           <div class="field-grid" id="tlManual">
             <label class="field"><span>Miles</span><input type="number" step="0.01" min="0" id="tlMiles" inputmode="decimal"></label>
@@ -2022,10 +2029,63 @@
       </div>
     </div>
     <div id="youSettingsView" class="you-grid" style="display:none;">
+      <div class="card setup-card" id="coachCard" style="display:none;">
+        <div class="section-head">
+          <div>
+            <div class="card-title">Set up with Claude <span class="badge tone-int-1" style="vertical-align:3px;">Easiest</span></div>
+            <div class="hint">Two copy-pastes. Claude (a free account works) walks you through the rest and connects your watch to Hawks for you.</div>
+          </div>
+        </div>
+        <ol class="setup-steps">
+          <li>
+            <div class="setup-num">1</div>
+            <div class="setup-body">
+              <b>Add Hawky to Claude</b>
+              <p>In Claude (claude.ai or the app): <b>Settings → Connectors → Add custom connector</b>. Name it <b>Hawky</b> and paste your link. Claude can't add connectors to itself, so this one step is yours. Keep the link private: it's your login.</p>
+              <div class="copy-row">
+                <textarea id="coachUrl" readonly rows="1" placeholder="Tap Get link"></textarea>
+                <button id="coachUrlBtn">Get link</button>
+              </div>
+            </div>
+          </li>
+          <li>
+            <div class="setup-num">2</div>
+            <div class="setup-body">
+              <b>Paste one prompt in a new chat</b>
+              <p>Claude checks Hawky is connected, then walks you through intervals.icu and Garmin (those need your own logins), connects your watch to Hawks, imports your whole history, saves your PRs and explains your Fitness States.</p>
+              <button type="button" id="copySetupPromptBtn">Copy setup prompt</button>
+            </div>
+          </li>
+          <li>
+            <div class="setup-num">3</div>
+            <div class="setup-body">
+              <b>That's it</b>
+              <p>Your runs sync into Hawks by themselves. In Claude, say <b>"coach me"</b> after a run for a full review from Hawky.</p>
+            </div>
+          </li>
+        </ol>
+        <details class="fit-how" style="margin-top:var(--sp-3);">
+          <summary><span class="hint"><b>Using a COROS, Garmin or Strava connector in Claude instead?</b></span></summary>
+          <div class="stack" style="margin-top:var(--sp-3);">
+            <div class="seg" id="coachSource" role="tablist" aria-label="Watch">
+              <button type="button" class="seg-btn" data-src="intervals">Watch sync</button>
+              <button type="button" class="seg-btn" data-src="coros">COROS</button>
+              <button type="button" class="seg-btn" data-src="garmin">Garmin</button>
+              <button type="button" class="seg-btn" data-src="strava">Strava</button>
+            </div>
+            <ol class="coach-steps" id="coachSteps"></ol>
+            <textarea id="coachPrompt" class="coach-prompt" readonly></textarea>
+            <div class="cluster">
+              <button class="ghost" id="copyCoachPromptBtn">Copy prompt</button>
+              <button class="ghost" id="resetCoachBtn" type="button">New link</button>
+            </div>
+          </div>
+        </details>
+      </div>
       <div class="card setup-card" id="setupCard">
         <div class="section-head">
           <div>
-            <div class="card-title">Set up your watch</div>
+            <div class="card-title">Or set up your watch yourself</div>
             <div class="hint">About 5 minutes, once. After that your runs, splits and Fitness States update on their own every time you open Hawks.</div>
           </div>
           <span id="icuBadge"></span>
@@ -2087,30 +2147,6 @@
             </div>
           </li>
         </ol>
-      </div>
-      <div class="card" id="coachCard" style="display:none;">
-        <div class="card-title">Hawky in Claude <span class="badge" style="vertical-align:3px;">Optional</span></div>
-        <div class="hint">Talk to Hawky inside the Claude app: it reads your Hawks plan, log and Fitness States, and can review runs from a COROS, Garmin or Strava connector. Not needed if Watch sync above is set up.</div>
-        <div class="field" style="margin-top:var(--sp-3);"><span>Your watch</span>
-          <div class="seg" id="coachSource" role="tablist" aria-label="Watch">
-            <button type="button" class="seg-btn" data-src="coros">COROS</button>
-            <button type="button" class="seg-btn" data-src="garmin">Garmin</button>
-            <button type="button" class="seg-btn" data-src="strava">Strava</button>
-            <button type="button" class="seg-btn" data-src="intervals">Watch sync</button>
-          </div>
-        </div>
-        <ol class="coach-steps" id="coachSteps" style="margin-top:var(--sp-3);"></ol>
-        <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Your Hawky link</div>
-        <div class="copy-row" style="margin-top:6px;">
-          <textarea id="coachUrl" readonly rows="1" placeholder="Tap Get link"></textarea>
-          <button id="coachUrlBtn">Get link</button>
-        </div>
-        <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Setup prompt</div>
-        <textarea id="coachPrompt" class="coach-prompt" readonly></textarea>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-          <button id="copyCoachPromptBtn">Copy prompt</button>
-          <button class="ghost" id="resetCoachBtn" type="button">Reset link</button>
-        </div>
       </div>
       <div class="card" id="calendarFeedCard" style="display:none;">
         <div class="card-title">Google Calendar</div>
@@ -4056,7 +4092,7 @@ const COACH_SOURCES = {
   },
   intervals: {
     label: 'Hawks Watch sync',
-    connect: '<b>Turn on Watch sync</b> (the card above). Your Garmin or COROS runs then land in Hawks on their own, so Claude only needs the Hawky connector.',
+    connect: '<b>Turn on Watch sync</b> (the setup prompt above does it for you). Your Garmin or COROS runs then land in Hawks on their own, so Claude only needs the Hawky connector.',
     pull: 'My runs already sync into Hawks from my watch (Watch sync via intervals.icu), so do not use another connector. Take the new activities from recent_workouts in get_coach_context',
     detail: 'everything is already there (distance, times, HR, cadence, and splits on the training log). Review any run whose summary is empty or whose category looks wrong, and re-send it with log_workouts using source "intervals" and activity_id = its strava_id without the "intervals:" prefix.',
     extra: '',
@@ -4101,11 +4137,58 @@ FIRST RUN ONLY: Start with step 1 and 1b (ask for my PRs and goal race), then do
 My name is ${name}.`;
 }
 
+// The one prompt: Claude checks the Hawky connector, walks the runner through
+// intervals.icu (their logins), connects the watch with Hawky's tools, imports
+// history, saves PRs and explains Fitness States. Then the "coach me" routine.
+function setupPrompt(name, url){
+  return `You are Hawky, my running coach for the Hawks cross country team. Hawks is our team app. The "Hawky" connector is my private link into it: my training plan, training log, workout library, Fitness States, and my watch sync.
+
+SETUP. Do these one at a time, in plain friendly language, and wait for me after each step that needs me.
+
+0. CONNECTOR. Check that you can use the Hawky tools (watch_status, get_coach_context). If you can't, stop and tell me exactly this: in Claude go to Settings > Connectors > Add custom connector, name it Hawky, and paste this URL: ${url}
+   Then I need to open a new chat and paste this prompt again. You can't add connectors yourself, so don't try.
+
+1. Call watch_status. If my watch is already connected and my history is imported, skip to step 6.
+
+2. INTERVALS.ICU ACCOUNT. intervals.icu is a free site that Garmin and COROS send runs to. Have me make a free account at https://intervals.icu (I have to do this with my own email; you can't do it for me).
+
+3. LINK MY WATCH THERE. Have me go to intervals.icu Settings > Connections and connect Garmin (or COROS) and log in there. Then have me use the option on that connection to import my old activities, so my whole history comes across, not just new runs. Warn me not to connect Strava there instead: Strava doesn't let intervals.icu share runs, so Hawks would get nothing.
+
+4. CONNECT TO HAWKS. Have me open intervals.icu Settings. My athlete id is under my name (it looks like i12345). My API key is under Developer Settings. Ask me to paste both here, then call connect_watch with them. If it fails, read me the error and help me fix it (usually a copy-paste problem or the wrong id).
+
+5. IMPORT HISTORY. Call sync_watch with full_history: true and keep calling it until done is true. Tell me roughly how far back my runs go. If it says activities came from Strava, explain step 3 again.
+
+6. PRs. Call get_coach_context. If missing_prs isn't empty, ask me in one message for my PRs (time, and roughly when) for 400, 800, 1600, 3200, 5K and XC 5K, plus my next goal race and goal time. Save them with set_prs, including dates (YYYY-MM-DD; first of the month is fine if I only know the month).
+
+7. FITNESS STATES. Call get_fitness and explain it simply: what I could race right now from 400 m to half marathon, my VO2max estimate, my weekly mileage, and my training paces (what each pace is for). Say what it's based on and how confident it is.
+
+8. DONE. Tell me I'm set up: my runs now sync into Hawks by themselves and show up in the Training log, and I can say "coach me" here after any run.
+
+EVERY TIME I SAY "coach me" (or when this runs as a scheduled task):
+1. Call sync_watch, then get_coach_context. Read the rubric in it and follow it.
+2. Look at sessions since your last review. A warm-up, workout and cool-down saved separately are ONE session. Compare reps and paces with my Fitness States paces. On the track, reps round to the nearest 100 m and miles go in eighths, with no elevation.
+3. If a run's category or note is wrong, re-send it with log_workouts (source "intervals", activity_id = its strava_id without the "intervals:" prefix), with one report on the session's main activity.
+4. For each date, call log_day: status vs plan, day_line (one sentence on the day), summary, split_reps for reps, coach_note and load_note. If it was a library workout, set library_id and use get_workout_history to compare with last time.
+5. Reply with a short coach's report: a table of the new sessions (date, type, miles, pace, avg HR, on plan or not), this week's miles vs plan, what's next on my plan with my rep targets (find_workouts / get_workout), and one or two things to focus on.
+
+RULES: Only ever log my own activities. Never invent data. Every pace comes from my Fitness States. If a tool fails, tell me what it said. Talk like a supportive high school XC coach. If this Claude app supports scheduled tasks, offer to run "coach me" every evening at 8pm.
+
+My name is ${name}.`;
+}
+
+async function copySetupPrompt(){
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  if(!p) return;
+  const url = coachLinks[p.id] || await fetchCoachLink(false);
+  if(!url){ alert('Couldn’t get your Hawky link. Check your connection.'); return; }
+  copyText(setupPrompt(p.first_name || p.name, url), $('copySetupPromptBtn'));
+}
+
 function renderCoachSteps(){
   const src = COACH_SOURCES[coachSource] || COACH_SOURCES.coros;
   $('coachSource').querySelectorAll('[data-src]').forEach(b=> b.classList.toggle('active', b.dataset.src === coachSource));
   $('coachSteps').innerHTML = `<li>${src.connect}</li>
-    <li><b>Add your Hawks link.</b> Same Connectors page: Add custom connector → name it <b>Hawky</b> → paste the link below. Keep it private; it's your login.</li>
+    <li><b>Add Hawky.</b> Same Connectors page: Add custom connector → name it <b>Hawky</b> → paste your link from step 1 above.</li>
     <li><b>Paste the prompt.</b> Start a new chat and paste the setup prompt. Claude asks for your PRs and goal race, syncs your last 2 weeks, then you just say <b>"coach me"</b> after each run.</li>`;
 }
 
@@ -4726,6 +4809,18 @@ function wireUI(){
   $('tlNext').addEventListener('click', ()=>{ tlMonthIdx++; if(tlMonthIdx > 11){ tlMonthIdx = 0; tlYear++; } tlSelected = null; renderTrainingLog(); });
   $('tlSave').addEventListener('click', saveTrainingDay);
   $('tlDayCard').addEventListener('input', ()=>{ tlDirty = true; });
+  $('tlTrack').addEventListener('change', async ()=>{
+    tlTrack = $('tlTrack').checked;
+    splitRows.forEach(r=>{ if(tlTrack && r.m > 0) r.m = snapTrack(r.m); });
+    renderSplitBuilder();
+    // Watch days update the synced workout right away (miles and elevation change).
+    if(tlDays[tlSelected]?.locked && isRealPerson()){
+      const res = await apiPost('/api/log/track', { personId: activePersonId, date: tlSelected, track: tlTrack });
+      if(!res || res.error){ alert(res?.error || 'Couldn’t save. Check your connection.'); return; }
+      fitnessData = null; library = null;
+      renderTrainingLog();
+    }
+  });
   $('splitAddSet').addEventListener('click', ()=>{
     const n = Math.min(40, Math.max(1, parseInt($('splitAddN').value, 10) || 1));
     const m = Math.max(50, parseInt($('splitAddM').value, 10) || 400);
@@ -4786,6 +4881,7 @@ function wireUI(){
     copyField('coachUrl', 'coachUrlBtn');
   });
   $('copyCoachPromptBtn').addEventListener('click', ()=> copyField('coachPrompt', 'copyCoachPromptBtn'));
+  $('copySetupPromptBtn').addEventListener('click', copySetupPrompt);
   $('resetCoachBtn').addEventListener('click', async ()=>{
     if(!confirm('Make a new Hawky link? The old one stops working, so you’ll need to update the connector in Claude.')) return;
     await fetchCoachLink(true);
@@ -4935,7 +5031,10 @@ function clock(sec){
   const sStr = whole ? String(Math.round(ss)).padStart(2,'0') : ss.toFixed(1).padStart(4,'0');
   return m ? `${m}:${sStr}` : (whole ? String(Math.round(ss)) : ss.toFixed(1));
 }
-const pacePerMile = (m, s)=> m > 0 && s > 0 ? clock(Math.round(s / m * 1609.344)) : '';
+// On the track a mile is 1600 m (four laps).
+let tlTrack = false;
+const pacePerMile = (m, s)=> m > 0 && s > 0 ? clock(Math.round(s / m * (tlTrack ? 1600 : 1609.344))) : '';
+const snapTrack = (m)=> Math.max(100, Math.round(m / 100) * 100);
 
 function renderSplitBuilder(){
   const wrap = $('splitBuilder');
@@ -4953,6 +5052,11 @@ function renderSplitBuilder(){
       <input type="text" data-k="rest" value="${escapeHtml(r.rest || '')}" placeholder="2:00" maxlength="12" aria-label="Rep ${i+1} rest">
       <button type="button" class="x" data-del="${i}" aria-label="Remove rep ${i+1}">✕</button>
     </div>`).join('');
+  // Track reps settle on the nearest 100 m mark once you leave the field.
+  wrap.querySelectorAll('.split-row[data-i] input[data-k="m"]').forEach(inp=> inp.addEventListener('blur', ()=>{
+    const row = splitRows[Number(inp.closest('.split-row').dataset.i)];
+    if(tlTrack && row.m > 0 && snapTrack(row.m) !== row.m){ row.m = snapTrack(row.m); inp.value = row.m; inp.closest('.split-row').querySelector('.pace').textContent = pacePerMile(row.m, row.s); updateSplitSummary(); }
+  }));
   wrap.querySelectorAll('.split-row[data-i] input').forEach(inp=> inp.addEventListener('input', ()=>{
     const row = splitRows[Number(inp.closest('.split-row').dataset.i)];
     if(inp.dataset.k === 'm') row.m = parseInt(inp.value, 10) || 0;
@@ -4970,7 +5074,8 @@ function updateSplitSummary(){
   if(!ok.length){ $('splitSummary').textContent = ''; return; }
   const m = ok.reduce((a,r)=>a+r.m,0), sec = ok.reduce((a,r)=>a+r.s,0);
   const same = ok.every(r=>r.m === ok[0].m);
-  $('splitSummary').textContent = `${same ? `${ok.length} x ${ok[0].m}m · avg ${clock(sec / ok.length)}` : `${ok.length} reps · ${(m/1609.344).toFixed(2)} mi`} · ${pacePerMile(m, sec)}/mi`;
+  const miles = tlTrack ? `${Math.round(m / 200) / 8} mi` : `${(m/1609.344).toFixed(2)} mi`;
+  $('splitSummary').textContent = `${same ? `${ok.length} x ${ok[0].m}m · avg ${clock(sec / ok.length)}` : `${ok.length} reps · ${miles}`} · ${pacePerMile(m, sec)}/mi`;
 }
 
 const SESSION_LABEL = { easy:'Easy run', recovery:'Recovery run', long:'Long run', workout:'Workout', race:'Race', shakeout:'Shakeout', crosstrain:'Cross-training' };
@@ -5005,8 +5110,8 @@ async function renderTrainingDay(){
   $('tlDifficulty').value = locked ? '' : (day.difficulty ?? '');
 
   $('tlSessions').innerHTML = (day.sessions || []).map(sx=>{
-    const meta = [sx.start && sx.start, `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `effort ${sx.effort}`].filter(Boolean).join(' · ');
-    const acts = sx.activities.length > 1 ? `<div class="session-acts">${sx.activities.map(a=>`<span>${escapeHtml(a.start ? a.start + ' ' : '')}${escapeHtml(cap(a.category))} ${a.miles != null ? Math.round(a.miles*10)/10 + ' mi' : ''}</span>`).join('')}</div>` : '';
+    const meta = [sx.start && sx.start, sx.track && 'Track', `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `effort ${sx.effort}`].filter(Boolean).join(' · ');
+    const acts = sx.activities.length > 1 ? `<div class="session-acts">${sx.activities.map(a=>`<span>${escapeHtml(a.start ? a.start + ' ' : '')}${escapeHtml(cap(a.category))} ${a.miles != null ? Math.round(a.miles*100)/100 + ' mi' : ''}</span>`).join('')}</div>` : '';
     return `<div class="session">
       <div class="session-head"><span class="list-title">${escapeHtml(sx.title && !/^(morning|afternoon|evening|lunch|night)? ?run$/i.test(sx.title) ? sx.title : SESSION_LABEL[sx.category] || 'Run')}</span><span class="badge ${toneOf(sx.category)}">${escapeHtml(cap(sx.category))}</span></div>
       <div class="session-meta num">${escapeHtml(meta)}</div>
@@ -5020,6 +5125,9 @@ async function renderTrainingDay(){
   $('tlEvents').innerHTML = evs.map(ev=>{ const st = eventStyle(ev); return `<div class="tl-event"><i style="background:${st.color}"></i><span>${escapeHtml(ev.title)}${ev.time ? ' · ' + escapeHtml(formatEventTimeRange(ev)) : ''}</span><button type="button" class="ghost sm-btn" data-cal="${tlSelected}" style="margin-left:auto;">Calendar</button></div>`; }).join('');
   $('tlEvents').querySelectorAll('[data-cal]').forEach(b=> b.addEventListener('click', ()=> openCalendarDay(b.dataset.cal)));
 
+  tlTrack = !!day.track;
+  $('tlTrack').checked = tlTrack;
+  $('tlTrackHint').textContent = day.locked ? 'The workout snaps to the lines: reps to 100 m, miles to eighths, no elevation.' : 'Reps round to the nearest 100 m and a mile is 1600 m.';
   splitRows = (day.split_reps || []).map(r=>({ m: r.m, s: r.s, rest: r.rest || '' }));
   renderSplitBuilder();
 
@@ -5062,7 +5170,8 @@ async function saveTrainingDay(){
     status: $('tlStatus').value,
     planned: $('tlPlanned').value,
     library_id: $('tlLibrary').value,
-    split_reps: splitRows.filter(r=>r.m > 0 && r.s > 0).map(r=>({ m: r.m, s: r.s, rest: (r.rest || '').trim() })),
+    split_reps: splitRows.filter(r=>r.m > 0 && r.s > 0).map(r=>({ m: tlTrack ? snapTrack(r.m) : r.m, s: r.s, rest: (r.rest || '').trim() })),
+    surface: tlTrack ? 'track' : '',
     summary: $('tlSummary').value,
     feel: num('tlFeel'),
     sleep_hours: num('tlSleep'),

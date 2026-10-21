@@ -513,3 +513,24 @@ export function workoutTargets(w, fitness) {
   }
   return out;
 }
+
+// ------------------------------------------------------------------ track
+
+// On the track, distances are what the lines say, not what GPS says: reps
+// snap to the nearest 100 m, a mile is 1600 m, mileage is in eighths (one
+// eighth = 200 m) and there is no elevation.
+export const TRACK_MILE_M = 1600;
+export const snap100 = (m) => Math.max(100, Math.round(m / 100) * 100);
+export const trackMiles = (mi) => Math.round(mi * 8) / 8;
+export const trackMilesFromMeters = (m) => Math.round((m / TRACK_MILE_M) * 8) / 8;
+
+// A watch session that was run on a track: "track" in the name or sport,
+// or flat work reps that sit on 100 m marks (not mile/km auto-laps).
+export function looksLikeTrack({ name = '', type = '', elevFtPerMile = 0, laps = [] }) {
+  if (/track/i.test(type) || /\btrack\b|\boval\b|\d+\s*x\s*[2-8]00\b/i.test(name)) return true;
+  if (laps.length < 3 || elevFtPerMile > 20) return false;
+  const autoLaps = laps.every((l) => Math.abs(l.m - 1609) < 25 || Math.abs(l.m - 1000) < 20);
+  if (autoLaps) return false;
+  const onMarks = laps.filter((l) => l.m >= 150 && Math.abs(l.m - snap100(l.m)) <= Math.max(12, l.m * 0.035));
+  return onMarks.length / laps.length >= 0.8;
+}

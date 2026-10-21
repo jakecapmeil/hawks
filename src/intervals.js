@@ -13,11 +13,12 @@ import { logWorkouts, todayInTz, COACH_RUBRIC } from './coach.js';
 import { saveDay, sessionsOf } from './log.js';
 import { reportSessions, AiError } from './gemini.js';
 import { recomputeFitness } from './fitness.js';
+import { looksLikeTrack, snap100, trackMilesFromMeters, TRACK_MILE_M } from './workouts.js';
 
 export class IntervalsError extends Error {}
 
 const API = 'https://intervals.icu/api/v1'; // ICU_API_BASE overrides it for local testing
-const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun', 'Treadmill']);
+const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun', 'Treadmill', 'TrackRun']);
 const FIRST_SYNC_DAYS = 28;
 const MAX_LAP_FETCHES = 8; // Workers cap subrequests per invocation
 const IMPORT_WINDOW_DAYS = 90;
@@ -106,18 +107,25 @@ function fmtTime(sec) {
   return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`;
 }
 
-// WORK intervals -> "800m 2:45 (5:32/mi, 178)" style splits.
-function splitsFrom(intervals) {
-  const work = (intervals || []).filter((i) => i.type === 'WORK' && i.distance > 50 && i.moving_time > 0);
-  if (work.length < 2) return { work: [], text: '', laps: [] };
-  const laps = work.slice(0, 40).map((i) => ({ m: Math.round(i.distance), s: i.moving_time, hr: i.average_heartrate ? Math.round(i.average_heartrate) : null }));
-  const text = work.slice(0, 20).map((i) => {
-    const m = Math.round(i.distance);
-    const dist = m >= 1500 && Math.abs(m - 1609) < 40 ? '1 mi' : `${m}m`;
-    const hr = i.average_heartrate ? `, ${Math.round(i.average_heartrate)}` : '';
-    return `${dist} ${fmtTime(i.moving_time)} (${fmtPace(i.moving_time / (i.distance / 1609.344))}/mi${hr})`;
+// WORK intervals -> "800m 2:45 (5:32/mi, 178)" style splits. On the track
+// the reps read as the lines (nearest 100 m) and a mile is 1600 m.
+function splitsText(laps, track) {
+  return laps.slice(0, 20).map((l) => {
+    const m = track ? snap100(l.m) : l.m;
+    const mile = track ? TRACK_MILE_M : 1609.344;
+    const dist = !track && m >= 1500 && Math.abs(m - 1609) < 40 ? '1 mi' : `${m}m`;
+    return `${dist} ${fmtTime(l.s)} (${fmtPace(l.s / (m / mile))}/mi${l.hr ? `, ${l.hr}` : ''})`;
   }).join('; ');
-  return { work, text, laps };
+}
+
+function splitsFrom(intervals) {
+  const all = (intervals || []).filter((i) => i.distance > 0);
+  const work = all.filter((i) => i.type === 'WORK' && i.distance > 50 && i.moving_time > 0);
+  // Every segment snapped to the lines: the session's distance if it was on a track.
+  const trackM = all.reduce((a, i) => a + (i.distance >= 50 ? snap100(i.distance) : 0), 0);
+  if (work.length < 2) return { work: [], laps: [], trackM };
+  const laps = work.slice(0, 40).map((i) => ({ m: Math.round(i.distance), s: i.moving_time, hr: i.average_heartrate ? Math.round(i.average_heartrate) : null }));
+  return { work, laps, trackM };
 }
 
 // The pre-built, no-AI classifier: HR share of max, structure and distance.
@@ -195,18 +203,20 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
   const order = [...fresh].sort((x, y) => Number(wantsLaps(y, maxHr)) - Number(wantsLaps(x, maxHr)) || String(y.start_date_local).localeCompare(String(x.start_date_local)));
   for (const a of order) {
     let work = [];
-    let splits = '';
     let laps = [];
+    let trackM = 0;
     if (wantsLaps(a, maxHr) && lapFetches < lapBudget) {
       lapFetches++;
       try {
         const iv = await icu(key, `/activity/${encodeURIComponent(a.id)}/intervals`, env);
-        ({ work, text: splits, laps } = splitsFrom(iv?.icu_intervals));
+        ({ work, laps, trackM } = splitsFrom(iv?.icu_intervals));
       } catch { /* laps are a nice-to-have */ }
     }
     const date = dateOf(a);
     const wk = date.slice(0, 8) + String(Math.floor(Number(date.slice(8)) / 7));
-    runs.push({ a, work, splits, laps, date, start: timeOf(a), category: ruleCategory(a, work, maxHr, weekLongest.get(wk) || 0) });
+    const miles = a.distance / 1609.344;
+    const track = RUN_TYPES.has(a.type) && looksLikeTrack({ name: a.name || '', type: a.type, elevFtPerMile: ((a.total_elevation_gain || 0) * 3.281) / Math.max(miles, 0.1), laps });
+    runs.push({ a, work, laps, track, trackM, splits: laps.length ? splitsText(laps, track) : '', date, start: timeOf(a), category: ruleCategory(a, work, maxHr, weekLongest.get(wk) || 0) });
   }
   runs.sort((x, y) => (x.date + x.start).localeCompare(y.date + y.start));
 
@@ -234,7 +244,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
               id: x.id, start: r.start, name: r.a.name || '', type: r.a.type, rule_category: r.category,
               miles: Math.round(r.a.distance / 16.09344) / 100, minutes: Math.round(r.a.moving_time / 60),
               pace: fmtPace(r.a.moving_time / (r.a.distance / 1609.344)), avg_hr: r.a.average_heartrate || null, max_hr: r.a.max_heartrate || null,
-              laps: r.splits || null, athlete_note: (r.a.description || '').slice(0, 300) || null,
+              laps: r.splits || null, on_track: r.track || undefined, athlete_note: (r.a.description || '').slice(0, 300) || null,
             };
           }),
         });
@@ -256,7 +266,11 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
   const rows = runs.map((r) => ({
     source: 'intervals', activity_id: String(r.a.id), date: r.date, name: r.a.name || '', sport: r.a.type,
     category: catById.get(String(r.a.id)) || r.category,
-    distance_mi: Math.round(r.a.distance / 16.09344) / 100, moving_sec: r.a.moving_time, elapsed_sec: r.a.elapsed_time,
+    // On the track the session's miles come from its segments snapped to the lines.
+    distance_mi: r.track && r.trackM ? trackMilesFromMeters(r.trackM) : Math.round(r.a.distance / 16.09344) / 100,
+    raw_distance_mi: Math.round(r.a.distance / 16.09344) / 100,
+    surface: r.track ? 'track' : '',
+    moving_sec: r.a.moving_time, elapsed_sec: r.a.elapsed_time,
     avg_hr: r.a.average_heartrate, max_hr: r.a.max_heartrate, avg_cadence: r.a.average_cadence,
     elev_gain_ft: r.a.total_elevation_gain != null ? Math.round(r.a.total_elevation_gain * 3.281) : null,
     start_local: r.start, laps: r.laps,
@@ -272,7 +286,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
     if (!r.splits) continue;
     const existing = await db.prepare('SELECT splits FROM training_days WHERE person_id = ? AND date = ?').bind(person.id, r.date).first();
     if (existing?.splits) continue;
-    await saveDay(db, person.id, r.date, { splits: r.splits, types: dayTypes(catById.get(String(r.a.id)) || r.category, r.work) });
+    await saveDay(db, person.id, r.date, { splits: r.splits, types: dayTypes(catById.get(String(r.a.id)) || r.category, r.work), ...(r.track ? { surface: 'track' } : {}) });
   }
   for (const d of ai?.days || []) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(d?.date || '') && d.line) await saveDay(db, person.id, d.date, { day_line: d.line });

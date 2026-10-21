@@ -8,6 +8,7 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
 import { logTools, callLogTool, LogError, getDays, fiveKFor, getPrs, PR_EVENTS } from './log.js';
 import { getFitness } from './fitness.js';
+import { trackMiles } from './workouts.js';
 
 export class CoachError extends Error {}
 
@@ -44,6 +45,8 @@ Hawks shows plan match per DAY, not per activity: a warm-up, workout and cool-do
 SESSIONS: activities less than ~75 min apart are one session. Write ONE report per session on its main activity (the workout, race or longest run) and leave the warm-up/cool-down summaries empty.
 
 YOUR NOTE (summary, 2-4 sentences, on the session's main activity): what the session was, how it compared to the plan, how the reps or pace compared to the runner's Fitness States paces, and one useful coaching point (pacing, HR drift, cadence under ~165 spm, too fast on an easy day, a strong workout). Be honest but encouraging, like a good high school XC coach.
+
+TRACK: if a session was on a track (the watch says track run, the name says track, or the reps land on 200/400/800/1600 marks on flat ground), send surface "track". Report track reps as 200/400/800/1200/1600 m (round to the nearest 100 m, a mile is 1600 m) and track mileage in eighths of a mile. No elevation on the track.
 
 FITNESS STATES: fitness (in get_coach_context) holds the runner's current estimates for 400 to half marathon, VO2max estimate, recent mileage and pace zones. Use those paces for every workout target. Never invent a pace that isn't from there or from the library.
 
@@ -179,17 +182,23 @@ function cleanWorkout(raw) {
   const strava_id = source === 'strava' ? rawId : `${source}:${rawId}`;
   const category = clip(raw?.category, 20).toLowerCase();
   if (!CATEGORIES.includes(category)) throw new CoachError(`Workout ${strava_id}: category must be one of ${CATEGORIES.join(', ')}`);
+  const surface = raw?.surface === 'track' ? 'track' : '';
+  const gpsMi = num(raw.raw_distance_mi ?? raw.distance_mi, { max: 200 });
+  const gpsElev = r(num(raw.elev_gain_ft, { max: 50000 }));
   return {
-    strava_id, date, category,
+    strava_id, date, category, surface,
+    raw_distance_mi: gpsMi,
+    raw_elev_ft: gpsElev,
     name: clip(raw.name, 200),
     sport: clip(raw.sport, 40) || 'Run',
-    distance_mi: num(raw.distance_mi, { max: 200 }),
+    // On the track: miles in eighths (200 m) and no elevation.
+    distance_mi: surface ? (num(raw.distance_mi, { max: 200 }) != null ? trackMiles(num(raw.distance_mi, { max: 200 })) : null) : num(raw.distance_mi, { max: 200 }),
     moving_sec: r(num(raw.moving_sec, { max: 86400 })),
     elapsed_sec: r(num(raw.elapsed_sec, { max: 172800 })),
     avg_hr: r(num(raw.avg_hr, { min: 30, max: 250 })),
     max_hr: r(num(raw.max_hr, { min: 30, max: 250 })),
     avg_cadence: cadenceSpm(num(raw.avg_cadence, { max: 260 })),
-    elev_gain_ft: r(num(raw.elev_gain_ft, { max: 50000 })),
+    elev_gain_ft: surface ? 0 : gpsElev,
     start_local: /^\d{1,2}:\d{2}$/.test(clip(raw.start_local, 5)) ? clip(raw.start_local, 5).padStart(5, '0') : '',
     laps: cleanLaps(raw.laps),
     summary: clip(raw.summary, 1000),
@@ -349,8 +358,9 @@ export async function logWorkouts(db, person, list) {
     results.push({ strava_id: w.strava_id, date: w.date, category: w.category, planned: planned ? `${planned.type} ${planned.detail}` : null, effort, load, plan_score });
     return db.prepare(
       `INSERT INTO workouts (id, person_id, strava_id, date, name, sport, category, distance_mi, moving_sec, elapsed_sec,
-         avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, start_local, laps, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, start_local, laps,
+         surface, raw_distance_mi, raw_elev_ft, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(person_id, strava_id) DO UPDATE SET
          date=excluded.date, name=COALESCE(NULLIF(excluded.name, ''), name), sport=excluded.sport, category=excluded.category,
          distance_mi=COALESCE(excluded.distance_mi, distance_mi), moving_sec=COALESCE(excluded.moving_sec, moving_sec),
@@ -361,11 +371,14 @@ export async function logWorkouts(db, person, list) {
          plan_score=excluded.plan_score, load=excluded.load, rating=excluded.rating,
          summary=COALESCE(NULLIF(excluded.summary, ''), summary), library_id=COALESCE(NULLIF(excluded.library_id, ''), library_id),
          start_local=COALESCE(NULLIF(excluded.start_local, ''), start_local), laps=COALESCE(NULLIF(excluded.laps, ''), laps),
+         surface=CASE WHEN excluded.surface = 'track' THEN 'track' ELSE surface END,
+         raw_distance_mi=COALESCE(excluded.raw_distance_mi, raw_distance_mi), raw_elev_ft=COALESCE(excluded.raw_elev_ft, raw_elev_ft),
          updated_at=excluded.updated_at`
     ).bind(
       'w_' + crypto.randomUUID(), person.id, w.strava_id, w.date, w.name, w.sport, w.category, w.distance_mi,
       w.moving_sec, w.elapsed_sec, w.avg_hr, w.max_hr, w.avg_cadence, w.elev_gain_ft,
-      planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, w.library_id, w.start_local, w.laps, now, now
+      planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, w.library_id, w.start_local, w.laps,
+      w.surface, w.raw_distance_mi, w.raw_elev_ft, now, now
     );
   });
   await db.batch(stmts);
@@ -454,6 +467,7 @@ export const COACH_TOOLS = [
               avg_cadence: { type: 'integer', description: 'Average cadence as the connector reports it; Hawks doubles one-foot values (under 120) automatically.' },
               elev_gain_ft: { type: 'integer', description: 'Feet (meters x 3.281)' },
               start_local: { type: 'string', description: 'Local start time HH:MM (groups warm-up, workout and cool-down into one session)' },
+              surface: { type: 'string', enum: ['track', ''], description: '"track" for sessions run on a track: Hawks rounds reps to 100 m and miles to eighths, and drops elevation' },
               laps: { type: 'array', description: 'Work reps only (not warm-up/recovery): meters, seconds, avg HR', items: { type: 'object', properties: { m: { type: 'number' }, s: { type: 'number' }, hr: { type: 'number' } }, required: ['m', 's'] } },
               summary: { type: 'string', description: 'Session report (2-4 sentences) on the main activity of the session; empty for warm-ups and cool-downs' },
               library_id: { type: 'string', description: 'Workout library id if this run was a library workout (see find_workouts)' },

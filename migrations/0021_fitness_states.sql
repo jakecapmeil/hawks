@@ -29,6 +29,14 @@ ALTER TABLE people ADD COLUMN icu_import_done INTEGER DEFAULT 0;
 ALTER TABLE workouts ADD COLUMN start_local TEXT DEFAULT '';
 ALTER TABLE workouts ADD COLUMN laps TEXT DEFAULT '';
 
+-- Track sessions: surface = 'track' snaps distances to the lines (reps to
+-- 100 m, miles to eighths) and drops elevation. The GPS numbers are kept in
+-- raw_* so the "On the track" toggle can be undone.
+ALTER TABLE workouts ADD COLUMN surface TEXT DEFAULT '';
+ALTER TABLE workouts ADD COLUMN raw_distance_mi REAL;
+ALTER TABLE workouts ADD COLUMN raw_elev_ft INTEGER;
+ALTER TABLE training_days ADD COLUMN surface TEXT DEFAULT '';
+
 -- Structured splits (JSON [{m, s, rest}]) behind the split builder; the
 -- `splits` text column is kept in sync for Hawky and older clients.
 -- day_line is Hawky's one-line summary of the whole day.

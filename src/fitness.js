@@ -19,7 +19,7 @@
 //      exponent vs Daniels') shifts every distance.
 //   4. Mileage: 10K and half estimates are slowed for low weekly mileage,
 //      since VDOT alone over-predicts long races for low-volume runners.
-import { parseReps } from './workouts.js';
+import { parseReps, snap100 } from './workouts.js';
 
 const DAY = 86400000;
 const MILE = 1609.344;
@@ -111,11 +111,11 @@ async function loadInputs(db, personId, today) {
   const [person, workouts, days, maxRow] = await Promise.all([
     db.prepare('SELECT id, prs, five_k_time, five_k_set_at FROM people WHERE id = ?').bind(personId).first(),
     db.prepare(
-      `SELECT date, name, category, distance_mi, moving_sec, avg_hr, max_hr, elev_gain_ft, laps
+      `SELECT date, name, category, distance_mi, moving_sec, avg_hr, max_hr, elev_gain_ft, laps, surface
        FROM workouts WHERE person_id = ? AND date >= ? ORDER BY date`
     ).bind(personId, since).all(),
     db.prepare(
-      'SELECT date, manual_miles, splits, split_reps FROM training_days WHERE person_id = ? AND date >= ?'
+      'SELECT date, manual_miles, splits, split_reps, surface FROM training_days WHERE person_id = ? AND date >= ?'
     ).bind(personId, since).all(),
     db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(personId).first(),
   ]);
@@ -146,7 +146,13 @@ function milesBetween(workouts, days, from, to) {
 }
 
 // Work reps for a day: the watch laps if there are any, else the split builder.
+// Track reps read as the lines.
 function repsOf(w, dayRow) {
+  const track = w?.surface === 'track' || dayRow?.surface === 'track';
+  return rawReps(w, dayRow).map((r) => (track ? { ...r, m: snap100(r.m) } : r));
+}
+
+function rawReps(w, dayRow) {
   const out = [];
   try { for (const r of JSON.parse(w?.laps || '[]')) if (r.m > 0 && r.s > 0) out.push({ m: r.m, s: r.s }); } catch { /* ignore */ }
   if (out.length) return out;

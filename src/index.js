@@ -1,7 +1,7 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
-import { logTools, callLogTool, LogError, getLog, saveDay, libraryMeta, setFiveK, fiveKFor, setPrs, getPrs } from './log.js';
+import { logTools, callLogTool, LogError, getLog, saveDay, setDayTrack, libraryMeta, setFiveK, fiveKFor, setPrs, getPrs } from './log.js';
 import { WORKOUTS, WORKOUT_GROUPS, workoutGroup, workoutTargets } from './workouts.js';
-import { todayInTz, getCoachContext } from './coach.js';
+import { todayInTz, getCoachContext, compactFitness } from './coach.js';
 import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
 import { aiEnabled, askCoach, AiError } from './gemini.js';
@@ -1217,8 +1217,56 @@ async function handleMcp(request, env, ctx) {
 // token is in the path because claude.ai custom connectors can't send headers.
 async function handleCoachMcp(request, env, token) {
   const person = await personForToken(env.DB, token);
-  if (!person) return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unknown Hawky link. Get a new one from Hawks > You > Settings > Hawky in Claude.' } }, 401);
-  return await serveMcp(request, 'hawks-coach', COACH_TOOLS, (name, args) => callCoachTool(env.DB, person, name, args));
+  if (!person) return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unknown Hawky link. Get a new one from Hawks > You > Settings.' } }, 401);
+  return await serveMcp(request, 'hawky', [...WATCH_TOOLS, ...COACH_TOOLS], (name, args) =>
+    (WATCH_TOOLS.some((t) => t.name === name) ? callWatchTool(env, person, name, args || {}) : callCoachTool(env.DB, person, name, args)));
+}
+
+// Watch setup through Hawky, so the runner's own Claude can do the Hawks side
+// of the setup: connect intervals.icu with the id and key the runner pastes,
+// pull their history, and show their Fitness States. Making the intervals.icu
+// account and linking Garmin there still needs the runner's own logins.
+const WATCH_TOOLS = [
+  {
+    name: 'watch_status',
+    description: "Whether this runner's watch (Garmin/COROS via intervals.icu) is connected to Hawks, when it last synced, and whether their full history has been imported. Call it at the start of setup.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'connect_watch',
+    description: "Connect the runner's intervals.icu account to Hawks with the athlete id (looks like i12345) and API key they paste from intervals.icu Settings > Developer Settings. Hawks checks them, stores the key encrypted, and syncs the last 4 weeks. After this, call sync_watch with full_history until done.",
+    inputSchema: { type: 'object', required: ['athlete_id', 'api_key'], properties: { athlete_id: { type: 'string' }, api_key: { type: 'string' } }, additionalProperties: false },
+  },
+  {
+    name: 'sync_watch',
+    description: 'Pull new runs from the watch now. With full_history: true it imports about 3 months of older history per call, newest first; keep calling until done is true (usually 3-8 calls). Then call get_fitness.',
+    inputSchema: { type: 'object', properties: { full_history: { type: 'boolean' } }, additionalProperties: false },
+  },
+  {
+    name: 'get_fitness',
+    description: "The runner's Fitness States: current race estimates from 400 m to half marathon, VO2max estimate, weekly mileage, pace zones and what they're based on. Recalculated fresh.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+];
+
+async function callWatchTool(env, person, name, args) {
+  try {
+    if (name === 'watch_status') return await icuStatus(env.DB, person.id);
+    if (name === 'connect_watch') {
+      const res = await icuConnect(env, person.id, args.athlete_id, args.api_key);
+      const sync = await syncPerson(env, person.id);
+      return { ...res, synced: sync, next: 'Call sync_watch with full_history: true until done.' };
+    }
+    if (name === 'sync_watch') {
+      if (args.full_history) return await importHistory(env, person.id);
+      return await syncPerson(env, person.id);
+    }
+    if (name === 'get_fitness') return compactFitness(await recomputeFitness(env.DB, person.id, todayInTz()));
+  } catch (err) {
+    if (err instanceof IntervalsError) throw new McpToolError(err.message);
+    throw err;
+  }
+  throw new McpToolError(`Unknown tool: ${name}`);
 }
 
 async function serveMcp(request, serverName, tools, call) {
@@ -1602,9 +1650,14 @@ export default {
         if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
         if (pathname === '/api/people/personal') return await upsertPersonal(env.DB, body, env, ctx);
         if (pathname === '/api/travel-estimate') return await upsertTravelEstimate(env.DB, body);
-        if (pathname === '/api/log/day' || pathname === '/api/people/5k' || pathname === '/api/people/prs' || pathname === '/api/fitness/refresh') {
+        if (pathname === '/api/log/day' || pathname === '/api/log/track' || pathname === '/api/people/5k' || pathname === '/api/people/prs' || pathname === '/api/fitness/refresh') {
           const personId = str(body.personId, 100);
           try {
+            if (pathname === '/api/log/track') {
+              const day = await setDayTrack(env.DB, personId, str(body.date, 10), body.track === true);
+              await env.DB.prepare('UPDATE fitness_states SET computed_at = 0 WHERE person_id = ?').bind(personId).run();
+              return json(day);
+            }
             if (pathname === '/api/fitness/refresh') return json({ fitness: await recomputeFitness(env.DB, personId, todayInTz()) });
             if (pathname === '/api/people/prs') {
               const out = await setPrs(env.DB, personId, body.prs);
