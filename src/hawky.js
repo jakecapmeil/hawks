@@ -74,7 +74,8 @@ export async function healthSummary(db, person, today) {
   // Sleep: the watch if it has it, else what the runner logged.
   const sleepByDate = new Map();
   days.results.forEach((d) => { if (d.sleep_hours) sleepByDate.set(d.date, d.sleep_hours); });
-  w.forEach((r) => { if (r.sleep_hours) sleepByDate.set(r.date, r.sleep_hours); });
+  // Watch sleep over 12 h is the watch counting time off-wrist or in bed, not sleep.
+  w.forEach((r) => { if (r.sleep_hours >= 3 && r.sleep_hours <= 12) sleepByDate.set(r.date, r.sleep_hours); });
   const sleep3 = avg([...sleepByDate.entries()].filter(([d]) => d > addDays(today, -3)).map(([, h]) => h));
   const sleep7 = avg([...sleepByDate.entries()].filter(([d]) => d > addDays(today, -7)).map(([, h]) => h));
   const feels = days.results.filter((d) => d.feel != null);
