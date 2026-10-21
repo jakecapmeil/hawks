@@ -28,7 +28,9 @@ async function spend(db, personId, today) {
 
 async function generate(env, { system, prompt, schema, maxTokens = 1024 }) {
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  // GEMINI_API_BASE overrides the endpoint for local testing.
+  const base = env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com';
+  const res = await fetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
     body: JSON.stringify({
@@ -96,13 +98,13 @@ const SESSION_SCHEMA = {
 };
 
 // sessions: [{ key, date, activities: [{ id, start, name, rule_category, miles, minutes, pace, avg_hr, laps }] }]
-export async function reportSessions(env, db, person, sessions, { rubric, maxHr, today }) {
+export async function reportSessions(env, db, person, sessions, { rubric, maxHr, today, body }) {
   if (!aiEnabled(env) || !sessions.length) return null;
   await spend(db, person.id, today);
   const acts = sessions.reduce((n, x) => n + x.activities.length, 0);
   const out = await generate(env, {
     system: `You are Hawky, the Hawks cross country team's AI coach, reviewing a high school runner's synced training. Follow this rubric exactly; only the CATEGORY and the session REPORT are your job.\n\n${rubric}`,
-    prompt: `Runner: ${person.first_name || person.name}. Max HR used: ${maxHr}.
+    prompt: `Runner: ${person.first_name || person.name}. Max HR used: ${maxHr}.${body ? `\nBody right now: ${JSON.stringify(body)} (mention it if a session ran on something marked sore or pain).` : ''}
 Activities are already grouped into sessions (warm-up, workout and cool-down saved separately are ONE session). For each session return:
 - main_id: the main activity (the workout, race or longest run)
 - activities: every activity id with one category (warm-ups/cool-downs around a workout are "easy"). rule_category is a math-based guess; change it only when laps, HR or the name clearly say otherwise.
@@ -116,14 +118,57 @@ ${JSON.stringify(sessions)}`,
   return out && Array.isArray(out.sessions) ? out : null;
 }
 
-export async function askCoach(env, db, person, question, context, today) {
+// What Hawky can save from a chat: how a day felt, sleep, a note, body map
+// changes and health status. The server checks every value before saving.
+const CHAT_SCHEMA = {
+  type: 'object',
+  properties: {
+    answer: { type: 'string' },
+    log: {
+      type: 'object',
+      description: 'Only when the runner told you how a day felt, how they slept, or something worth noting about a day.',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD of the day they mean' },
+        feel: { type: 'integer', description: '1 (awful) to 10 (great)' },
+        sleep_hours: { type: 'number' },
+        note: { type: 'string', description: 'Short note in their words, e.g. "legs heavy on the last 2 reps"' },
+      },
+    },
+    body: {
+      type: 'array',
+      description: 'Only when the runner says a body part is sore, painful, or better now.',
+      items: {
+        type: 'object',
+        properties: { part: { type: 'string', description: 'A part id from body_parts' }, status: { type: 'string', enum: ['sore', 'pain', 'none'] } },
+        required: ['part', 'status'],
+      },
+    },
+    health_status: { type: 'string', enum: ['healthy', 'injured', 'sick'], description: 'Only when the runner says they are sick, injured, or better.' },
+  },
+  required: ['answer'],
+};
+
+// history: [{ role: 'user' | 'hawky', text }], oldest first, ending with the
+// runner's new message.
+export async function askCoach(env, db, person, history, context, today, bodyParts) {
   if (!aiEnabled(env)) throw new AiError('AI is not set up for this app.');
-  const q = String(question || '').trim().slice(0, 1000);
-  if (!q) throw new AiError('Ask a question first.');
+  const turns = (Array.isArray(history) ? history : []).slice(-12)
+    .map((m) => ({ role: m?.role === 'hawky' ? 'Hawky' : 'Runner', text: String(m?.text || '').trim().slice(0, 1000) }))
+    .filter((m) => m.text);
+  if (!turns.length || turns[turns.length - 1].role !== 'Runner') throw new AiError('Ask a question first.');
   await spend(db, person.id, today);
   return await generate(env, {
-    system: `You are Hawky, the Hawks cross country team's AI coach, talking to one high school runner. Be specific, encouraging and brief (under 200 words). Base answers on their data below: training plan, log, PRs, Fitness States (race estimates, VO2max estimate, mileage, pace zones) and the team's workout library. Every pace you give must come from their Fitness States paces. When suggesting a workout, prefer one from the library, lay it out as warm-up / main set with rep targets / cool-down, and give each rep's target time from their paces. Never give medical diagnoses: for pain that lasts or gets worse, tell them to talk to their coach or a doctor. If the data doesn't answer the question, say so.`,
-    prompt: `Today is ${today}.\n\nRUNNER DATA:\n${JSON.stringify(context)}\n\nQUESTION: ${q}`,
-    maxTokens: 700,
+    system: `You are Hawky, the Hawks cross country team's AI coach, chatting with one high school runner. Be specific, warm and brief (under 150 words), like a good coach checking in.
+
+Base answers on their data below: training plan, log, how each day felt and how they slept, body (health status and body map: parts marked sore or pain), PRs, Fitness States (race estimates, VO2max estimate, mileage, pace zones) and the team's workout library. Every pace you give must come from their Fitness States paces. When suggesting a workout, prefer one from the library, lay it out as warm-up / main set with rep targets / cool-down, and give each rep's target time.
+
+CHECK IN like a coach. If a recent run day has no feel or sleep logged, or a body part is marked sore or pain, ask about it, one short question at a time, at the end of your answer (e.g. "How did the 6x800 feel, 1 to 10?" or "Is the left calf still sore?"). Let soreness and how they feel change your advice: back off when something hurts or they're tired.
+
+SAVE what they tell you. When the runner says how a day felt, how they slept, or something about a day, fill log (feel 1-10 where 10 is great; pick the date they mean, default today or the most recent run). When they say a body part is sore, painful or better, fill body with the matching id from body_parts ("none" clears it). When they say they're sick, injured or better, set health_status. Mention briefly in your answer what you saved. Never save anything they didn't say.
+
+Never give medical diagnoses: for pain that lasts or gets worse, tell them to talk to their coach or a doctor. If the data doesn't answer the question, say so.`,
+    prompt: `Today is ${today}.\n\nRUNNER DATA:\n${JSON.stringify(context)}\n\nbody_parts (id: name): ${JSON.stringify(bodyParts)}\n\nCONVERSATION:\n${turns.map((m) => `${m.role}: ${m.text}`).join('\n')}\n\nReply as Hawky to the runner's last message.`,
+    schema: CHAT_SCHEMA,
+    maxTokens: 900,
   });
 }

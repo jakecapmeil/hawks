@@ -9,7 +9,7 @@
 // it's set up, refines the category and writes one report per session.
 // Scoring is the same logWorkouts path Hawky in Claude uses. Old history is
 // imported in chunks with rules only, so it never spends the AI quota.
-import { logWorkouts, todayInTz, COACH_RUBRIC } from './coach.js';
+import { logWorkouts, todayInTz, COACH_RUBRIC, bodyStatus } from './coach.js';
 import { saveDay, sessionsOf } from './log.js';
 import { reportSessions, AiError } from './gemini.js';
 import { recomputeFitness } from './fitness.js';
@@ -251,7 +251,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
       }
     }
     try {
-      ai = await reportSessions(env, db, person, sessions, { rubric: COACH_RUBRIC, maxHr, today });
+      ai = await reportSessions(env, db, person, sessions, { rubric: COACH_RUBRIC, maxHr, today, body: await bodyStatus(db, person.id) });
     } catch (err) {
       aiNote = err instanceof AiError ? err.message : 'AI unavailable';
     }

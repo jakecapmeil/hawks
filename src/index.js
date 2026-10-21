@@ -4,6 +4,7 @@ import { WORKOUTS, WORKOUT_GROUPS, workoutGroup, workoutTargets } from './workou
 import { todayInTz, getCoachContext, compactFitness } from './coach.js';
 import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
+import { BODY_PARTS } from './body.js';
 import { aiEnabled, askCoach, AiError } from './gemini.js';
 import { COACH_TOOLS, callCoachTool, personForToken, workoutsForApp, issueCoachToken, teamTraining } from './coach.js';
 
@@ -1484,6 +1485,42 @@ async function sendMeetDayReminders(env) {
   return { sent };
 }
 
+// What Hawky heard in the chat, checked and saved: a day's feel, sleep and a
+// note; body map changes; health status. Returns short labels for the page.
+async function applyHawkySaves(db, personId, out) {
+  const saved = [];
+  const today = todayInTz();
+  const log = out?.log;
+  if (log && /^\d{4}-\d{2}-\d{2}$/.test(log.date || '') && log.date <= today && log.date >= todayInTz(new Date(Date.now() - 14 * 86400000))) {
+    const fields = {};
+    const feel = Math.round(Number(log.feel));
+    if (feel >= 1 && feel <= 10) { fields.feel = feel; saved.push(`feel ${feel}/10`); }
+    const sleep = Number(log.sleep_hours);
+    if (sleep > 0 && sleep <= 16) { fields.sleep_hours = Math.round(sleep * 2) / 2; saved.push(`${fields.sleep_hours} h sleep`); }
+    const note = str(log.note, 300);
+    if (note) {
+      const row = await db.prepare('SELECT notes FROM training_days WHERE person_id = ? AND date = ?').bind(personId, log.date).first();
+      if (!(row?.notes || '').includes(note)) { fields.notes = str(row?.notes ? `${row.notes}\n${note}` : note, 2000); saved.push('a note'); }
+    }
+    if (Object.keys(fields).length) {
+      await saveDay(db, personId, log.date, fields);
+      const label = new Date(log.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      saved.splice(0, saved.length, `${saved.join(', ')} on ${label}`);
+    }
+  }
+  for (const b of Array.isArray(out?.body) ? out.body.slice(0, 6) : []) {
+    if (!BODY_PARTS[b?.part] || !['sore', 'pain', 'none'].includes(b?.status)) continue;
+    if (b.status === 'none') await db.prepare('DELETE FROM body_marks WHERE person_id = ? AND part = ?').bind(personId, b.part).run();
+    else await db.prepare('INSERT INTO body_marks (person_id, part, status) VALUES (?, ?, ?) ON CONFLICT(person_id, part) DO UPDATE SET status = excluded.status').bind(personId, b.part, b.status).run();
+    saved.push(`${BODY_PARTS[b.part]}: ${b.status === 'none' ? 'cleared' : b.status}`);
+  }
+  if (['healthy', 'injured', 'sick'].includes(out?.health_status)) {
+    await db.prepare('UPDATE people SET health_status = ? WHERE id = ?').bind(out.health_status, personId).run();
+    saved.push(`status: ${out.health_status}`);
+  }
+  return saved;
+}
+
 // Team mileage: weekly totals for the last 8 weeks and each athlete's week.
 // Synced runs count; hand-logged miles count on days with no synced runs.
 async function teamMileage(db) {
@@ -1701,7 +1738,9 @@ export default {
                 "SELECT date, library_id, splits, summary, difficulty FROM training_days WHERE person_id = ? AND (library_id != '' OR splits != '') ORDER BY date"
               ).bind(personId).all()).results;
               context.all_workout_sessions = sessions.map((d) => ({ date: d.date, workout: d.library_id || null, splits: d.splits || null, summary: (d.summary || '').slice(0, 200), difficulty: d.difficulty }));
-              return json({ answer: await askCoach(env, env.DB, person, body.question, context, todayInTz()) });
+              const history = Array.isArray(body.history) ? body.history : [{ role: 'user', text: body.question }];
+              const out = await askCoach(env, env.DB, person, history, context, todayInTz(), BODY_PARTS);
+              return json({ answer: String(out?.answer || ''), saved: await applyHawkySaves(env.DB, personId, out) });
             }
           } catch (err) {
             if (err instanceof IntervalsError || err instanceof AiError) return json({ error: err.message }, 400);

@@ -201,29 +201,24 @@
 
   /* header */
   header{
-    margin-bottom:4px;
+    margin-bottom:10px;
     display:flex;
-    align-items:flex-start;
+    align-items:center;
     justify-content:space-between;
     gap:12px;
   }
+  #whoCard{padding:10px 14px;margin-bottom:12px;}
   h1{
     font-family:var(--font-display);
     font-weight:900;
-    font-size:clamp(1.625rem,7.5vw,var(--fs-large-title));
-    letter-spacing:var(--tr-large-title);
+    font-size:clamp(1.25rem,5.6vw,1.5rem);
+    letter-spacing:-0.3px;
     margin:0;
     line-height:1.05;
+    white-space:nowrap;
   }
   h1 span{color:var(--gold);}
   #secretTapZone{color:var(--ink);cursor:pointer;user-select:none;-webkit-user-select:none;}
-  .tagline{
-    font-size:var(--fs-footnote);
-    line-height:var(--lh-footnote);
-    letter-spacing:var(--tr-footnote);
-    color:var(--ink-soft);
-    margin-top:3px;
-  }
 
   /* contact icons */
   .contact-row{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-top:2px;}
@@ -1245,7 +1240,15 @@
   .hawky-box .modal-head h3{display:flex;align-items:center;}
   .hawky-body{padding:4px 16px 18px;display:flex;flex-direction:column;gap:var(--sp-3);}
   .hawky-body .chip-scroll{margin:0 -16px;padding:0 16px 2px;}
-  .hawky-answer{background:var(--bg);border-radius:var(--r-control);padding:var(--sp-3);white-space:pre-wrap;font-size:var(--fs-subhead);line-height:1.5;max-height:50vh;overflow-y:auto;}
+  .hawky-thread{display:flex;flex-direction:column;gap:var(--sp-2);max-height:min(52vh,460px);overflow-y:auto;padding:2px 0;}
+  .hawky-msg{max-width:88%;padding:var(--sp-2) var(--sp-3);border-radius:14px;white-space:pre-wrap;font-size:var(--fs-subhead);line-height:1.45;}
+  .hawky-msg.hawky{align-self:flex-start;background:var(--bg);border-bottom-left-radius:4px;}
+  .hawky-msg.user{align-self:flex-end;background:var(--fill);color:var(--on-fill);border-bottom-right-radius:4px;}
+  .hawky-msg.typing{color:var(--ink-soft);}
+  .hawky-saved{align-self:flex-start;display:flex;flex-wrap:wrap;gap:4px;margin-top:-2px;}
+  .hawky-saved span{font-size:var(--fs-caption);font-weight:600;background:var(--int-1-bg);color:var(--int-1-ink);border-radius:var(--r-pill);padding:2px 8px;}
+  .hawky-compose{display:flex;gap:var(--sp-2);align-items:flex-end;}
+  .hawky-compose textarea{flex:1;min-height:48px;}
   .hawky-line{font-size:var(--fs-subhead);line-height:1.45;background:var(--gold-bg);color:var(--gold-ink);border-radius:var(--r-control);padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);}
   .hawky-note{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-subhead);line-height:1.45;background:var(--bg);border-radius:var(--r-control);padding:var(--sp-3);}
   .hawky-note b{font-size:var(--fs-caption);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
@@ -1402,6 +1405,10 @@
   .import-bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .4s ease;}
 
   /* ---- Calendar: event chips (desktop) and the log link ------------------- */
+  /* Posts sit under the calendar (desktop places them with grid areas). */
+  #schCalView{display:flex;flex-direction:column;}
+  #schCalView > #postCard{order:3;}
+  #schCalView > #dayDetail{order:2;}
   .ev-chips{display:none;flex-direction:column;gap:2px;margin-top:3px;min-width:0;}
   .ev-chip{font-size:10.5px;line-height:1.25;font-weight:600;padding:1px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   .ev-more{font-size:10px;color:var(--ink-soft);padding-left:5px;}
@@ -1419,27 +1426,46 @@
     .wo-tiles{grid-template-columns:repeat(3,minmax(0,1fr));}
   }
   @media (min-width:1024px){
+    /* One top bar: wordmark, who you are, sections, sync and contacts. */
+    body{padding:calc(16px + env(safe-area-inset-top)) 24px 40px;}
     .wrap{
-      max-width:1200px;display:grid;grid-template-columns:320px minmax(0,1fr);
-      column-gap:var(--sp-6);align-items:start;
+      max-width:1480px;display:grid;
+      grid-template-columns:auto minmax(200px,260px) minmax(0,1fr) auto;
+      grid-template-areas:"brand who tabs right" "page page page page";
+      column-gap:var(--sp-4);align-items:center;
     }
-    .wrap > header{grid-column:1 / -1;margin-bottom:var(--sp-5);align-items:center;}
-    .wrap > .card{grid-column:1;margin-bottom:var(--sp-6);min-height:58px;padding:var(--sp-3) var(--sp-4);display:flex;flex-direction:column;justify-content:center;}
-    .wrap > .page-tabs{grid-column:2;margin-bottom:var(--sp-6);}
-    .wrap > [id^="page"]{grid-column:1 / -1;}
-    .page-tab{flex-direction:row;height:52px;gap:var(--sp-2);font-size:var(--fs-subhead);letter-spacing:var(--tr-subhead);}
+    .wrap > header{display:contents;}
+    .wrap > header > .wordmark{grid-area:brand;font-size:1.375rem;}
+    .wrap > header > .head-right{grid-area:right;}
+    .wrap > #whoCard{grid-area:who;margin:0;padding:0 var(--sp-3);height:52px;display:flex;flex-direction:column;justify-content:center;position:relative;}
+    .wrap > .page-tabs{grid-area:tabs;margin:0;}
+    .wrap > [id^="page"]{grid-area:page;margin-top:var(--sp-5);align-self:start;}
+    #whoCard .who-row{flex-wrap:nowrap;}
+    #whoCard .who-name{min-width:0;overflow:hidden;white-space:nowrap;}
+    #whoCard .who-label{overflow:hidden;text-overflow:ellipsis;}
+    #whoCard button{height:var(--btn-h-sm);}
+    /* The add/edit person forms drop down from the bar instead of growing it. */
+    #newPersonRow.show,#editPersonRow.show{
+      position:absolute;top:calc(100% + 8px);left:0;width:340px;z-index:30;
+      background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
+      padding:var(--sp-4);box-shadow:var(--elev-2);margin:0;
+    }
+    .page-tab{flex-direction:row;height:46px;gap:var(--sp-2);font-size:var(--fs-subhead);letter-spacing:var(--tr-subhead);}
     .page-tab svg{width:19px;height:19px;}
+    .page-head{margin-bottom:var(--sp-3);}
     .card{padding:var(--sp-5) var(--sp-5);}
     .card-title,#dayDetail h3{font-size:var(--fs-title3);}
 
     /* Schedule: the month fills the left column at viewport height, the day
        and posts scroll beside it, so nothing needs a long page scroll. */
-    #schCalView{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-areas:"cal detail" "cal posts";gap:var(--sp-5);align-items:start;}
+    /* Schedule: a compact month on the left with posts under it; the day,
+       events and availability fill the right. */
+    #schCalView{display:grid;grid-template-columns:minmax(0,780px) minmax(380px,1fr);grid-template-areas:"cal detail" "posts detail";gap:var(--sp-5);align-items:start;}
     #schCalView > .card{margin-bottom:0;}
-    #schCalView > .card:has(#calendarSection){grid-area:cal;position:sticky;top:var(--sp-5);}
-    #schCalView > #dayDetail{grid-area:detail;max-height:calc(100vh - 2 * var(--sp-5));overflow-y:auto;}
+    #schCalView > .card:has(#calendarSection){grid-area:cal;}
+    #schCalView > #dayDetail{grid-area:detail;position:sticky;top:var(--sp-4);max-height:calc(100vh - 2 * var(--sp-4));overflow-y:auto;}
     #schCalView > #postCard{grid-area:posts;}
-    #calGrid .day{aspect-ratio:auto;height:clamp(50px, calc((100vh - 455px) / 6), 116px);align-items:stretch;padding:5px 6px;}
+    #calGrid .day{aspect-ratio:auto;height:clamp(54px, calc((100vh - 360px) / 6), 104px);align-items:stretch;padding:5px 6px;}
     #calGrid .day .num{text-align:left;font-size:var(--fs-footnote);}
     #calGrid .day .event-marks{display:none;}
     #calGrid .day .ev-chips{display:flex;}
@@ -1470,10 +1496,7 @@
 <div class="wrap">
 
   <header>
-    <div>
-      <h1><span id="secretTapZone">HAWKS</span> <span>CALENDAR</span></h1>
-      <div class="tagline">Hunter Hawks · schedule &amp; training</div>
-    </div>
+    <h1 class="wordmark"><span id="secretTapZone">HAWKS</span> <span>CALENDAR</span></h1>
     <div class="head-right">
     <div class="sync-wrap" id="syncWrap" hidden>
       <button type="button" class="sync-pill" id="syncPill" aria-haspopup="menu" aria-expanded="false" aria-label="Watch sync"><svg class="sicon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg><span class="sdot"></span><span class="slabel" id="syncLabel">Sync</span></button>
@@ -1498,7 +1521,7 @@
     </div>
   </header>
 
-  <div class="card">
+  <div class="card" id="whoCard">
     <div class="identity-block" style="padding-bottom:0;margin-bottom:0;border-bottom:none;">
       <div class="who-row">
         <div class="who-name">
@@ -1706,7 +1729,7 @@
           </div>
           <div class="hawky-today" id="hawkyToday" style="display:none;"></div>
           <div class="chip-scroll" id="askSuggest"></div>
-          <button type="button" id="openHawkyBtn" class="full-btn">Ask Hawky</button>
+          <button type="button" id="openHawkyBtn" class="full-btn">Check in with Hawky</button>
         </section>
         <section class="card" id="weekCard" style="display:none;">
           <div class="section-head">
@@ -2042,6 +2065,7 @@
           <span><span class="swatch" style="background:var(--pain);"></span>Pain</span>
         </div>
         <div class="hint" id="bodyMapHint" style="margin-top:10px;">Tap a body part to mark it — tap again to cycle sore → pain → clear.</div>
+        <button type="button" class="ghost full-btn" id="bodyHawkyBtn" style="margin-top:var(--sp-3);">Tell Hawky how it feels</button>
       </div>
     </div>
     <div id="youSettingsView" class="you-grid" style="display:none;">
@@ -2184,10 +2208,13 @@
       <button class="ghost" id="closeHawky" aria-label="Close">✕</button>
     </div>
     <div class="hawky-body">
+      <div class="hawky-thread" id="hawkyThread" aria-live="polite"></div>
       <div class="chip-scroll" id="hawkySuggest"></div>
-      <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. Build me a tempo workout for tomorrow"></textarea>
-      <div class="cluster"><button id="askBtn" type="button">Ask</button><span class="hint" id="askStatus"></span></div>
-      <div class="hawky-answer" id="askAnswer" style="display:none;"></div>
+      <div class="hawky-compose">
+        <textarea id="askInput" rows="2" maxlength="1000" placeholder="Tell Hawky how it went, or ask anything"></textarea>
+        <button id="askBtn" type="button" aria-label="Send">Send</button>
+      </div>
+      <div class="hint" id="askStatus"></div>
     </div>
   </div>
 </div>
@@ -4000,7 +4027,7 @@ async function autoSync(){
 }
 
 // --- Hawky ------------------------------------------------------------------
-const ASK_SUGGESTIONS = ['How was my week?', 'What should I run tomorrow?', 'Build me a workout for my next race', 'Am I running my easy days too hard?', 'What do my Fitness States say I can run?'];
+const ASK_SUGGESTIONS = ['How was my week?', 'What should I run tomorrow?', 'My legs are sore', 'Build me a workout for my next race', 'Am I running my easy days too hard?'];
 
 async function renderHawkyCard(){
   const card = $('askCard');
@@ -4013,24 +4040,88 @@ async function renderHawkyCard(){
   }
 }
 
-function openHawky(question, ask){
+// Hawky is a chat. Each person's thread lives for this page load; the last
+// 12 turns go to the server so Hawky remembers what it just asked.
+let hawkyChat = { personId: null, turns: [] };
+
+function hawkyBubble(role, html, saved){
+  const el = document.createElement('div');
+  el.className = `hawky-msg ${role}`;
+  el.innerHTML = html;
+  $('hawkyThread').appendChild(el);
+  if(saved?.length){
+    const s = document.createElement('div');
+    s.className = 'hawky-saved';
+    s.innerHTML = saved.map(x=>`<span>Saved: ${escapeHtml(x)}</span>`).join('');
+    $('hawkyThread').appendChild(s);
+  }
+  $('hawkyThread').scrollTop = $('hawkyThread').scrollHeight;
+  return el;
+}
+
+// Hawky opens like a coach would: asks about the last run if it has no feel
+// logged, or about anything marked sore on the body map.
+async function hawkyOpener(){
+  const p = people.find(x=>x.id===activePersonId);
+  const name = p?.first_name || p?.name?.split(' ')[0] || '';
+  const marks = Object.entries(bodyMarks[activePersonId] || {});
+  let recent = null;
+  try{
+    const res = await fetch(`/api/log?personId=${encodeURIComponent(activePersonId)}&from=${addDaysKey(todayKey(), -2)}&to=${todayKey()}`, { cache:'no-store' });
+    if(res.ok){ const d = await res.json(); recent = d.days.filter(x=>x.miles).sort((a,b)=> b.date.localeCompare(a.date))[0] || null; }
+  }catch(e){}
+  const when = recent ? (recent.date === todayKey() ? 'today' : recent.date === addDaysKey(todayKey(), -1) ? 'yesterday' : new Date(recent.date + 'T12:00:00').toLocaleDateString(undefined,{ weekday:'long' })) : '';
+  const what = recent ? (recent.sessions?.find(x=>x.category === 'workout' || x.category === 'race')?.title || `${Math.round(recent.miles * 10) / 10} miles`) : '';
+  const sore = marks.slice(0, 2).map(([part, st])=> `${(BODY_PART_LABELS[part] || part).toLowerCase()} (${st})`);
+  const parts = [`Hey ${name}!`];
+  if(recent && recent.feel == null) parts.push(`How did ${when}'s ${what} feel, 1 to 10?${recent.sleep_hours == null ? ' And how did you sleep?' : ''}`);
+  if(sore.length) parts.push(`Your body map has ${sore.join(' and ')} marked. How's that feeling?`);
+  if(parts.length === 1) parts.push('How are the legs today? Ask me anything about your training.');
+  return parts.join(' ');
+}
+
+async function openHawky(question, ask){
   if(!isRealPerson()){ alert('Pick your name first so Hawky knows whose training to look at.'); return; }
   $('hawkySuggest').innerHTML = ASK_SUGGESTIONS.map(q=>`<button type="button" class="chip" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('');
   $('hawkySuggest').querySelectorAll('[data-q]').forEach(b=> b.addEventListener('click', ()=>{ $('askInput').value = b.dataset.q; askCoachNow(); }));
-  if(question !== undefined) $('askInput').value = question;
   $('hawkyOverlay').classList.add('show');
+  if(hawkyChat.personId !== activePersonId){
+    hawkyChat = { personId: activePersonId, turns: [] };
+    $('hawkyThread').innerHTML = '';
+    const opener = await hawkyOpener();
+    hawkyChat.turns.push({ role: 'hawky', text: opener });
+    hawkyBubble('hawky', escapeHtml(opener));
+  }
+  if(question !== undefined) $('askInput').value = question;
   if(ask) askCoachNow(); else setTimeout(()=>{ $('askInput').focus(); $('askInput').setSelectionRange(9999, 9999); }, 50);
 }
 
 async function askCoachNow(){
   const q = $('askInput').value.trim();
-  if(!q || !isRealPerson()) return;
-  $('askBtn').disabled = true; $('askStatus').textContent = 'Hawky is thinking…';
-  const res = await apiPost('/api/coach/ask', { personId: activePersonId, question: q });
-  $('askBtn').disabled = false; $('askStatus').textContent = '';
-  const out = $('askAnswer'); out.style.display = '';
-  if(res?.answer) out.innerHTML = miniMarkdown(res.answer);
-  else out.textContent = res?.error || 'Couldn’t reach Hawks. Check your connection.';
+  if(!q || !isRealPerson() || $('askBtn').disabled) return;
+  const personId = activePersonId;
+  $('askInput').value = '';
+  hawkyChat.turns.push({ role: 'user', text: q });
+  hawkyBubble('user', escapeHtml(q));
+  const typing = hawkyBubble('hawky typing', 'Hawky is thinking…');
+  $('askBtn').disabled = true; $('askStatus').textContent = '';
+  const res = await apiPost('/api/coach/ask', { personId, history: hawkyChat.turns.slice(-12) });
+  $('askBtn').disabled = false;
+  typing.remove();
+  if(personId !== activePersonId) return;
+  if(!res?.answer){
+    hawkyChat.turns.pop();
+    hawkyBubble('hawky', escapeHtml(res?.error || 'Couldn’t reach Hawks. Check your connection.'));
+    return;
+  }
+  hawkyChat.turns.push({ role: 'hawky', text: res.answer });
+  hawkyBubble('hawky', miniMarkdown(res.answer), res.saved);
+  // Anything Hawky saved shows up everywhere right away.
+  if(res.saved?.length){
+    await loadState();
+    renderAll();
+    fitnessData = null;
+  }
 }
 
 // Escape first, then allow only bold, inline code and bullet lines.
@@ -4887,6 +4978,7 @@ function wireUI(){
   $('hawkyOverlay').addEventListener('click', e=>{ if(e.target === $('hawkyOverlay')) $('hawkyOverlay').classList.remove('show'); });
   $('askBtn').addEventListener('click', askCoachNow);
   $('askInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); askCoachNow(); } });
+  $('bodyHawkyBtn').addEventListener('click', ()=> openHawky());
   $('coachSource').querySelectorAll('[data-src]').forEach(b=> b.addEventListener('click', ()=>{
     coachSource = b.dataset.src;
     try{ localStorage.setItem('hawksCoachSource', coachSource); }catch(e){}

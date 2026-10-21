@@ -9,6 +9,20 @@ import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
 import { logTools, callLogTool, LogError, getDays, fiveKFor, getPrs, PR_EVENTS } from './log.js';
 import { getFitness } from './fitness.js';
 import { trackMiles } from './workouts.js';
+import { BODY_PARTS } from './body.js';
+
+// Health, training status and the body map, as Hawky reads them.
+export async function bodyStatus(db, personId) {
+  const [p, marks] = await Promise.all([
+    db.prepare('SELECT health_status, training_status FROM people WHERE id = ?').bind(personId).first(),
+    db.prepare('SELECT part, status FROM body_marks WHERE person_id = ?').bind(personId).all(),
+  ]);
+  return {
+    health: p?.health_status || 'healthy',
+    training: p?.training_status || '',
+    marked: marks.results.map((m) => ({ part: m.part, name: BODY_PARTS[m.part] || m.part, status: m.status })),
+  };
+}
 
 export class CoachError extends Error {}
 
@@ -41,6 +55,8 @@ PLAN MATCH (0-100) compares the run to that day's plan:
 - Distance, 50 pts: 50 x (1 - miss/planned), where a miss within 10% counts as on target.
 - Easy-day guard: an easy, recovery or long run at effort 6+ loses 15 more (easy days should be easy).
 Hawks shows plan match per DAY, not per activity: a warm-up, workout and cool-down saved separately are one session and are judged together against the day's plan (On plan / Close / Off plan, with the reason).
+
+BODY: body (in get_coach_context) is the runner's health status and body map (parts marked sore or pain). Check in on marked parts, and on easy days after a hard week ask how their legs feel. Pain that lasts or gets worse goes to their coach or a doctor; never diagnose.
 
 SESSIONS: activities less than ~75 min apart are one session. Write ONE report per session on its main activity (the workout, race or longest run) and leave the warm-up/cool-down summaries empty.
 
@@ -301,6 +317,7 @@ export async function getCoachContext(db, person) {
     missing_prs: PR_EVENTS.filter((e) => !(e in prsNow)),
     five_k_time: (await fiveKFor(db, person.id)) || null,
     fitness: compactFitness(await getFitness(db, person.id, today)),
+    body: await bodyStatus(db, person.id),
     training_log_last_14_days: await getDays(db, person.id, addDays(today, -13), today),
     rubric: COACH_RUBRIC,
   };
