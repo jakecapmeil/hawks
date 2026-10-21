@@ -1471,7 +1471,8 @@
   .conf{width:10px;height:10px;border-radius:50%;justify-self:end;}
   .conf.high{background:var(--int-1);} .conf.medium{background:var(--int-2);} .conf.low{background:var(--ink-soft);opacity:.5;}
   .fit-trend{margin-top:var(--sp-4);}
-  .fit-trend svg{width:100%;height:70px;display:block;overflow:visible;}
+  .spark{width:100%;min-height:70px;}
+  .spark svg{display:block;}
   .fit-trend .hint{margin-top:4px;}
   .fit-how summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
   .fit-how summary::-webkit-details-marker{display:none;}
@@ -5700,12 +5701,27 @@ async function loadFitness(refresh){
   return data;
 }
 
+// Trend lines are drawn at the width they're shown at (never scaled), so the
+// dot stays round and the line stays crisp at any window size.
 function sparkline(points){
   if(points.length < 2) return '';
-  const vs = points.map(p=>p.v), lo = Math.min(...vs) - 0.5, hi = Math.max(...vs) + 0.5;
-  const W = 300, H = 60;
-  const xy = points.map((p,i)=>[i / (points.length - 1) * W, H - (p.v - lo) / (hi - lo) * H]);
-  return `<svg viewBox="-4 -4 ${W + 8} ${H + 8}" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${xy.map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ')}"/><polyline fill="none" stroke="var(--gold)" stroke-width="9" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${(xy[xy.length-1][0]-0.01).toFixed(2)},${xy[xy.length-1][1].toFixed(1)} ${xy[xy.length-1][0].toFixed(2)},${xy[xy.length-1][1].toFixed(1)}"/></svg>`;
+  return `<div class="spark" data-v="${points.map(p=>p.v).join(',')}"></div>`;
+}
+function drawSpark(el){
+  const vs = el.dataset.v.split(',').map(Number);
+  const W = Math.round(el.clientWidth), H = Math.max(70, Math.min(140, Math.round(W * 0.14)));
+  if(!W || el.dataset.w === String(W)) return;
+  el.dataset.w = String(W);
+  const pad = 8, lo = Math.min(...vs), hi = Math.max(...vs), span = (hi - lo) || 1;
+  const xy = vs.map((v,i)=>[pad + i / (vs.length - 1) * (W - 2 * pad), pad + (1 - (v - lo) / span) * (H - 2 * pad)]);
+  const pts = xy.map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ');
+  const [lx, ly] = xy[xy.length - 1];
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--gold)" stop-opacity=".22"/><stop offset="1" stop-color="var(--gold)" stop-opacity="0"/></linearGradient></defs><polygon points="${xy[0][0].toFixed(1)},${H} ${pts} ${lx.toFixed(1)},${H}" fill="url(#sparkFill)"/><polyline fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${pts}"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="5" fill="var(--gold)"/></svg>`;
+}
+let sparkObserver = null;
+function drawSparks(){
+  if(!sparkObserver && window.ResizeObserver) sparkObserver = new ResizeObserver(es=> es.forEach(e=> drawSpark(e.target)));
+  document.querySelectorAll('.spark').forEach(el=>{ drawSpark(el); if(sparkObserver) sparkObserver.observe(el); });
 }
 
 async function renderFitness(refresh){
@@ -5725,6 +5741,7 @@ async function renderFitness(refresh){
     const delta = fs.change_4wk != null ? `${fs.change_4wk >= 0 ? '+' : ''}${fs.change_4wk} in 4 wk` : '';
     $('fitScore').innerHTML = tileSub(fs.fitness, 'fitness', delta) + tileSub(fs.fatigue, 'fatigue', 'last 7 days') + tileSub(`${fs.form > 0 ? '+' : ''}${fs.form}`, 'form', fs.form < -20 ? 'very tired' : fs.form < -5 ? 'building' : fs.form <= 10 ? 'balanced' : 'fresh');
     $('fitScoreTrend').innerHTML = fs.trend?.length >= 2 ? `${sparkline(fs.trend.map(p=>({ v: p.fitness })))}<div class="hint">Fitness over the last 8 weeks${fs.source === 'intervals.icu' ? ' (from intervals.icu, which counts every activity)' : ''}. Form under -20 for long is a sign to back off.</div>` : '';
+    drawSparks();
   }
   if(!f || !f.vdot){
     $('fitBadge').innerHTML = '';
@@ -5755,6 +5772,7 @@ async function renderFitness(refresh){
   const hist = (data.history || []).filter(h=>h.vdot).map(h=>({ v: h.vdot, d: h.date }));
   const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';
   $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">Race fitness over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');
+  drawSparks();
   $('fitZones').innerHTML = pacesHtml(f.zones);
   const kindLabel = { race:'Race effort', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate', best:'Best effort', garmin:'Garmin' };
   $('fitSources').innerHTML = f.sources.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label)}</div><div class="list-meta">${kindLabel[x.kind] || x.kind}${x.date ? ' · ' + escapeHtml(x.date) : ''}${x.vdot ? ' · VDOT ' + x.vdot : ''} · weight ${Math.round(x.weight * 100)}%</div></div></div>`).join('')
