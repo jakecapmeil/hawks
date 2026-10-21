@@ -368,7 +368,11 @@ async function syncBestEfforts(env, person, key) {
   // Time per point: secs if it grows with distance at running speeds, else values.
   const plausible = (arr) => Array.isArray(arr) && arr.length === dist.length && dist.every((d, i) => !d || !arr[i] || (d / arr[i] > 1.5 && d / arr[i] < 9.5));
   const times = plausible(curve.secs) ? curve.secs : plausible(curve.values) ? curve.values : null;
-  if (!times) { console.log('pace-curve: no usable times'); return 0; }
+  if (!times) {
+    const idx = [0, 1, 5, 10, 20, 40, dist.length - 1].filter((i) => i < dist.length);
+    console.log('pace-curve: no usable times', JSON.stringify(idx.map((i) => [dist[i], curve.values?.[i], curve.secs?.[i]])), JSON.stringify(curve.paceModels || null).slice(0, 400));
+    return 0;
+  }
   const acts = res?.activities || {};
   const rows = [];
   for (const m of EFFORT_METERS) {
