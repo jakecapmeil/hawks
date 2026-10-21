@@ -1287,6 +1287,19 @@
   .tl-event{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-footnote);color:var(--ink-soft);}
   .tl-event i{width:3px;height:16px;border-radius:2px;flex-shrink:0;}
   .split-builder{display:flex;flex-direction:column;gap:6px;}
+  .split-toggle{
+    width:100%;height:auto;min-height:var(--tap-min);padding:0;margin-bottom:var(--sp-2);
+    display:flex;align-items:center;gap:var(--sp-2);
+    background:none;border:none;color:var(--ink);text-align:left;white-space:normal;font-weight:500;
+  }
+  .split-toggle:active{transform:none;opacity:1;}
+  .split-toggle .eyebrow{flex-shrink:0;}
+  .split-toggle .eyebrow span{margin-left:6px;color:var(--ink-soft);font-weight:600;}
+  .split-toggle .hint{flex:1;min-width:0;text-align:right;}
+  .split-toggle svg{width:16px;height:16px;flex-shrink:0;fill:none;stroke:var(--ink-soft);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s ease;}
+  .split-toggle[aria-expanded="false"] svg{transform:rotate(-90deg);}
+  .split-toggle[aria-expanded="false"]{margin-bottom:0;}
+  #splitBody[hidden]{display:none;}
   .split-row{display:grid;grid-template-columns:16px minmax(0,1fr) minmax(0,1.1fr) 44px minmax(0,1fr) 28px;gap:5px;align-items:center;}
   .split-row.head{font-size:var(--fs-caption2);font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;}
   .split-row .n{font-size:var(--fs-caption);color:var(--ink-soft);font-weight:700;text-align:center;}
@@ -1759,10 +1772,12 @@
           <hr class="divider">
           <div class="stack-lg">
             <div>
-              <div class="section-head" style="margin-bottom:var(--sp-2);">
-                <div class="eyebrow">Splits</div>
+              <button type="button" class="split-toggle" id="splitToggle" aria-expanded="true" aria-controls="splitBody">
+                <span class="eyebrow">Splits<span id="splitCount"></span></span>
                 <span class="hint" id="splitSummary"></span>
-              </div>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div id="splitBody">
               <div class="split-builder" id="splitBuilder"></div>
               <div class="split-add">
                 <input type="number" id="splitAddN" min="1" max="40" value="4" inputmode="numeric" aria-label="Number of reps">
@@ -1771,6 +1786,7 @@
                 <span>m</span>
                 <button type="button" class="ghost" id="splitAddSet">Add set</button>
                 <button type="button" class="ghost" id="splitAddOne">+ Rep</button>
+              </div>
               </div>
             </div>
             <div class="field"><span>Type</span><div class="cluster" id="tlTypes"></div></div>
@@ -4821,6 +4837,7 @@ function wireUI(){
       renderTrainingLog();
     }
   });
+  $('splitToggle').addEventListener('click', ()=> setSplitsOpen(!splitsOpen));
   $('splitAddSet').addEventListener('click', ()=>{
     const n = Math.min(40, Math.max(1, parseInt($('splitAddN').value, 10) || 1));
     const m = Math.max(50, parseInt($('splitAddM').value, 10) || 400);
@@ -5013,6 +5030,15 @@ async function renderTrainingLog(){
 
 let tlDirty = false;
 let splitRows = [];
+// Splits fold away; long sets (more than 8 reps) start folded.
+let splitsOpen = true;
+const SPLITS_AUTO_HIDE = 8;
+
+function setSplitsOpen(open){
+  splitsOpen = open;
+  $('splitBody').hidden = !open;
+  $('splitToggle').setAttribute('aria-expanded', String(open));
+}
 
 // "2:45", "2:45.3" or "165" -> seconds.
 function parseClock(v){
@@ -5041,6 +5067,7 @@ function renderSplitBuilder(){
   if(!splitRows.length){
     wrap.innerHTML = '<div class="split-empty">No reps yet. Add a set below. On workout days they fill in from your watch.</div>';
     $('splitSummary').textContent = '';
+    $('splitCount').textContent = '';
     return;
   }
   wrap.innerHTML = `<div class="split-row head"><span class="n">#</span><span>Meters</span><span>Time</span><span style="text-align:right">/mi</span><span>Rest</span><span></span></div>` +
@@ -5070,6 +5097,7 @@ function renderSplitBuilder(){
 }
 
 function updateSplitSummary(){
+  $('splitCount').textContent = splitRows.length ? ` · ${splitRows.length}` : '';
   const ok = splitRows.filter(r=>r.m > 0 && r.s > 0);
   if(!ok.length){ $('splitSummary').textContent = ''; return; }
   const m = ok.reduce((a,r)=>a+r.m,0), sec = ok.reduce((a,r)=>a+r.s,0);
@@ -5130,6 +5158,7 @@ async function renderTrainingDay(){
   $('tlTrackHint').textContent = day.locked ? 'The workout snaps to the lines: reps to 100 m, miles to eighths, no elevation.' : 'Reps round to the nearest 100 m and a mile is 1600 m.';
   splitRows = (day.split_reps || []).map(r=>({ m: r.m, s: r.s, rest: r.rest || '' }));
   renderSplitBuilder();
+  setSplitsOpen(splitRows.length <= SPLITS_AUTO_HIDE);
 
   $('tlStatus').value = day.status || '';
   $('tlPlanned').value = day.planned || (day.plan ? day.plan.planned : '');
@@ -5153,6 +5182,7 @@ async function renderTrainingDay(){
 }
 
 function addSplitSet(n, m){
+  setSplitsOpen(true);
   for(let i = 0; i < n; i++) splitRows.push({ m, s: 0, rest: '' });
   tlDirty = true;
   renderSplitBuilder();
