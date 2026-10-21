@@ -308,18 +308,23 @@ export async function getCoachContext(db, person) {
 
 // The same run can arrive twice: once from the intervals.icu sync and once
 // from the runner's own Claude reading COROS or Strava. If a run from another
-// source matches on date, distance (3%) and moving time (3%), reuse its row so
-// the newer write (usually Claude's, with a better note) updates it in place.
+// source matches on date and distance (1.5%, or 0.02 mi on short jogs), reuse
+// its row so the newer write updates it in place. Moving time only has to be
+// within 25%: Strava and Garmin count pauses differently, so it often differs
+// by 10-20% for the very same run.
 async function mergeDuplicates(db, personId, clean) {
   const dates = [...new Set(clean.map((w) => w.date))];
   if (!dates.length) return;
   const rows = (await db.prepare(
-    `SELECT strava_id, date, distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft FROM workouts WHERE person_id = ? AND date IN (${dates.map(() => '?').join(',')})`
+    `SELECT strava_id, date, distance_mi, COALESCE(raw_distance_mi, distance_mi) AS gps_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft FROM workouts WHERE person_id = ? AND date IN (${dates.map(() => '?').join(',')})`
   ).bind(personId, ...dates).all()).results;
-  const close = (a, b) => a && b && Math.abs(a - b) / Math.max(a, b) <= 0.03;
+  const srcOf = (id) => (id.includes(':') ? id.split(':')[0] : 'strava');
+  const sameDistance = (a, b) => a && b && Math.abs(a - b) <= Math.max(0.02, 0.015 * Math.max(a, b));
+  const sameTime = (a, b) => !a || !b || Math.abs(a - b) / Math.max(a, b) <= 0.25;
   for (const w of clean) {
     if (rows.some((r) => r.strava_id === w.strava_id)) continue;
-    const twin = rows.find((r) => r.date === w.date && close(r.distance_mi, w.distance_mi) && close(r.moving_sec, w.moving_sec)
+    const twin = rows.find((r) => r.date === w.date && srcOf(r.strava_id) !== srcOf(w.strava_id)
+      && sameDistance(r.gps_mi, w.raw_distance_mi ?? w.distance_mi) && sameTime(r.moving_sec, w.moving_sec)
       && !clean.some((o) => o !== w && o.strava_id === r.strava_id));
     if (twin) w.strava_id = twin.strava_id;
   }
