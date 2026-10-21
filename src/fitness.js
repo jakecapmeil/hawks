@@ -189,7 +189,7 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
     // A "race" at easy heart rate was mislabelled (a jog, or a meet day warm-up).
     if (hrMax && w.avg_hr && w.avg_hr / hrMax < 0.85) continue;
     const m = snapDistance(w.distance_mi * MILE);
-    sources.push({ kind: 'race', max: true, m, s: w.moving_sec, age: ageDays(w.date, today), date: w.date, quality: 1, label: `${w.name || 'Race'} ${fmtTime(w.moving_sec)}` });
+    sources.push({ kind: 'race', max: true, m, s: w.moving_sec, age: ageDays(w.date, today), date: w.date, quality: 1, label: `${w.name || 'Race'} ${fmtTime(w.moving_sec)} (${w.date})` });
   }
 
   // 2. Training: rep sessions.

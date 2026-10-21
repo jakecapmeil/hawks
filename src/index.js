@@ -309,7 +309,13 @@ async function getPlan(db, params) {
     rank = CLASS_YEAR_RANK[grade] ?? null;
   }
   if (!rank) return new Response(JSON.stringify({ error: 'no_plan' }), { status: 404, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-  const plan = (personId && PLAN_VARIANTS[personId]?.[rank]) || PLANS[rank];
+  let plan = (personId && PLAN_VARIANTS[personId]?.[rank]) || PLANS[rank];
+  // The runner's own rep targets next to each menu workout, from Fitness States.
+  const fitness = personId ? await getFitness(db, personId, todayInTz()) : null;
+  if (fitness?.vdot) {
+    plan = JSON.parse(JSON.stringify(plan));
+    for (const sec of plan.ref.sessions) sec.targets = sec.items.map((item) => workoutTargets({ main: item, paces: item, type: 'vo2' }, fitness));
+  }
   return new Response(JSON.stringify(plan), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
 

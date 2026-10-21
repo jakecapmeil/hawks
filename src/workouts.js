@@ -405,17 +405,20 @@ export function zoneOf(text) {
   })();
   if (between) return { keys: [norm(between[1]), norm(between[2])], offset };
   const at = t.match(/(?:at|@)\s+([^,;()]+)/);
+  const faster = /faster than/.test(t) && !offset ? -5 : 0;
   // The zone named first wins ("5K pace (plans 3-5). Newer runners: threshold").
   for (const scope of [at?.[1], t]) {
     if (!scope) continue;
     let best = null;
     for (const [re, key] of ZONE_WORDS) {
-      // A distance word is only a zone when "pace" or "effort" follows it.
-      const full = ['10k', '5k', '3200', 'mile', '800', '400'].includes(key) ? new RegExp(`(?:${re.source})[^,;]{0,12}(pace|effort)`) : re;
+      // A distance word is only a zone when "pace" or "effort" follows it,
+      // or when it's what the reps are run "at" ("12x400 at 5k").
+      const bare = scope === at?.[1];
+      const full = ['10k', '5k', '3200', 'mile', '800', '400'].includes(key) && !bare ? new RegExp(`(?:${re.source})[^,;]{0,12}(pace|effort)`) : re;
       const m = scope.match(full);
       if (m && (!best || m.index < best.index)) best = { index: m.index, key };
     }
-    if (best) return { keys: [best.key], offset };
+    if (best) return { keys: [best.key], offset: offset + faster };
   }
   return null;
 }
@@ -437,7 +440,9 @@ export function segmentsOf(main) {
       }
       continue;
     }
-    const reps = clause.match(/(\d+)\s*x\s*\(?\s*(\d+(?:\.\d+)?)\s*(k\b|m\b|mi\b|mile|miles|min|s\b|sec)?/i);
+    const reps = clause.match(/(\d+)\s*x\s*\(?\s*(\d+(?:\.\d+)?)\s*(k\b|m\b|mi\b|mile|miles|min|s\b|sec)?/i)
+      || (() => { const u = clause.match(/(\d+)\s*x\s*(mile|k)\b/i); return u ? [u[0], u[1], '1', u[2]] : null; })()
+      || (() => { const t = clause.match(/^(\d+)\s*\(\s*(\d+):(\d{2})\s*min/i) || clause.match(/^(\d+)\s*\(\s*(\d+)\s*(min)/i); return t ? (t[3] && /^\d{2}$/.test(t[3]) ? [t[0], t[1], String(Number(t[2]) * 60 + Number(t[3])), 's'] : [t[0], t[1], t[2], 'min']) : null; })();
     const single = clause.match(/^(?:am:|pm:)?\s*(\d+(?:\.\d+)?)(?:\s*-\s*\d+(?:\.\d+)?)?\s*(k\b|m\b|mi\b|mile|miles|min)?\b/i);
     const hit = reps ? { n: Number(reps[1]), v: Number(reps[2]), u: (reps[3] || '').toLowerCase() } : single ? { n: 1, v: Number(single[1]), u: (single[2] || '').toLowerCase() } : null;
     if (!hit) continue;

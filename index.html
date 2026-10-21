@@ -1420,7 +1420,7 @@
     #schCalView > .card:has(#calendarSection){grid-area:cal;position:sticky;top:var(--sp-5);}
     #schCalView > #dayDetail{grid-area:detail;max-height:calc(100vh - 2 * var(--sp-5));overflow-y:auto;}
     #schCalView > #postCard{grid-area:posts;}
-    #calGrid .day{aspect-ratio:auto;height:clamp(68px, calc((100vh - 400px) / 6), 116px);align-items:stretch;padding:5px 6px;}
+    #calGrid .day{aspect-ratio:auto;height:clamp(50px, calc((100vh - 455px) / 6), 116px);align-items:stretch;padding:5px 6px;}
     #calGrid .day .num{text-align:left;font-size:var(--fs-footnote);}
     #calGrid .day .event-marks{display:none;}
     #calGrid .day .ev-chips{display:flex;}
@@ -1701,6 +1701,7 @@
         </section>
         <section class="card">
           <div class="card-title">Workout menu</div>
+          <div class="hint" id="tpRefHint" style="margin:-6px 0 var(--sp-3);">Your rep targets come from your Fitness States.</div>
           <div id="tpRef"></div>
         </section>
       </div>
@@ -5343,10 +5344,11 @@ async function renderTraining(){
   $('tpTotal').textContent = `${shown.weeks[week].miles} miles this week. WO = workout miles, WU/CD = warm-up/cool-down.`;
 
   const r = shown.ref;
+  $('tpRefHint').style.display = r.sessions.some(x=>x.targets) ? '' : 'none';
   $('tpRef').innerHTML = r.sessions.map(sec=>`
     <div class="tp-ref-title">${escapeHtml(cap(sec.title))}</div>
     ${sec.desc ? `<div class="tp-ref-desc">${escapeHtml(sec.desc)}</div>` : ''}
-    <ol class="tp-ref-list">${sec.items.map(i=>`<li>${escapeHtml(i)}</li>`).join('')}</ol>`).join('')
+    <ol class="tp-ref-list">${sec.items.map((i, n)=>`<li>${escapeHtml(i)}${(sec.targets?.[n] || []).length ? `<div class="lib-targets">${sec.targets[n].map(t=>`<div class="lib-target"><b>${escapeHtml(t.text)}</b><span class="tz">${escapeHtml(t.per_mile)}/mi</span><span class="tr">${escapeHtml(t.per_rep)}</span></div>`).join('')}</div>` : ''}</li>`).join('')}</ol>`).join('')
     + [r.core && `<div class="tp-ref-line"><b>Core:</b> ${escapeHtml(r.core.replace(/^Core\s*/,''))}</div>`,
        r.gym && `<div class="tp-ref-line"><b>Gym:</b> ${escapeHtml(r.gym.replace(/^Gym\s*/,''))}</div>`,
        r.shoes && `<div class="tp-ref-line"><b>Shoes:</b> ${escapeHtml(r.shoes)}</div>`].filter(Boolean).join('');
