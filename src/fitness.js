@@ -108,7 +108,7 @@ function addDays(dateKey, n) {
 
 async function loadInputs(db, personId, today) {
   const since = addDays(today, -365);
-  const [person, workouts, days, maxRow, meets, efforts, well] = await Promise.all([
+  const [person, workouts, days, maxRow, meets, efforts, well, model] = await Promise.all([
     db.prepare('SELECT id, prs, five_k_time, five_k_set_at FROM people WHERE id = ?').bind(personId).first(),
     db.prepare(
       `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, load
@@ -121,10 +121,11 @@ async function loadInputs(db, personId, today) {
     db.prepare("SELECT DISTINCT date FROM events WHERE type = 'meet' AND date >= ?").bind(since).all(),
     db.prepare('SELECT meters, sec, date, activity_id FROM best_efforts WHERE person_id = ?').bind(personId).all(),
     db.prepare('SELECT date, vo2max, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
+    db.prepare('SELECT cs, d_prime, r2, updated_at FROM pace_models WHERE person_id = ?').bind(personId).first(),
   ]);
   return {
     person, workouts: workouts.results, days: days.results, maxHr: maxRow?.m || null,
-    meets: new Set(meets.results.map((r) => r.date)), efforts: efforts.results, wellness: well.results,
+    meets: new Set(meets.results.map((r) => r.date)), efforts: efforts.results, wellness: well.results, paceModel: model || null,
   };
 }
 
@@ -178,7 +179,7 @@ function raceDistance(m) {
 // PR events a race distance updates, and the time scaled to that event.
 const PR_FOR = { 1600: '1600', [MILE]: '1600', 3200: '3200', [2 * MILE]: '3200', 5000: '5K' };
 
-export function computeFitness({ person, workouts, days, maxHr, meets = new Set(), efforts = [], wellness = [] }, today) {
+export function computeFitness({ person, workouts, days, maxHr, meets = new Set(), efforts = [], wellness = [], paceModel = null }, today) {
   const sources = [];
   const prs = parsePrs(person?.prs);
 
@@ -406,6 +407,11 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const dPrime = md - speed * mt;
     if (speed > 2.5 && speed < 7 && dPrime > 0 && dPrime < 600) cs = { speed, dPrime };
   }
+  // intervals.icu's own critical speed fit of the whole pace curve (every
+  // run from the watch) beats a fit to a handful of races when it's good.
+  if (paceModel && (paceModel.r2 ?? 1) >= 0.95 && Date.now() - paceModel.updated_at < 21 * DAY) {
+    cs = { speed: paceModel.cs, dPrime: paceModel.d_prime, source: 'intervals.icu' };
+  }
 
   const confFor = (meters) => {
     const near = maxSrc.filter((s) => Math.max(s.m, meters) / Math.min(s.m, meters) <= 2.2);
@@ -482,7 +488,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       };
     }),
     zones,
-    cs: cs ? { per_mile: fmtPace(MILE / cs.speed), d_prime_m: Math.round(cs.dPrime) } : null,
+    cs: cs ? { per_mile: fmtPace(MILE / cs.speed), d_prime_m: Math.round(cs.dPrime), source: cs.source || 'your races' } : null,
     speed_index: round1(speedIndex * 100) / 100,
     profile: speedIndex > 0.012 ? 'speed' : speedIndex < -0.012 ? 'endurance' : 'balanced',
     sources: sources

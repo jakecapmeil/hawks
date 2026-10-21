@@ -363,21 +363,23 @@ async function syncBestEfforts(env, person, key) {
   }
   const curve = (Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : [])[0];
   if (!curve) { console.log('pace-curves: no list', Object.keys(res || {}).join(',')); return 0; }
-  console.log('pace-curve fields', Object.keys(curve).join(','), 'n', curve.distance?.length);
   const dist = curve.distance || [];
-  // Time per point: secs if it grows with distance at running speeds, else values.
-  const plausible = (arr) => Array.isArray(arr) && arr.length === dist.length && dist.every((d, i) => !d || !arr[i] || (d / arr[i] > 1.5 && d / arr[i] < 9.5));
-  const times = plausible(curve.secs) ? curve.secs : plausible(curve.values) ? curve.values : null;
-  if (!times) {
-    const idx = [0, 1, 5, 10, 20, 40, dist.length - 1].filter((i) => i < dist.length);
-    console.log('pace-curve: no usable times', JSON.stringify(idx.map((i) => [dist[i], curve.values?.[i], curve.secs?.[i]])), JSON.stringify(curve.paceModels || null).slice(0, 400));
-    return 0;
+  // values are seconds; GPS spikes at the very short end (15+ m/s) are skipped point by point.
+  const times = curve.values || curve.secs || [];
+  const ok = (i) => dist[i] > 0 && times[i] > 0 && dist[i] / times[i] > 1.5 && dist[i] / times[i] < 9.5;
+  // intervals.icu fits a critical speed model to the same curve.
+  const cs = (curve.paceModels || []).find((m) => m?.type === 'CS' && m.criticalSpeed > 2 && m.criticalSpeed < 7 && m.dPrime > 0 && m.dPrime < 800);
+  if (cs) {
+    await env.DB.prepare(
+      `INSERT INTO pace_models (person_id, cs, d_prime, r2, updated_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(person_id) DO UPDATE SET cs = excluded.cs, d_prime = excluded.d_prime, r2 = excluded.r2, updated_at = excluded.updated_at`
+    ).bind(person.id, cs.criticalSpeed, cs.dPrime, cs.r2 ?? null, Date.now()).run();
   }
   const acts = res?.activities || {};
   const rows = [];
   for (const m of EFFORT_METERS) {
     let best = -1;
-    dist.forEach((d, i) => { if (Math.abs(d - m) / m <= 0.01 && (best < 0 || Math.abs(d - m) < Math.abs(dist[best] - m))) best = i; });
+    dist.forEach((d, i) => { if (ok(i) && Math.abs(d - m) / m <= 0.01 && (best < 0 || Math.abs(d - m) < Math.abs(dist[best] - m))) best = i; });
     if (best < 0 || !times[best]) continue;
     const aid = String(curve.activity_id?.[best] || '');
     const date = String(acts[aid]?.start_date_local || '').slice(0, 10) || null;

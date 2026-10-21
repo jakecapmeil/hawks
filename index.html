@@ -2055,7 +2055,7 @@
               <p><b>Recent races come first.</b> Each one becomes a VDOT (Jack Daniels' running formula), weighted by how recent it is. A new race outranks older results and a 5K you typed in, and a much slower race (hilly course, bad day) doesn't drag you down.</p>
               <p><b>Garmin's VO2max is matched to your races.</b> Garmin estimates VO2max from heart rate vs speed, which usually reads higher than race results. Hawks finds your personal ratio from races run near a Garmin reading, so the number can track your fitness between races.</p>
               <p><b>Training fills the gaps.</b> Rep sessions from your watch or split builder, and your heart rate on steady runs, only move the number when your last race is old: if you've gotten fitter since, or lost some fitness.</p>
-              <p><b>Each distance gets its own estimate.</b> From 1600 to 5K, a critical-speed curve fitted to your recent races sharpens the numbers (it's accurate to about 1-2% there). 400 and 800 lean on your recent PRs, since speed isn't something aerobic models capture. Your own speed-vs-endurance profile shifts every distance.</p>
+              <p><b>Each distance gets its own estimate.</b> From 1600 to 5K, a critical-speed curve sharpens the numbers (accurate to about 1-2% there); when your watch syncs, intervals.icu fits it to every run you've done. 400 and 800 lean on your recent PRs, since speed isn't something aerobic models capture. Your own speed-vs-endurance profile shifts every distance.</p>
               <p><b>Mileage matters for long races.</b> 10K and half marathon estimates slow down when your last 4 weeks are low on miles.</p>
               <p><b>VO2max</b> is Garmin's when your watch sends it, otherwise Hawks' estimate from your heart rate on steady runs (the same idea Garmin uses). Race fitness (VDOT) is what your race times say. Neither is a lab test.</p>
               <p><b>Fitness score</b> is your training load (minutes x effort) averaged over 42 days; fatigue is the same over 7 days, and form is fitness minus fatigue. It goes up with steady training and doesn't depend on racing.</p>
@@ -5630,7 +5630,7 @@ async function renderFitness(refresh){
   $('fitZones').innerHTML = pacesHtml(f.zones);
   const kindLabel = { race:'Race effort', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate', best:'Best effort', garmin:'Garmin' };
   $('fitSources').innerHTML = f.sources.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label)}</div><div class="list-meta">${kindLabel[x.kind] || x.kind}${x.date ? ' · ' + escapeHtml(x.date) : ''}${x.vdot ? ' · VDOT ' + x.vdot : ''} · weight ${Math.round(x.weight * 100)}%</div></div></div>`).join('')
-    + `<div class="hint" style="margin-top:var(--sp-2);">Profile: ${f.profile === 'speed' ? 'speed-leaning (your short races are relatively stronger)' : f.profile === 'endurance' ? 'endurance-leaning (your long races are relatively stronger)' : 'balanced'}.${f.cs ? ` Critical velocity ${f.cs.per_mile}/mi.` : ''}</div>`;
+    + `<div class="hint" style="margin-top:var(--sp-2);">Profile: ${f.profile === 'speed' ? 'speed-leaning (your short races are relatively stronger)' : f.profile === 'endurance' ? 'endurance-leaning (your long races are relatively stronger)' : 'balanced'}.${f.cs ? ` Critical speed ${f.cs.per_mile}/mi (${f.cs.source === 'intervals.icu' ? 'fitted by intervals.icu to all your runs' : 'from your races'}).` : ''}</div>`;
 }
 
 // --- Team mileage -----------------------------------------------------------------
