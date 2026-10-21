@@ -209,10 +209,14 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
       .bind(person.id, ...chunk).all()).results.forEach((r) => logged.add(r.strava_id));
   }
   const fresh = usable.filter((a) => !logged.has(`intervals:${a.id}`));
-  // Runs already in Hawks still get the newest numbers intervals.icu has (no extra requests).
-  const refresh = usable.filter((a) => logged.has(`intervals:${a.id}`)).map((a) => [a, JSON.stringify(metricsOf(a))]).filter(([, m]) => m !== '{}');
+  // Runs already in Hawks still get the newest numbers intervals.icu has (no
+  // extra requests), and a start time if they were logged before we kept one:
+  // without it the day's runs can't be put in order.
+  const refresh = usable.filter((a) => logged.has(`intervals:${a.id}`)).map((a) => [a, JSON.stringify(metricsOf(a)), timeOf(a)]).filter(([, m, t]) => m !== '{}' || t);
   for (let i = 0; i < refresh.length; i += 50) {
-    await db.batch(refresh.slice(i, i + 50).map(([a, m]) => db.prepare('UPDATE workouts SET metrics = ? WHERE person_id = ? AND strava_id = ?').bind(m, person.id, `intervals:${a.id}`)));
+    await db.batch(refresh.slice(i, i + 50).map(([a, m, t]) => db.prepare(
+      "UPDATE workouts SET metrics = COALESCE(NULLIF(?, '{}'), metrics), start_local = COALESCE(NULLIF(start_local, ''), NULLIF(?, '')) WHERE person_id = ? AND strava_id = ?"
+    ).bind(m, t, person.id, `intervals:${a.id}`)));
   }
   if (!fresh.length) return { imported: 0, checked: usable.length, total: all.length, skipped_strava: skippedStrava };
 

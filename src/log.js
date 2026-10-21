@@ -88,12 +88,41 @@ function lapsOf(rs, track) {
 // Activities less than 75 min apart (end to start) are one session: warm-up,
 // workout and cool-down saved as separate activities read as one workout.
 // Hawky's report for a session lives on its main activity.
+const HARD_CATS = new Set(['workout', 'race']);
 const RANK = { race: 6, workout: 5, long: 4, easy: 3, shakeout: 2, recovery: 1, crosstrain: 0 };
 const toMin = (hhmm) => { const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+// When the recording ended (minutes into the day), which is what puts a day's
+// runs in order. Null when the start time is unknown.
+const endMin = (w) => { const s = toMin(w.start_local); return s === null ? null : s + Math.round((w.elapsed_sec || w.moving_sec || 0) / 60); };
+const byEnd = (a, b) => {
+  const x = endMin(a);
+  const y = endMin(b);
+  return x === null || y === null ? (x === null) - (y === null) : x - y;
+};
+
+// A run before the day's hard effort is the warm-up, one after it the cool-down.
+const EASYISH = new Set(['easy', 'recovery', 'shakeout']);
+function rolesOf(rs) {
+  const roles = new Map();
+  const run = rs.filter((w) => w.category !== 'crosstrain' && endMin(w) !== null).sort(byEnd);
+  const hard = run.filter((w) => HARD_CATS.has(w.category));
+  if (!hard.length) return roles;
+  const first = endMin(hard[0]);
+  const last = endMin(hard[hard.length - 1]);
+  for (const w of run) {
+    if (!EASYISH.has(w.category)) continue;
+    const e = endMin(w);
+    if (e < first) roles.set(w.strava_id, 'warmup');
+    else if (e > last) roles.set(w.strava_id, 'cooldown');
+  }
+  return roles;
+}
 
 // One activity with everything the watch and the weather say about it.
 // `events` (that day's calendar) tells which course it was on.
-function activityDetail(w, events = []) {
+function activityDetail(w, events = [], role = '') {
   let metrics = {};
   try { metrics = JSON.parse(w.metrics || '{}') || {}; } catch { /* ignore */ }
   let laps = [];
@@ -104,7 +133,7 @@ function activityDetail(w, events = []) {
   const heat = cond?.heat || 0;
   const hill = cond?.hill || 0;
   return {
-    id: w.strava_id, name: w.name, category: w.category, start: w.start_local || '',
+    id: w.strava_id, name: w.name, category: w.category, role, start: w.start_local || '', end: endMin(w) === null ? '' : hhmm(endMin(w)),
     miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null,
     moving_sec: w.moving_sec ?? null, elapsed_sec: w.elapsed_sec ?? null,
     pace: pace ? fmtSec(Math.round(pace)) : null,
@@ -123,6 +152,8 @@ function activityDetail(w, events = []) {
 }
 
 export function sessionsOf(rs, events = []) {
+  rs = [...rs].sort(byEnd);
+  const roles = rolesOf(rs);
   const groups = [];
   for (const w of rs) {
     const start = toMin(w.start_local);
@@ -157,14 +188,13 @@ export function sessionsOf(rs, events = []) {
       report: main.summary || items.find((w) => w.summary)?.summary || '',
       elev_ft: items.some((w) => w.elev_gain_ft != null) ? items.reduce((a, w) => a + (w.elev_gain_ft || 0), 0) : null,
       temp_f: main.temp_f ?? null, dew_point_f: main.dew_point_f ?? null,
-      activities: items.map((w) => activityDetail(w, events)),
+      activities: items.map((w) => activityDetail(w, events, roles.get(w.strava_id) || '')),
     };
   });
 }
 
 // How the whole day compared with the plan. Replaces the old per-activity
 // letter grades, which compared a warm-up on its own to the full day's miles.
-const HARD_CATS = new Set(['workout', 'race']);
 export function dayPlanTag(rs, miles, maxEffort) {
   const planned = rs.find((w) => w.planned_type);
   if (!planned) return null;
@@ -217,7 +247,7 @@ export async function getDays(db, personId, from, to) {
     return byDate.get(date);
   };
   days.results.forEach((d) => { get(d.date).entry = d; });
-  runs.results.forEach((w) => { get(w.date).runs.push(w); });
+  [...runs.results].sort(byEnd).forEach((w) => { get(w.date).runs.push(w); });
 
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).map(({ date, entry: e, runs: rs }) => {
     const running = rs.filter((w) => w.category !== 'crosstrain');

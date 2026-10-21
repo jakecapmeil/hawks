@@ -1384,6 +1384,11 @@
   .act-laps{width:100%;border-collapse:collapse;margin-top:var(--sp-2);font-size:var(--fs-footnote);font-variant-numeric:tabular-nums;}
   .act-laps th{font-weight:600;color:var(--ink-soft);text-align:left;padding:2px 4px;}
   .act-laps td{padding:3px 4px;border-top:1px solid var(--line);}
+  .act-laps tfoot td{font-weight:700;}
+  .act-laps tr.run td:first-child{font-weight:600;}
+  .act-laps tr.sub td{color:var(--ink-soft);}
+  .act-laps tr.sub td:first-child{padding-left:14px;}
+  .day-splits{margin-top:var(--sp-3);}
   .session-report b{color:var(--gold);font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;}
   .tl-events{display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-3);}
   .tl-event{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-footnote);color:var(--ink-soft);}
@@ -1466,7 +1471,7 @@
   .conf{width:10px;height:10px;border-radius:50%;justify-self:end;}
   .conf.high{background:var(--int-1);} .conf.medium{background:var(--int-2);} .conf.low{background:var(--ink-soft);opacity:.5;}
   .fit-trend{margin-top:var(--sp-4);}
-  .fit-trend svg{width:100%;height:70px;display:block;}
+  .fit-trend svg{width:100%;height:70px;display:block;overflow:visible;}
   .fit-trend .hint{margin-top:4px;}
   .fit-how summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
   .fit-how summary::-webkit-details-marker{display:none;}
@@ -1961,6 +1966,7 @@
             <label class="field"><span>Runs</span><input type="number" step="1" min="0" max="10" id="tlRuns" inputmode="numeric"></label>
             <label class="field"><span>Difficulty 1-10</span><input type="number" step="1" min="1" max="10" id="tlDifficulty" inputmode="numeric"></label>
           </div>
+          <div id="tlDaySplits"></div>
           <div class="sessions" id="tlSessions"></div>
           <div class="tl-events" id="tlEvents"></div>
           <!-- The split builder moves into whichever session is open. -->
@@ -5351,6 +5357,7 @@ function updateSplitSummary(){
   $('splitSummary').textContent = `${same ? `${ok.length} x ${ok[0].m}m · avg ${clock(sec / ok.length)}` : `${ok.length} reps · ${miles}`} · ${pacePerMile(m, sec)}/mi`;
 }
 
+const ROLE_LABEL = { warmup:'Warm up', cooldown:'Cool down' };
 const SESSION_LABEL = { easy:'Easy run', recovery:'Recovery run', long:'Long run', workout:'Workout', race:'Race', shakeout:'Shakeout', crosstrain:'Cross-training' };
 const ZONE_COLORS = ['#9bb7d4','#6fbf8e','#e8c547','#f0954a','#e0584f','#b0365e','#6d2a5e'];
 
@@ -5360,7 +5367,7 @@ function activityHtml(a){
   const m = a.metrics || {};
   const open = a.id === tlOpenActivity;
   const generic = /^((morning|afternoon|evening|lunch|night)\s+)?run(ning)?$|running$/i;
-  const name = a.name && !generic.test(a.name) ? a.name : (SESSION_LABEL[a.category] || 'Run');
+  const name = ROLE_LABEL[a.role] || (a.name && !generic.test(a.name) ? a.name : (SESSION_LABEL[a.category] || 'Run'));
   const stat = (v, l)=> v == null || v === '' ? '' : `<div class="act-stat"><b>${escapeHtml(String(v))}</b><span>${escapeHtml(l)}</span></div>`;
   const dur = (sec)=> sec ? clock(sec) : null;
   const pace = (sec)=> sec ? clock(Math.round(sec)) + '/mi' : null;
@@ -5400,11 +5407,30 @@ function activityHtml(a){
   })() : '';
   const lapRows = (a.laps || []).filter(l=>l.m > 0 && l.s > 0);
   const laps = lapRows.length ? `<table class="act-laps"><thead><tr><th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${lapRows.map((l,i)=>`<tr><td>${i+1}</td><td>${Math.round(l.m)}m</td><td>${clock(l.s)}</td><td>${clock(Math.round(l.s / l.m * (a.track ? 1600 : 1609.344)))}</td><td>${l.hr || ''}</td></tr>`).join('')}</tbody></table>` : '';
-  const meta = [a.start, a.miles != null && `${Math.round(a.miles * 100) / 100} mi`, a.pace && `${a.pace}/mi`, a.avg_hr && `${a.avg_hr} bpm`, heat].filter(Boolean).join(' · ');
+  const meta = [a.start && a.end && a.end !== a.start ? `${a.start}–${a.end}` : a.start, a.miles != null && `${Math.round(a.miles * 100) / 100} mi`, a.pace && `${a.pace}/mi`, a.avg_hr && `${a.avg_hr} bpm`, heat].filter(Boolean).join(' · ');
   return `<div class="act ${open ? 'open' : ''}" data-id="${escapeHtml(a.id)}">
-    <button type="button" class="act-btn" aria-expanded="${open}"><span><span class="act-name">${escapeHtml(name)}</span> <span class="badge ${toneOf(a.category)}">${escapeHtml(cap(a.category))}</span><br><span class="act-meta num">${escapeHtml(meta)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+    <button type="button" class="act-btn" aria-expanded="${open}"><span><span class="act-name">${escapeHtml(name)}</span> <span class="badge ${toneOf(a.category)}">${escapeHtml(a.role ? ROLE_LABEL[a.role] : cap(a.category))}</span><br><span class="act-meta num">${escapeHtml(meta)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
     <div class="act-body"><div class="act-grid">${stats}</div>${notes ? `<div class="act-note">${escapeHtml(notes)}</div>` : ''}${zones}${laps}</div>
   </div>`;
+}
+
+// The whole day in order of when each recording ended: every run as a row,
+// with a workout's reps listed under it. Only for days with more than one run.
+function daySplitsHtml(sessions){
+  const acts = sessions.flatMap(sx=> sx.activities || []);
+  if(acts.length < 2) return '';
+  const sec = (v)=> v ? clock(Math.round(v)) : '';
+  const rows = acts.map(a=>{
+    const name = ROLE_LABEL[a.role] || SESSION_LABEL[a.category] || 'Run';
+    const mi = (a.miles || 0);
+    const pace = mi > 0.2 && a.moving_sec ? clock(Math.round(a.moving_sec / mi)) : '';
+    const reps = (a.laps || []).filter(l=>l.m > 0 && l.s > 0);
+    const sub = reps.length > 1 ? reps.map((l,i)=>`<tr class="sub"><td>${i+1}</td><td>${Math.round(l.m)}m</td><td>${clock(l.s)}</td><td>${clock(Math.round(l.s / l.m * (a.track ? 1600 : 1609.344)))}</td><td>${l.hr || ''}</td></tr>`).join('') : '';
+    return `<tr class="run"><td>${escapeHtml(name)}</td><td>${mi ? Math.round(mi * 100) / 100 + ' mi' : ''}</td><td>${sec(a.moving_sec)}</td><td>${pace}</td><td>${a.avg_hr || ''}</td></tr>${sub}`;
+  }).join('');
+  const mi = acts.reduce((t,a)=> t + (a.miles || 0), 0);
+  const secs = acts.reduce((t,a)=> t + (a.moving_sec || 0), 0);
+  return `<div class="day-splits"><div class="eyebrow">Day splits</div><table class="act-laps"><thead><tr><th>Run</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${Math.round(mi * 100) / 100} mi</td><td>${sec(secs)}</td><td>${mi > 0.2 ? clock(Math.round(secs / mi)) : ''}</td><td></td></tr></tfoot></table></div>`;
 }
 
 async function renderTrainingDay(){
@@ -5442,6 +5468,7 @@ async function renderTrainingDay(){
   // The split builder may sit inside the session being replaced: move it out
   // first, or the redraw deletes it (and opening another session fails).
   if($('tlSessions').contains($('splitPanel'))) $('tlSessions').after($('splitPanel'));
+  $('tlDaySplits').innerHTML = daySplitsHtml(tlSessions);
   $('tlSessions').innerHTML = tlSessions.map(sx=>{
     const meta = [sx.start && sx.start, sx.track && 'Track', sx.miles != null && `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `difficulty ${sx.effort}`, sx.temp_f != null && `${Math.round(sx.temp_f)}°F`, sx.elev_ft && !sx.track && `${sx.elev_ft} ft up`].filter(Boolean).join(' · ');
     const acts = sx.activities.length ? `<div class="acts">${sx.activities.map(activityHtml).join('')}</div>` : '';
@@ -5678,7 +5705,7 @@ function sparkline(points){
   const vs = points.map(p=>p.v), lo = Math.min(...vs) - 0.5, hi = Math.max(...vs) + 0.5;
   const W = 300, H = 60;
   const xy = points.map((p,i)=>[i / (points.length - 1) * W, H - (p.v - lo) / (hi - lo) * H]);
-  return `<svg viewBox="-4 -4 ${W + 8} ${H + 8}" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${xy.map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ')}"/><circle cx="${xy[xy.length-1][0]}" cy="${xy[xy.length-1][1]}" r="4" fill="var(--gold)"/></svg>`;
+  return `<svg viewBox="-4 -4 ${W + 8} ${H + 8}" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${xy.map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ')}"/><polyline fill="none" stroke="var(--gold)" stroke-width="9" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${(xy[xy.length-1][0]-0.01).toFixed(2)},${xy[xy.length-1][1].toFixed(1)} ${xy[xy.length-1][0].toFixed(2)},${xy[xy.length-1][1].toFixed(1)}"/></svg>`;
 }
 
 async function renderFitness(refresh){
