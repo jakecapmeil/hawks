@@ -337,8 +337,6 @@ async function syncWellness(env, person, key, today) {
       atl: Number.isFinite(w.atl) ? Math.round(w.atl * 10) / 10 : null,
     }))
     .filter((w) => w.rhr || w.hrv || w.sleep || w.vo2 || w.ctl != null);
-  // Field names come from a community doc, so note what intervals.icu actually sends.
-  if (rows?.length) console.log('wellness fields', Object.keys(rows[rows.length - 1]).filter((k) => rows[rows.length - 1][k] != null).join(','));
   if (!good.length) return 0;
   const stmts = good.map((w) => env.DB.prepare(
     `INSERT INTO wellness (person_id, date, resting_hr, hrv, sleep_hours, sleep_score, vo2max, ctl, atl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
