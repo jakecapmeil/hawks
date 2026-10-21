@@ -144,6 +144,24 @@ const CHAT_SCHEMA = {
       },
     },
     health_status: { type: 'string', enum: ['healthy', 'injured', 'sick'], description: 'Only when the runner says they are sick, injured, or better.' },
+    plan_change: {
+      type: 'object',
+      description: "Change one day of the plan (today to 13 days out), when the runner can't do it as planned or you decide it should change.",
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        type: { type: 'string', enum: ['Easy', 'Recovery', 'Workout', 'Long run', 'Race', 'Shakeout', 'Cross-train', 'Off'] },
+        miles: { type: 'number' },
+        detail: { type: 'string', description: 'The session, e.g. "5 x 1K at 3:53 with 2 min jog" or "40 min easy bike"' },
+        reason: { type: 'string', description: 'One sentence the runner will see' },
+      },
+      required: ['date', 'type', 'reason'],
+    },
+    level_change: {
+      type: 'object',
+      description: "Move the runner's plan up or down one level. Up only when level.ready is true; down when injury, illness or exhaustion calls for it.",
+      properties: { direction: { type: 'string', enum: ['up', 'down'] }, reason: { type: 'string' } },
+      required: ['direction', 'reason'],
+    },
   },
   required: ['answer'],
 };
@@ -163,6 +181,10 @@ export async function askCoach(env, db, person, history, context, today, bodyPar
 Base answers on their data below: training plan, log, how each day felt and how they slept, body (health status and body map: parts marked sore or pain), PRs, Fitness States (race estimates, VO2max estimate, mileage, pace zones) and the team's workout library. Every pace you give must come from their Fitness States paces. When suggesting a workout, prefer one from the library, lay it out as warm-up / main set with rep targets / cool-down, and give each rep's target time.
 
 CHECK IN like a coach. If a recent run day has no feel or sleep logged, or a body part is marked sore or pain, ask about it, one short question at a time, at the end of your answer (e.g. "How did the 6x800 feel, 1 to 10?" or "Is the left calf still sore?"). Let soreness and how they feel change your advice: back off when something hurts or they're tired.
+
+YOU RUN THEIR PLAN DAY TO DAY. The coach's weekly plan (plan.week) is the base and the goal is to follow it. Change a day (plan_change) when the runner says they can't do it (busy, sick, hurt, wiped out), when readiness or the body map says so, or to move a workout to a better day. Prefer moving or shrinking over skipping; keep two easy days between hard ones; never add mileage to make up for a missed day. Hawks rejects changes outside the plan's limits and tells you why, so stay close to the plan. Explain every change in one sentence. plan.tomorrow is what they'll see on the Plan tab.
+
+LEVELS. plan.level shows their weekly mileage and whether they're ready for the next level (ready plus the gates). If ready is true, you can tell them and level them up (level_change up). If they're injured, sick or exhausted for more than a few days, you can move them down. Talk in weekly miles, never level numbers.
 
 SAVE what they tell you. When the runner says how a day felt, how they slept, or something about a day, fill log (feel 1-10 where 10 is great; pick the date they mean, default today or the most recent run). When they say a body part is sore, painful or better, fill body with the matching id from body_parts ("none" clears it). When they say they're sick, injured or better, set health_status. Mention briefly in your answer what you saved. Never save anything they didn't say.
 

@@ -315,6 +315,31 @@ function stravaNote(res) {
     : '';
 }
 
+// Resting HR, HRV and sleep for the last 5 weeks (Garmin sends them to
+// intervals.icu when the watch is worn overnight). One request per sync.
+async function syncWellness(env, person, key, today) {
+  const oldest = todayInTz(new Date(Date.now() - 35 * 86400000));
+  let rows;
+  try {
+    rows = await icu(key, `${athletePath(person.icu_athlete)}/wellness?oldest=${oldest}&newest=${today}`, env);
+  } catch { return 0; }
+  const good = (Array.isArray(rows) ? rows : []).filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w?.id || ''))
+    .map((w) => ({
+      date: w.id,
+      rhr: w.restingHR > 25 && w.restingHR < 120 ? w.restingHR : null,
+      hrv: w.hrv > 5 && w.hrv < 300 ? w.hrv : null,
+      sleep: w.sleepSecs > 3600 && w.sleepSecs < 16 * 3600 ? Math.round((w.sleepSecs / 3600) * 10) / 10 : null,
+      score: w.sleepScore > 0 && w.sleepScore <= 100 ? w.sleepScore : null,
+    }))
+    .filter((w) => w.rhr || w.hrv || w.sleep);
+  if (!good.length) return 0;
+  await env.DB.batch(good.map((w) => env.DB.prepare(
+    `INSERT INTO wellness (person_id, date, resting_hr, hrv, sleep_hours, sleep_score) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(person_id, date) DO UPDATE SET resting_hr = excluded.resting_hr, hrv = excluded.hrv, sleep_hours = excluded.sleep_hours, sleep_score = excluded.sleep_score`
+  ).bind(person.id, w.date, w.rhr, w.hrv, w.sleep, w.score)));
+  return good.length;
+}
+
 export async function syncPerson(env, personId, { days } = {}) {
   const db = env.DB;
   const person = await loadPerson(env, personId);
@@ -324,6 +349,7 @@ export async function syncPerson(env, personId, { days } = {}) {
     const lastSyncDay = person.icu_synced_at ? todayInTz(new Date(person.icu_synced_at - 3 * 86400000)) : null;
     const oldest = days ? todayInTz(new Date(Date.now() - days * 86400000)) : (lastSyncDay || todayInTz(new Date(Date.now() - FIRST_SYNC_DAYS * 86400000)));
     const res = await importRange(env, person, key, { oldest, newest: today, ai: true, lapBudget: MAX_LAP_FETCHES });
+    res.wellness_days = await syncWellness(env, person, key, today);
     const note = [res.ai_note, stravaNote(res)].filter(Boolean).join(' ');
     await db.prepare('UPDATE people SET icu_synced_at = ?, icu_status = ? WHERE id = ?').bind(Date.now(), note ? `ok (${note})` : 'ok', person.id).run();
     if (res.imported) await recomputeFitness(db, person.id, today);

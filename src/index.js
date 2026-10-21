@@ -5,6 +5,7 @@ import { todayInTz, getCoachContext, compactFitness } from './coach.js';
 import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
 import { BODY_PARTS } from './body.js';
+import { hawkyState, applyPlanChange, resetPlanDay, changeLevel, healthSummary, PlanError } from './hawky.js';
 import { aiEnabled, askCoach, AiError } from './gemini.js';
 import { COACH_TOOLS, callCoachTool, personForToken, workoutsForApp, issueCoachToken, teamTraining } from './coach.js';
 
@@ -290,7 +291,7 @@ async function setHealthStatus(db, body) {
   const status = str(body?.status, 20);
   if (!personId || !VALID_HEALTH_STATUS.includes(status)) return json({ error: 'Missing personId or invalid status' }, 400);
 
-  const result = await db.prepare('UPDATE people SET health_status = ? WHERE id = ?').bind(status, personId).run();
+  const result = await db.prepare('UPDATE people SET health_status = ?, health_updated_at = ? WHERE id = ?').bind(status, Date.now(), personId).run();
   if (!result.meta.changes) return json({ error: 'Unknown person' }, 400);
   return json({ ok: true });
 }
@@ -365,7 +366,8 @@ async function mcpSetRanks(db, changes) {
     const row = await resolvePerson(db, c?.person ?? c?.personId);
     resolved.push({ row, rank: parseRank(c?.rank) });
   }
-  await db.batch(resolved.map(({ row, rank }) => db.prepare('UPDATE people SET plan_rank = ? WHERE id = ?').bind(rank, row.id)));
+  // What the coach sets is the new baseline Hawky levels from.
+  await db.batch(resolved.map(({ row, rank }) => db.prepare('UPDATE people SET plan_rank = ?, coach_rank = ? WHERE id = ?').bind(rank, rank, row.id)));
   return resolved.map(({ row, rank }) => ({ ...planSummary({ ...row, plan_rank: rank }), previous_rank: row.plan_rank ?? null }));
 }
 
@@ -406,9 +408,9 @@ async function toggleBodyMark(db, body) {
     await db.prepare('DELETE FROM body_marks WHERE person_id = ? AND part = ?').bind(personId, part).run();
   } else {
     await db.prepare(
-      `INSERT INTO body_marks (person_id, part, status) VALUES (?, ?, ?)
-       ON CONFLICT(person_id, part) DO UPDATE SET status=excluded.status`
-    ).bind(personId, part, next).run();
+      `INSERT INTO body_marks (person_id, part, status, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(person_id, part) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at`
+    ).bind(personId, part, next, Date.now()).run();
   }
   return json({ status: next });
 }
@@ -988,6 +990,11 @@ const MCP_TOOLS_BASE = [
     },
   },
   {
+    name: 'get_hawky_changes',
+    description: "Everything Hawky changed for the team in the last N days (default 30): plan level moves (with the weekly miles before and after, and why) and single-day plan changes (what the plan said, what Hawky set, why). Use it to review or undo Hawky's decisions; set_ranks overrides any level.",
+    inputSchema: { type: 'object', properties: { days: { type: 'integer', minimum: 1, maximum: 120 } }, additionalProperties: false },
+  },
+  {
     name: 'get_team_training',
     description: "Training for the whole team: for each person, whether they've connected Hawky in Claude, this week's miles vs plan, load, average plan score (0-100), days run, and their scored runs over the last N days (default 7). Use it to see who's putting in the work.",
     inputSchema: {
@@ -1099,9 +1106,9 @@ async function mcpSetBodyMark(db, args) {
     await db.prepare('DELETE FROM body_marks WHERE person_id = ? AND part = ?').bind(personId, part).run();
   } else {
     await db.prepare(
-      `INSERT INTO body_marks (person_id, part, status) VALUES (?, ?, ?)
-       ON CONFLICT(person_id, part) DO UPDATE SET status=excluded.status`
-    ).bind(personId, part, status).run();
+      `INSERT INTO body_marks (person_id, part, status, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(person_id, part) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at`
+    ).bind(personId, part, status, Date.now()).run();
   }
   return { status };
 }
@@ -1161,6 +1168,17 @@ async function callMcpTool(name, args, env, ctx) {
       return await unwrapJson(await deletePerson(db, a), 'delete_person failed');
     case 'get_plans':
       return await mcpGetPlans(db);
+    case 'get_hawky_changes': {
+      const since = Date.now() - (Number.isInteger(a.days) ? a.days : 30) * 86400000;
+      const [levels, days] = await Promise.all([
+        db.prepare('SELECT p.name, l.from_rank, l.to_rank, l.reason, l.source, l.created_at FROM level_changes l JOIN people p ON p.id = l.person_id WHERE l.created_at >= ? ORDER BY l.created_at DESC').bind(since).all(),
+        db.prepare("SELECT p.name, c.date, c.type, c.miles, c.detail, c.reason, c.source, c.cleared FROM plan_changes c JOIN people p ON p.id = c.person_id WHERE c.created_at >= ? AND c.source != 'athlete' ORDER BY c.date DESC").bind(since).all(),
+      ]);
+      return {
+        level_changes: levels.results.map((l) => ({ ...l, from_miles: PLANS[l.from_rank]?.weeks[0].miles, to_miles: PLANS[l.to_rank]?.weeks[0].miles, when: new Date(l.created_at).toISOString().slice(0, 10) })),
+        day_changes: days.results.map((d) => ({ ...d, undone: !!d.cleared })),
+      };
+    }
     case 'get_team_training':
       return await teamTraining(db, a.days);
     case 'set_rank':
@@ -1244,6 +1262,28 @@ const WATCH_TOOLS = [
     inputSchema: { type: 'object', properties: { full_history: { type: 'boolean' } }, additionalProperties: false },
   },
   {
+    name: 'get_plan_status',
+    description: "Today's and tomorrow's session as the runner should run them (the coach's plan, or a change Hawky made, or Hawky's readiness adjustment), this week day by day, readiness and health (resting HR, HRV, sleep, feel, body map, load), and the runner's plan level with whether they're ready to move up.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'change_plan_day',
+    description: "Change one day of the runner's plan (today to 13 days out) when they can't do it as planned or it should change. Hawks enforces the limits (no big mileage jumps, no back-to-back hard days, week within 10% of plan) and says why if it refuses. reset: true puts the day back to the coach's plan.",
+    inputSchema: {
+      type: 'object', required: ['date'],
+      properties: {
+        date: { type: 'string' }, type: { type: 'string', enum: ['Easy', 'Recovery', 'Workout', 'Long run', 'Race', 'Shakeout', 'Cross-train', 'Off'] },
+        miles: { type: 'number' }, detail: { type: 'string' }, reason: { type: 'string' }, reset: { type: 'boolean' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'change_level',
+    description: 'Move the runner up a plan level (only when get_plan_status says ready) or down one (injury, illness, exhaustion). Explain it in weekly miles.',
+    inputSchema: { type: 'object', required: ['direction', 'reason'], properties: { direction: { type: 'string', enum: ['up', 'down'] }, reason: { type: 'string' } }, additionalProperties: false },
+  },
+  {
     name: 'get_fitness',
     description: "The runner's Fitness States: current race estimates from 400 m to half marathon, VO2max estimate, weekly mileage, pace zones and what they're based on. Recalculated fresh.",
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -1263,8 +1303,15 @@ async function callWatchTool(env, person, name, args) {
       return await syncPerson(env, person.id);
     }
     if (name === 'get_fitness') return compactFitness(await recomputeFitness(env.DB, person.id, todayInTz()));
+    if (name === 'get_plan_status') return await hawkyState(env.DB, person.id);
+    if (name === 'change_plan_day' || name === 'change_level') {
+      const full = await env.DB.prepare('SELECT id, name, first_name, class_year, plan_rank, coach_rank, health_status, health_updated_at, training_status FROM people WHERE id = ?').bind(person.id).first();
+      if (name === 'change_level') return await changeLevel(env.DB, full, args.direction, args.reason, todayInTz(), await healthSummary(env.DB, full, todayInTz()));
+      if (args.reset) { await resetPlanDay(env.DB, person.id, args.date, false); return { reset: args.date }; }
+      return await applyPlanChange(env.DB, full, args, 'hawky');
+    }
   } catch (err) {
-    if (err instanceof IntervalsError) throw new McpToolError(err.message);
+    if (err instanceof IntervalsError || err instanceof PlanError) throw new McpToolError(err.message);
     throw err;
   }
   throw new McpToolError(`Unknown tool: ${name}`);
@@ -1485,6 +1532,19 @@ async function sendMeetDayReminders(env) {
   return { sent };
 }
 
+// Splits belong to the session: they're the work laps of its main activity.
+async function saveSessionSplits(db, body) {
+  const personId = str(body?.personId, 100);
+  const id = str(body?.strava_id, 60);
+  const reps = (Array.isArray(body?.reps) ? body.reps : []).slice(0, 40)
+    .map((r) => ({ m: Math.round(Number(r?.m)), s: Math.round(Number(r?.s) * 10) / 10, hr: r?.hr ? Math.round(Number(r.hr)) : null, rest: str(r?.rest, 12) }))
+    .filter((r) => r.m >= 50 && r.m <= 20000 && r.s > 0 && r.s < 7200);
+  const res = await db.prepare('UPDATE workouts SET laps = ? WHERE person_id = ? AND strava_id = ?').bind(reps.length ? JSON.stringify(reps) : '', personId, id).run();
+  if (!res.meta.changes) return json({ error: 'Unknown session' }, 404);
+  await db.prepare('UPDATE fitness_states SET computed_at = 0 WHERE person_id = ?').bind(personId).run();
+  return json({ ok: true, reps });
+}
+
 // What Hawky heard in the chat, checked and saved: a day's feel, sleep and a
 // note; body map changes; health status. Returns short labels for the page.
 async function applyHawkySaves(db, personId, out) {
@@ -1511,12 +1571,37 @@ async function applyHawkySaves(db, personId, out) {
   for (const b of Array.isArray(out?.body) ? out.body.slice(0, 6) : []) {
     if (!BODY_PARTS[b?.part] || !['sore', 'pain', 'none'].includes(b?.status)) continue;
     if (b.status === 'none') await db.prepare('DELETE FROM body_marks WHERE person_id = ? AND part = ?').bind(personId, b.part).run();
-    else await db.prepare('INSERT INTO body_marks (person_id, part, status) VALUES (?, ?, ?) ON CONFLICT(person_id, part) DO UPDATE SET status = excluded.status').bind(personId, b.part, b.status).run();
+    else await db.prepare('INSERT INTO body_marks (person_id, part, status, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(person_id, part) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at').bind(personId, b.part, b.status, Date.now()).run();
     saved.push(`${BODY_PARTS[b.part]}: ${b.status === 'none' ? 'cleared' : b.status}`);
   }
   if (['healthy', 'injured', 'sick'].includes(out?.health_status)) {
-    await db.prepare('UPDATE people SET health_status = ? WHERE id = ?').bind(out.health_status, personId).run();
+    await db.prepare('UPDATE people SET health_status = ?, health_updated_at = ? WHERE id = ?').bind(out.health_status, Date.now(), personId).run();
     saved.push(`status: ${out.health_status}`);
+  }
+  // Plan and level changes go through Hawky's guardrails; a refusal comes
+  // back marked "!" so the page can show why.
+  const person = (out?.plan_change || out?.level_change)
+    ? await db.prepare('SELECT id, name, first_name, class_year, plan_rank, coach_rank, health_status, health_updated_at, training_status FROM people WHERE id = ?').bind(personId).first()
+    : null;
+  if (out?.plan_change && person) {
+    try {
+      const c = await applyPlanChange(db, person, out.plan_change, 'hawky');
+      const label = new Date(c.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      saved.push(`plan for ${label}: ${c.type}${c.miles ? ` ${c.miles} mi` : ''}`);
+    } catch (err) {
+      if (!(err instanceof PlanError)) throw err;
+      saved.push(`!${err.message}`);
+    }
+  }
+  if (out?.level_change && person) {
+    try {
+      const health = await healthSummary(db, person, today);
+      const m = await changeLevel(db, person, out.level_change.direction, out.level_change.reason, today, health);
+      saved.push(`plan level: ${m.from_miles} → ${m.to_miles} mi a week`);
+    } catch (err) {
+      if (!(err instanceof PlanError)) throw err;
+      saved.push(`!${err.message}`);
+    }
   }
   return saved;
 }
@@ -1644,6 +1729,15 @@ export default {
         return json({ fitness: await getFitness(env.DB, personId, todayInTz()), history: await fitnessHistory(env.DB, personId) });
       }
 
+      if (pathname === '/api/hawky' && request.method === 'GET') {
+        try {
+          return json(await hawkyState(env.DB, str(reqUrl.searchParams.get('personId'), 100)));
+        } catch (err) {
+          if (err instanceof PlanError) return json({ error: err.message }, 400);
+          throw err;
+        }
+      }
+
       if (pathname === '/api/team' && request.method === 'GET') {
         return json(await teamMileage(env.DB));
       }
@@ -1687,6 +1781,11 @@ export default {
         if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
         if (pathname === '/api/people/personal') return await upsertPersonal(env.DB, body, env, ctx);
         if (pathname === '/api/travel-estimate') return await upsertTravelEstimate(env.DB, body);
+        if (pathname === '/api/plan/reset') {
+          await resetPlanDay(env.DB, str(body.personId, 100), str(body.date, 10), body.keep === true);
+          return json(await hawkyState(env.DB, str(body.personId, 100)));
+        }
+        if (pathname === '/api/log/session-splits') return await saveSessionSplits(env.DB, body);
         if (pathname === '/api/log/day' || pathname === '/api/log/track' || pathname === '/api/people/5k' || pathname === '/api/people/prs' || pathname === '/api/fitness/refresh') {
           const personId = str(body.personId, 100);
           try {
@@ -1738,9 +1837,13 @@ export default {
                 "SELECT date, library_id, splits, summary, difficulty FROM training_days WHERE person_id = ? AND (library_id != '' OR splits != '') ORDER BY date"
               ).bind(personId).all()).results;
               context.all_workout_sessions = sessions.map((d) => ({ date: d.date, workout: d.library_id || null, splits: d.splits || null, summary: (d.summary || '').slice(0, 200), difficulty: d.difficulty }));
+              const state = await hawkyState(env.DB, personId);
+              context.plan = { today: state.today, tomorrow: state.tomorrow, week: state.week, level: state.level, changes: state.changes };
+              context.health = state.health;
               const history = Array.isArray(body.history) ? body.history : [{ role: 'user', text: body.question }];
               const out = await askCoach(env, env.DB, person, history, context, todayInTz(), BODY_PARTS);
-              return json({ answer: String(out?.answer || ''), saved: await applyHawkySaves(env.DB, personId, out) });
+              const saved = await applyHawkySaves(env.DB, personId, out);
+              return json({ answer: String(out?.answer || ''), saved: saved.filter((x) => !x.startsWith('!')), refused: saved.filter((x) => x.startsWith('!')).map((x) => x.slice(1)) });
             }
           } catch (err) {
             if (err instanceof IntervalsError || err instanceof AiError) return json({ error: err.message }, 400);

@@ -78,7 +78,7 @@ function lapsOf(rs, track) {
   for (const w of rs) {
     try {
       const laps = JSON.parse(w.laps || '[]');
-      if (Array.isArray(laps) && laps.length) return laps.map((l) => ({ m: track || w.surface === 'track' ? snap100(l.m) : l.m, s: l.s, hr: l.hr || null, rest: '' }));
+      if (Array.isArray(laps) && laps.length) return laps.map((l) => ({ m: track || w.surface === 'track' ? snap100(l.m) : l.m, s: l.s, hr: l.hr || null, rest: l.rest || '' }));
     } catch { /* ignore */ }
   }
   return [];
@@ -120,6 +120,8 @@ export function sessionsOf(rs) {
       avg_hr: hr.length ? Math.round(hr.reduce((a, w) => a + w.avg_hr * w.moving_sec, 0) / hr.reduce((a, w) => a + w.moving_sec, 0)) : null,
       effort: items.reduce((m, w) => Math.max(m, w.effort || 0), 0) || null,
       track: items.some((w) => w.surface === 'track'),
+      // The session's own splits: the work laps of its main activity.
+      splits: lapsOf([main, ...items.filter((w) => w !== main)], main.surface === 'track'),
       report: main.summary || items.find((w) => w.summary)?.summary || '',
       activities: items.map((w) => ({ id: w.strava_id, name: w.name, category: w.category, miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null, start: w.start_local || '' })),
     };

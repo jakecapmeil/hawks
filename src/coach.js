@@ -87,30 +87,30 @@ export function todayInTz(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
-function addDays(dateKey, n) {
+export function addDays(dateKey, n) {
   const d = new Date(dateKey + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
-function weekStartOf(dateKey) {
+export function weekStartOf(dateKey) {
   const dow = new Date(dateKey + 'T12:00:00Z').getUTCDay();
   return addDays(dateKey, dow === 0 ? -6 : 1 - dow);
 }
 
-function planFor(person) {
+export function planFor(person) {
   const rank = PLANS[person.plan_rank] ? person.plan_rank : (CLASS_YEAR_RANK[person.class_year] ?? null);
   if (!rank) return null;
   return PLAN_VARIANTS[person.id]?.[rank] || PLANS[rank];
 }
 
 // Race week when a meet is within the next 6 days, same as the Training tab.
-async function meetDates(db, from, to) {
+export async function meetDates(db, from, to) {
   const rows = await db.prepare("SELECT date FROM events WHERE type = 'meet' AND date >= ? AND date <= ?").bind(from, to).all();
   return rows.results.map((x) => x.date);
 }
 
-function plannedFor(plan, dateKey, meets) {
+export function plannedFor(plan, dateKey, meets) {
   if (!plan) return null;
   const week = meets.some((m) => m >= dateKey && m <= addDays(dateKey, 6)) ? 1 : 0;
   const dayName = DAY_NAMES[new Date(dateKey + 'T12:00:00Z').getUTCDay()];
