@@ -3,6 +3,7 @@
 // planned vs actual, status, difficulty, notes, and a rolling load note.
 import { WORKOUTS, WORKOUT_TYPES, RACES, PHASES, PACE_ZONES, pacesFrom5k, findWorkouts, workoutTargets, parseReps, snap100, trackMiles, TRACK_MILE_M } from './workouts.js';
 import { getFitness } from './fitness.js';
+import { conditionsOf } from './conditions.js';
 
 // Marks Fitness States stale so the next read recomputes them.
 const staleFitness = (db, personId) => db.prepare('UPDATE fitness_states SET computed_at = 0 WHERE person_id = ?').bind(personId).run();
@@ -90,7 +91,38 @@ function lapsOf(rs, track) {
 const RANK = { race: 6, workout: 5, long: 4, easy: 3, shakeout: 2, recovery: 1, crosstrain: 0 };
 const toMin = (hhmm) => { const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 
-export function sessionsOf(rs) {
+// One activity with everything the watch and the weather say about it.
+// `events` (that day's calendar) tells which course it was on.
+function activityDetail(w, events = []) {
+  let metrics = {};
+  try { metrics = JSON.parse(w.metrics || '{}') || {}; } catch { /* ignore */ }
+  let laps = [];
+  try { laps = JSON.parse(w.laps || '[]'); } catch { /* ignore */ }
+  const miles = w.distance_mi || 0;
+  const pace = miles > 0.2 && w.moving_sec ? w.moving_sec / miles : null;
+  const cond = w.category === 'crosstrain' ? null : conditionsOf(w, events);
+  const heat = cond?.heat || 0;
+  const hill = cond?.hill || 0;
+  return {
+    id: w.strava_id, name: w.name, category: w.category, start: w.start_local || '',
+    miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null,
+    moving_sec: w.moving_sec ?? null, elapsed_sec: w.elapsed_sec ?? null,
+    pace: pace ? fmtSec(Math.round(pace)) : null,
+    // The same effort on a flat course in cool weather (as Fitness States count it).
+    pace_adjusted: pace && cond && cond.factor >= 1.005 ? fmtSec(Math.round(pace / cond.factor)) : null,
+    course: cond?.course || '',
+    avg_hr: w.avg_hr ?? null, max_hr: w.max_hr ?? null, cadence: w.avg_cadence ?? null,
+    elev_ft: w.elev_gain_ft ?? null, elev_per_mi: w.elev_gain_ft != null && miles > 0.3 ? Math.round(w.elev_gain_ft / miles) : null,
+    temp_f: w.temp_f ?? null, dew_point_f: w.dew_point_f ?? null,
+    heat_pct: heat ? Math.round(heat * 1000) / 10 : 0, hill_pct: hill ? Math.round(hill * 1000) / 10 : 0,
+    effort: w.effort ?? null, hr_effort: w.hr_effort ?? null, load: w.load ?? null,
+    track: w.surface === 'track',
+    laps: Array.isArray(laps) ? laps.slice(0, 40) : [],
+    metrics,
+  };
+}
+
+export function sessionsOf(rs, events = []) {
   const groups = [];
   for (const w of rs) {
     const start = toMin(w.start_local);
@@ -123,7 +155,9 @@ export function sessionsOf(rs) {
       // The session's own splits: the work laps of its main activity.
       splits: lapsOf([main, ...items.filter((w) => w !== main)], main.surface === 'track'),
       report: main.summary || items.find((w) => w.summary)?.summary || '',
-      activities: items.map((w) => ({ id: w.strava_id, name: w.name, category: w.category, miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null, start: w.start_local || '' })),
+      elev_ft: items.some((w) => w.elev_gain_ft != null) ? items.reduce((a, w) => a + (w.elev_gain_ft || 0), 0) : null,
+      temp_f: main.temp_f ?? null, dew_point_f: main.dew_point_f ?? null,
+      activities: items.map((w) => activityDetail(w, events)),
     };
   });
 }
@@ -164,13 +198,17 @@ export function dayPlanTag(rs, miles, maxEffort) {
 export async function getDays(db, personId, from, to) {
   if (!isDate(from) || !isDate(to)) throw new LogError('from and to must be YYYY-MM-DD');
   if (from > to) throw new LogError('from must be on or before to');
-  const [days, runs] = await Promise.all([
+  const [days, runs, events] = await Promise.all([
     db.prepare('SELECT * FROM training_days WHERE person_id = ? AND date >= ? AND date <= ?').bind(personId, from, to).all(),
     db.prepare(
-      `SELECT strava_id, date, name, category, distance_mi, moving_sec, elapsed_sec, avg_hr, effort, load, library_id, summary,
-              start_local, laps, planned_type, planned_miles, surface
+      `SELECT strava_id, date, name, category, distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft, effort, hr_effort, load, library_id, summary,
+              start_local, laps, planned_type, planned_miles, surface, temp_f, dew_point_f, metrics
        FROM workouts WHERE person_id = ? AND date >= ? AND date <= ? ORDER BY start_local, created_at`
     ).bind(personId, from, to).all(),
+    db.prepare(
+      `SELECT e.date, e.type, e.title, e.location, e.description, l.name AS loc_name FROM events e
+       LEFT JOIN locations l ON l.id = e.location_id WHERE e.date >= ? AND e.date <= ?`
+    ).bind(from, to).all(),
   ]);
 
   const byDate = new Map();
@@ -187,6 +225,8 @@ export async function getDays(db, personId, from, to) {
     const types = new Set(parseTypes(e?.types));
     rs.forEach((w) => types.add(CATEGORY_TYPE[w.category] || 'easy'));
     const maxEffort = rs.reduce((m, w) => Math.max(m, w.effort || 0), 0);
+    // Plan matching goes by heart rate alone: an easy run in the heat is still easy.
+    const maxHrEffort = rs.reduce((m, w) => Math.max(m, w.hr_effort ?? w.effort ?? 0), 0);
     const track = e?.surface === 'track' || rs.some((w) => w.surface === 'track');
     const reps = parseSplitReps(e?.split_reps).map((r) => (track ? { ...r, m: snap100(r.m) } : r));
     const laps = lapsOf(rs, track);
@@ -208,8 +248,8 @@ export async function getDays(db, personId, from, to) {
       // Hand-built reps win, then the watch laps, then whatever the splits text says.
       split_reps: reps.length ? reps : laps.length ? laps : parseReps(e?.splits).map((r) => ({ ...r, m: track ? snap100(r.m) : r.m, rest: '' })),
       day_line: e?.day_line || '',
-      plan: dayPlanTag(rs, stravaMiles, maxEffort),
-      sessions: sessionsOf(rs),
+      plan: dayPlanTag(rs, stravaMiles, maxHrEffort),
+      sessions: sessionsOf(rs, events.results),
       summary: e?.summary || '',
       coach_note: e?.coach_note || '',
       load_note: e?.load_note || '',
@@ -316,6 +356,21 @@ export function weeklyTotals(days) {
   return [...weeks.values()].map(({ _diff, ...w }) => ({ ...w, avg_difficulty: _diff.length ? round1(_diff.reduce((a, b) => a + b, 0) / _diff.length) : null }));
 }
 
+// For Claude and Hawky: the same days without what only the page draws (an
+// activity's laps, already in the session's splits, and its HR zone bars).
+export function compactDays(days) {
+  return days.map((d) => ({
+    ...d,
+    sessions: d.sessions.map((s) => ({
+      ...s,
+      activities: s.activities.map(({ laps, metrics, ...a }) => {
+        const { hr_zones, ...m } = metrics || {};
+        return Object.keys(m).length ? { ...a, metrics: m } : a;
+      }),
+    })),
+  }));
+}
+
 export async function getLog(db, personId, from, to) {
   const days = await getDays(db, personId, from, to);
   return { from, to, weeks: weeklyTotals(days), days };
@@ -332,7 +387,7 @@ export async function workoutHistory(db, personId, libraryId) {
   ]);
   const dates = [...new Set([...days.results, ...runs.results].map((r) => r.date))].sort();
   const out = [];
-  for (const date of dates) out.push((await getDays(db, personId, date, date))[0]);
+  for (const date of dates) out.push(compactDays(await getDays(db, personId, date, date))[0]);
   return { workout: { id: w.id, name: w.name }, times_run: out.length, history: out };
 }
 
@@ -502,7 +557,8 @@ export async function callLogTool(db, personId, name, a, today) {
     case 'get_training_log': {
       const to = isDate(a.to) ? a.to : today;
       const from = isDate(a.from) ? a.from : addDays(to, -27);
-      return await getLog(db, personId, from, to);
+      const log = await getLog(db, personId, from, to);
+      return { ...log, days: compactDays(log.days) };
     }
     case 'log_day': {
       const { person, date, ...fields } = a;

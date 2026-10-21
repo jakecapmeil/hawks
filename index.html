@@ -1201,8 +1201,13 @@
 
 
 
-  /* ---- Plan: tomorrow, health, level ------------------------------------- */
-  .tomorrow-card{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold-bg);}
+  /* ---- Plan: today, health, level ---------------------------------------- */
+  .today-card{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold-bg);}
+  .tm-done{margin-top:var(--sp-3);display:flex;flex-direction:column;gap:var(--sp-2);}
+  .tm-done-row{display:flex;align-items:center;gap:var(--sp-2);width:100%;height:auto;padding:var(--sp-2) var(--sp-3);background:var(--bg);border:1px solid var(--line);border-radius:var(--r-control);color:var(--ink);text-align:left;font-weight:500;white-space:normal;}
+  .tm-done-row b{font-weight:700;}
+  .tm-done-row .meta{font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .tm-done-row .go{margin-left:auto;color:var(--ink-soft);font-size:var(--fs-footnote);flex-shrink:0;}
   .tm-main{display:flex;align-items:baseline;gap:var(--sp-2);margin-top:2px;}
   .tm-type{font-size:var(--fs-title2);font-weight:800;letter-spacing:var(--tr-title2);}
   .tm-miles{font-size:var(--fs-title3);font-weight:700;color:var(--ink-soft);}
@@ -1357,6 +1362,28 @@
   .session-acts{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--sp-2);}
   .session-acts span{font-size:var(--fs-caption);background:var(--bg);border-radius:var(--r-pill);padding:2px 8px;color:var(--ink-soft);}
   .session-report{margin-top:var(--sp-2);font-size:var(--fs-subhead);line-height:1.45;}
+  /* Each activity in a session opens to everything the watch and the weather say about it. */
+  .acts{display:flex;flex-direction:column;gap:4px;margin-top:var(--sp-2);}
+  .act{border:1px solid var(--line);border-radius:var(--r-control);background:var(--bg);}
+  .act-btn{width:100%;height:auto;padding:var(--sp-2) var(--sp-3);background:none;border:0;color:var(--ink);text-align:left;display:flex;align-items:center;gap:var(--sp-2);white-space:normal;font-weight:500;}
+  .act-btn:active{transform:none;opacity:1;}
+  .act-btn .act-name{font-weight:700;}
+  .act-btn .act-meta{font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .act-btn svg{margin-left:auto;width:14px;height:14px;flex-shrink:0;fill:none;stroke:var(--ink-soft);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;transform:rotate(-90deg);transition:transform .2s ease;}
+  .act.open .act-btn svg{transform:none;}
+  .act-body{display:none;padding:0 var(--sp-3) var(--sp-3);}
+  .act.open .act-body{display:block;}
+  .act-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;}
+  .act-stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;min-width:0;}
+  .act-stat b{font-size:var(--fs-subhead);font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+  .act-stat span{font-size:var(--fs-caption);color:var(--ink-soft);}
+  .act-note{margin-top:var(--sp-2);font-size:var(--fs-footnote);color:var(--ink-soft);line-height:1.45;}
+  .act-zones{display:flex;height:10px;border-radius:5px;overflow:hidden;margin-top:var(--sp-2);background:var(--line);}
+  .act-zones i{display:block;height:100%;}
+  .act-zone-key{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:4px;font-size:var(--fs-caption);color:var(--ink-soft);}
+  .act-laps{width:100%;border-collapse:collapse;margin-top:var(--sp-2);font-size:var(--fs-footnote);font-variant-numeric:tabular-nums;}
+  .act-laps th{font-weight:600;color:var(--ink-soft);text-align:left;padding:2px 4px;}
+  .act-laps td{padding:3px 4px;border-top:1px solid var(--line);}
   .session-report b{color:var(--gold);font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;}
   .tl-events{display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-3);}
   .tl-event{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-footnote);color:var(--ink-soft);}
@@ -1804,17 +1831,18 @@
 
     <div id="tpPlanView" class="split split-plan">
       <div class="stack-cards">
-        <section class="card tomorrow-card" id="tomorrowCard" style="display:none;">
+        <section class="card today-card" id="todayCard" style="display:none;">
           <div class="section-head" style="margin-bottom:var(--sp-2);">
             <div>
-              <div class="eyebrow" id="tmEyebrow">Tomorrow</div>
+              <div class="eyebrow" id="tmEyebrow">Today</div>
               <div class="tm-main"><span class="tm-type" id="tmType"></span><span class="tm-miles num" id="tmMiles"></span></div>
             </div>
             <span id="tmBadge"></span>
           </div>
           <div class="tm-detail" id="tmDetail"></div>
           <div class="tm-reason" id="tmReason" style="display:none;"></div>
-          <div class="tm-today" id="tmToday"></div>
+          <div class="tm-done" id="tmDone" style="display:none;"></div>
+          <div class="tm-today" id="tmNext"></div>
           <div class="cluster" style="margin-top:var(--sp-3);">
             <button type="button" class="ghost sm-btn" id="tmCant">Can't do this</button>
             <button type="button" class="ghost sm-btn" id="tmReset" style="display:none;">Back to the plan</button>
@@ -2052,6 +2080,7 @@
             <summary><span class="card-title" style="margin:0;">How it works</span></summary>
             <div class="stack" style="margin-top:var(--sp-3);">
               <p><b>Every run is searched for races.</b> Any run that covered a race distance (1600 to 10K) at race effort counts, whatever it was labelled, and if it beats a PR on file Hawks updates the PR. The fastest stretches inside your runs (from your watch, through intervals.icu) count too.</p>
+              <p><b>Course and weather are taken out.</b> Every race and hard run is credited back to a flat course on a cool day. Van Cortlandt runs about 5.5% slow (about a minute on an 18-minute 5K), other cross-country courses about 2.5% plus their hills, and heat by temperature plus dew point (about 1% at 120, 3% at 140, 6% at 160). Heart rate on steady runs is read the same way. Your PRs stay the real times, and a cross-country race counts toward your XC PR, never your track one.</p>
               <p><b>Recent races come first.</b> Each one becomes a VDOT (Jack Daniels' running formula), weighted by how recent it is. A new race outranks older results and a 5K you typed in, and a much slower race (hilly course, bad day) doesn't drag you down.</p>
               <p><b>Garmin's VO2max is matched to your races.</b> Garmin estimates VO2max from heart rate vs speed, which usually reads higher than race results. Hawks finds your personal ratio from races run near a Garmin reading, so the number can track your fitness between races.</p>
               <p><b>Training fills the gaps.</b> Rep sessions from your watch or split builder, and your heart rate on steady runs, only move the number when your last race is old: if you've gotten fitter since, or lost some fitness.</p>
@@ -4200,9 +4229,11 @@ async function hawkyOpener(){
   if(recent && recent.feel == null) parts.push(`How did ${when}'s ${what} feel, 1 to 10?${recent.sleep_hours == null ? ' And how did you sleep?' : ''}`);
   if(sore.length) parts.push(`Your body map has ${sore.join(' and ')} marked. How's that feeling?`);
   const h = await loadHawky();
-  if(h?.tomorrow && parts.length === 1){
-    const t = h.tomorrow;
-    parts.push(`Tomorrow is ${t.type === 'Off' ? 'a rest day' : `${t.type.toLowerCase()} ${t.miles} mi`}${t.source === 'hawky' || t.source === 'auto' ? ' (I changed it)' : ''}. Can you make it?`);
+  // Today's run until it's done, then tomorrow's.
+  const next = h?.today && !h.today_done ? { t: h.today, when: 'Today' } : h?.tomorrow ? { t: h.tomorrow, when: 'Tomorrow' } : null;
+  if(next && parts.length === 1){
+    const t = next.t;
+    parts.push(`${next.when} is ${t.type === 'Off' ? 'a rest day' : `${t.type.toLowerCase()} ${t.miles} mi`}${t.source === 'hawky' || t.source === 'auto' ? ' (I changed it)' : ''}. Can you make it?`);
   }
   if(parts.length === 1) parts.push('How are the legs today? Ask me anything about your training.');
   return parts.join(' ');
@@ -4506,13 +4537,14 @@ async function renderWeekCard(){
   $('weekHint').textContent = w.week_type ? `${w.week_type} week.` : '';
 }
 
-function openLogDay(date){
+function openLogDay(date, sessionKey){
   const d = new Date(date + 'T12:00:00');
   tlYear = d.getFullYear(); tlMonthIdx = d.getMonth(); tlSelected = date;
   trainingView = 'log';
   try{ localStorage.setItem('hawksTrainingView', 'log'); }catch(e){}
   setPage('training');
-  tlOpenSession = null;
+  tlOpenSession = sessionKey || null;
+  tlOpenActivity = null;
 }
 
 function resolvedMeetLocation(ev){
@@ -5091,9 +5123,9 @@ function wireUI(){
   $('syncNowItem').addEventListener('click', ()=>{ $('syncMenu').classList.remove('show'); runSync(); });
   $('syncImportItem').addEventListener('click', ()=>{ $('syncMenu').classList.remove('show'); runImport(); });
   $('syncSetupItem').addEventListener('click', ()=>{ $('syncMenu').classList.remove('show'); setPage('you'); setYouView('settings'); });
-  $('tmCant').addEventListener('click', ()=> openHawky("I can't do tomorrow's run as planned because ", false));
+  $('tmCant').addEventListener('click', ()=> openHawky("I can't do today's run as planned because ", false));
   $('tmAsk').addEventListener('click', ()=> openHawky());
-  $('tmReset').addEventListener('click', ()=>{ const t = hawkyData?.tomorrow; if(t) resetPlanDay(t.date, t.source === 'auto'); });
+  $('tmReset').addEventListener('click', ()=>{ const t = hawkyData?.today; if(t) resetPlanDay(t.date, t.source === 'auto'); });
   $('askBtn').addEventListener('click', askCoachNow);
   $('askInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); askCoachNow(); } });
   $('bodyHawkyBtn').addEventListener('click', ()=> openHawky());
@@ -5233,7 +5265,7 @@ async function renderTrainingLog(){
   }
   $('tlGrid').innerHTML = html;
   $('tlGrid').querySelectorAll('[data-date]').forEach(b=> b.addEventListener('click', ()=>{
-    tlSelected = b.dataset.date; tlOpenSession = null; renderTrainingLog();
+    tlSelected = b.dataset.date; tlOpenSession = null; tlOpenActivity = null; renderTrainingLog();
   }));
   renderTrainingDay();
 }
@@ -5242,7 +5274,7 @@ let tlDirty = false;
 let splitRows = [];
 // Which session's splits are open, and where they save: a watch session's
 // main activity (strava_id) or, for a hand-logged day, the day itself.
-let tlSessions = [], tlOpenSession = null, tlSplitTarget = null, tlSplitDirty = false;
+let tlSessions = [], tlOpenSession = null, tlOpenActivity = null, tlSplitTarget = null, tlSplitDirty = false;
 // Splits fold away; long sets (more than 8 reps) start folded.
 let splitsOpen = true;
 const SPLITS_AUTO_HIDE = 8;
@@ -5320,6 +5352,60 @@ function updateSplitSummary(){
 }
 
 const SESSION_LABEL = { easy:'Easy run', recovery:'Recovery run', long:'Long run', workout:'Workout', race:'Race', shakeout:'Shakeout', crosstrain:'Cross-training' };
+const ZONE_COLORS = ['#9bb7d4','#6fbf8e','#e8c547','#f0954a','#e0584f','#b0365e','#6d2a5e'];
+
+// One activity of a session: a row that opens to its own numbers, the
+// weather and terrain behind them, HR zones and laps.
+function activityHtml(a){
+  const m = a.metrics || {};
+  const open = a.id === tlOpenActivity;
+  const generic = /^((morning|afternoon|evening|lunch|night)\s+)?run(ning)?$|running$/i;
+  const name = a.name && !generic.test(a.name) ? a.name : (SESSION_LABEL[a.category] || 'Run');
+  const stat = (v, l)=> v == null || v === '' ? '' : `<div class="act-stat"><b>${escapeHtml(String(v))}</b><span>${escapeHtml(l)}</span></div>`;
+  const dur = (sec)=> sec ? clock(sec) : null;
+  const pace = (sec)=> sec ? clock(Math.round(sec)) + '/mi' : null;
+  const heat = a.temp_f != null ? `${Math.round(a.temp_f)}°F` : null;
+  const stats = [
+    stat(a.miles != null ? `${Math.round(a.miles * 100) / 100} mi` : null, 'distance'),
+    stat(dur(a.moving_sec), a.elapsed_sec && a.moving_sec && a.elapsed_sec - a.moving_sec > 30 ? `moving (${dur(a.elapsed_sec)} total)` : 'time'),
+    stat(a.pace && `${a.pace}/mi`, 'pace'),
+    stat(a.pace_adjusted && `${a.pace_adjusted}/mi`, 'flat & cool pace'),
+    stat(pace(m.gap_sec_mi), 'grade-adjusted'),
+    stat(pace(m.max_pace_sec_mi), 'fastest'),
+    stat(a.avg_hr && `${a.avg_hr}${a.max_hr ? ' / ' + a.max_hr : ''}`, a.max_hr ? 'avg / max HR' : 'avg HR'),
+    stat(a.effort, a.hr_effort != null && a.effort !== a.hr_effort ? `difficulty (HR ${a.hr_effort} + conditions)` : 'difficulty'),
+    stat(a.load, 'load'),
+    stat(heat, a.dew_point_f != null ? `dew point ${Math.round(a.dew_point_f)}°F` : 'temperature'),
+    stat(a.track ? null : a.elev_ft != null ? `${a.elev_ft} ft` : null, a.elev_per_mi != null ? `climb (${a.elev_per_mi} ft/mi)` : 'climb'),
+    stat(m.elev_loss_ft != null && !a.track ? `${m.elev_loss_ft} ft` : null, 'descent'),
+    stat(a.cadence && `${a.cadence} spm`, 'cadence'),
+    stat(m.stride_m && `${m.stride_m.toFixed(2)} m`, 'stride'),
+    stat(m.decoupling != null ? `${m.decoupling.toFixed(1)}%` : null, 'HR drift (decoupling)'),
+    stat(m.ef != null ? m.ef.toFixed(2) : null, 'efficiency factor'),
+    stat(m.icu_load, 'intervals.icu load'),
+    stat(m.trimp != null ? Math.round(m.trimp) : null, 'TRIMP'),
+    stat(m.calories, 'calories'),
+    stat(m.rpe, 'RPE'),
+  ].join('');
+  const notes = [
+    a.course === 'vc' ? 'Van Cortlandt course: about 5.5% slower than flat (hills, gravel and grass).' : a.course === 'xc' ? 'Cross-country course: about 2.5% slower than flat, plus its hills.' : '',
+    a.heat_pct >= 0.5 ? `Heat cost about ${a.heat_pct}% (temperature + dew point ${Math.round(a.temp_f + a.dew_point_f)}).` : '',
+    a.hill_pct >= 0.5 ? `Hills cost about ${a.hill_pct}%.` : '',
+    m.decoupling != null && m.decoupling > 5 && ['easy','long','recovery'].includes(a.category) ? 'Heart rate drifted up over 5% on a steady run: heat, dehydration or more than easy effort.' : '',
+  ].filter(Boolean).join(' ');
+  const zones = Array.isArray(m.hr_zones) && m.hr_zones.some(x=>x > 0) ? (()=>{
+    const total = m.hr_zones.reduce((x,y)=>x+y,0);
+    return `<div class="act-zones" aria-label="Time in heart rate zones">${m.hr_zones.map((z,i)=> z > 0 ? `<i style="width:${z / total * 100}%;background:${ZONE_COLORS[i] || '#888'}"></i>` : '').join('')}</div>
+      <div class="act-zone-key">${m.hr_zones.map((z,i)=> z >= 30 ? `<span>Z${i+1} ${Math.round(z / 60)}m</span>` : '').join('')}</div>`;
+  })() : '';
+  const lapRows = (a.laps || []).filter(l=>l.m > 0 && l.s > 0);
+  const laps = lapRows.length ? `<table class="act-laps"><thead><tr><th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${lapRows.map((l,i)=>`<tr><td>${i+1}</td><td>${Math.round(l.m)}m</td><td>${clock(l.s)}</td><td>${clock(Math.round(l.s / l.m * (a.track ? 1600 : 1609.344)))}</td><td>${l.hr || ''}</td></tr>`).join('')}</tbody></table>` : '';
+  const meta = [a.start, a.miles != null && `${Math.round(a.miles * 100) / 100} mi`, a.pace && `${a.pace}/mi`, a.avg_hr && `${a.avg_hr} bpm`, heat].filter(Boolean).join(' · ');
+  return `<div class="act ${open ? 'open' : ''}" data-id="${escapeHtml(a.id)}">
+    <button type="button" class="act-btn" aria-expanded="${open}"><span><span class="act-name">${escapeHtml(name)}</span> <span class="badge ${toneOf(a.category)}">${escapeHtml(cap(a.category))}</span><br><span class="act-meta num">${escapeHtml(meta)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+    <div class="act-body"><div class="act-grid">${stats}</div>${notes ? `<div class="act-note">${escapeHtml(notes)}</div>` : ''}${zones}${laps}</div>
+  </div>`;
+}
 
 async function renderTrainingDay(){
   const card = $('tlDayCard');
@@ -5353,9 +5439,12 @@ async function renderTrainingDay(){
   if(tlOpenSession && !tlSessions.some(x=>x.key === tlOpenSession)) tlOpenSession = null;
   if(!tlOpenSession && tlSessions.length === 1) tlOpenSession = tlSessions[0].key;
   if(!tlOpenSession) tlOpenSession = (tlSessions.find(x=>x.splits?.length) || tlSessions[0])?.key || null;
+  // The split builder may sit inside the session being replaced: move it out
+  // first, or the redraw deletes it (and opening another session fails).
+  if($('tlSessions').contains($('splitPanel'))) $('tlSessions').after($('splitPanel'));
   $('tlSessions').innerHTML = tlSessions.map(sx=>{
-    const meta = [sx.start && sx.start, sx.track && 'Track', sx.miles != null && `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `effort ${sx.effort}`].filter(Boolean).join(' · ');
-    const acts = sx.activities.length > 1 ? `<div class="session-acts">${sx.activities.map(a=>`<span>${escapeHtml(a.start ? a.start + ' ' : '')}${escapeHtml(cap(a.category))} ${a.miles != null ? Math.round(a.miles*100)/100 + ' mi' : ''}</span>`).join('')}</div>` : '';
+    const meta = [sx.start && sx.start, sx.track && 'Track', sx.miles != null && `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `difficulty ${sx.effort}`, sx.temp_f != null && `${Math.round(sx.temp_f)}°F`, sx.elev_ft && !sx.track && `${sx.elev_ft} ft up`].filter(Boolean).join(' · ');
+    const acts = sx.activities.length ? `<div class="acts">${sx.activities.map(activityHtml).join('')}</div>` : '';
     const open = sx.key === tlOpenSession;
     const reps = sx.splits?.length;
     return `<div class="session ${open ? 'open' : ''}" data-key="${escapeHtml(sx.key)}">
@@ -5370,6 +5459,13 @@ async function renderTrainingDay(){
       </div>
     </div>`;
   }).join('') || '<div class="hint">No run logged. Add miles above, or it fills in from your watch.</div>';
+  $('tlSessions').querySelectorAll('.act-btn').forEach(b=> b.addEventListener('click', ()=>{
+    const id = b.closest('.act').dataset.id;
+    tlOpenActivity = tlOpenActivity === id ? null : id;
+    b.closest('.act').classList.toggle('open', tlOpenActivity === id);
+    b.setAttribute('aria-expanded', String(tlOpenActivity === id));
+    $('tlSessions').querySelectorAll('.act').forEach(a=>{ if(a.dataset.id !== tlOpenActivity) a.classList.remove('open'); });
+  }));
   $('tlSessions').querySelectorAll('.session-btn').forEach(b=> b.addEventListener('click', ()=>{
     const key = b.closest('.session').dataset.key;
     if(tlSplitDirty && key !== tlOpenSession && !confirm('Your split changes in the open session aren’t saved. Switch anyway?')) return;
@@ -5623,7 +5719,12 @@ async function renderFitness(refresh){
   $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
     const pr = prFor[e.event] && prs[prFor[e.event]]?.time;
     return `<div class="fit-row"><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
-  }).join('');
+  }).join('')
+    // The same fitness on the home course (hills, gravel and grass: about 5.5% slower).
+    + (f.course_estimates || []).map(c=>{
+      const pr = c.key === 'vc5k' && prs['XC 5K']?.time;
+      return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · XC PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
+    }).join('');
   const hist = (data.history || []).filter(h=>h.vdot).map(h=>({ v: h.vdot, d: h.date }));
   const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';
   $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">Race fitness over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');
@@ -5686,11 +5787,13 @@ function targetsHtml(targets){
   return targets?.length ? `<div class="lib-targets">${targets.map(t=>`<div class="lib-target"><b>${escapeHtml(t.text)}</b><span class="tz">${escapeHtml(t.zone)} · ${escapeHtml(t.per_mile)}/mi</span><span class="tr">${escapeHtml(t.per_rep)}</span></div>`).join('')}</div>` : '';
 }
 
-function renderTomorrow(h){
-  const t = h.tomorrow;
-  $('tomorrowCard').style.display = t ? '' : 'none';
+// The plan card shows today's run; once it's run, what was done, with
+// tomorrow underneath.
+function renderToday(h){
+  const t = h.today;
+  $('todayCard').style.display = t ? '' : 'none';
   if(!t) return;
-  $('tmEyebrow').textContent = `Tomorrow · ${dayLabel(t.date)}`;
+  $('tmEyebrow').textContent = `Today · ${dayLabel(t.date)}`;
   $('tmType').textContent = t.type === 'Off' ? 'Rest day' : t.type;
   $('tmMiles').textContent = t.miles ? `${t.miles} mi` : '';
   const changed = t.source === 'hawky' || t.source === 'auto';
@@ -5702,8 +5805,18 @@ function renderTomorrow(h){
   $('tmReason').innerHTML = changed ? `<b>Why:</b> ${escapeHtml(t.reason)}${base ? ` <span class="hint">(${escapeHtml(base)})</span>` : ''}` : t.warning ? `<b>Heads up:</b> ${escapeHtml(t.warning)}` : '';
   $('tmReset').style.display = changed ? '' : 'none';
   $('tmReset').textContent = t.source === 'auto' ? 'Keep the plan' : 'Back to the plan';
-  const td = h.today;
-  $('tmToday').innerHTML = td ? `<span class="eyebrow">Today</span> ${escapeHtml(td.type === 'Off' ? 'Rest' : `${td.type}${td.miles ? ` ${td.miles} mi` : ''}`)}${td.source === 'hawky' || td.source === 'auto' ? ' <span class="badge tone-race">Hawky</span>' : ''}` : '';
+  const done = h.today_done;
+  $('tmDone').style.display = done?.sessions?.length ? '' : 'none';
+  if(done?.sessions?.length){
+    const head = `<div class="eyebrow">Done today${done.plan ? ` · ${escapeHtml(done.plan.label)}` : ''}</div>`;
+    $('tmDone').innerHTML = head + done.sessions.map(sx=>{
+      const meta = [sx.start, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `difficulty ${sx.effort}`, sx.temp_f != null && `${Math.round(sx.temp_f)}°F`, sx.elev_ft && `${sx.elev_ft} ft up`].filter(Boolean).join(' · ');
+      return `<button type="button" class="tm-done-row" data-date="${t.date}" data-key="${escapeHtml(sx.key)}"><span><b>${escapeHtml(SESSION_LABEL[sx.category] || 'Run')} ${sx.miles} mi</b><br><span class="meta num">${escapeHtml(meta)}</span></span><span class="go">Open ›</span></button>`;
+    }).join('');
+    $('tmDone').querySelectorAll('[data-key]').forEach(b=> b.addEventListener('click', ()=> openLogDay(b.dataset.date, b.dataset.key)));
+  }
+  const tm = h.tomorrow;
+  $('tmNext').innerHTML = tm ? `<span class="eyebrow">Tomorrow</span> ${escapeHtml(tm.type === 'Off' ? 'Rest' : `${tm.type}${tm.miles ? ` ${tm.miles} mi` : ''}`)}${tm.source === 'hawky' || tm.source === 'auto' ? ' <span class="badge tone-race">Hawky</span>' : ''}${tm.session && !tm.detail ? ` <span class="hint">${escapeHtml(tm.session.text)}</span>` : tm.detail ? ` <span class="hint">${escapeHtml(tm.detail)}</span>` : ''}` : '';
 }
 
 function renderOwnWeek(h){
@@ -5775,7 +5888,7 @@ async function renderPlanSide(){
   const h = await loadHawky();
   if(!h || currentPage !== 'training') return;
   if(trainingView === 'plan'){
-    renderTomorrow(h);
+    renderToday(h);
     $('healthCard').style.display = ''; $('healthBody').innerHTML = healthHtml(h.health);
     $('levelCard').style.display = h.level ? '' : 'none'; $('levelBody').innerHTML = levelHtml(h);
     if(h.week) renderOwnWeek(h);
@@ -5799,7 +5912,7 @@ async function renderTraining(){
   if(trainingView === 'fitness') return renderFitness();
   if(trainingView === 'hawky') return renderHawkyTab();
   const own = isRealPerson();
-  $('tomorrowCard').style.display = 'none';
+  $('todayCard').style.display = 'none';
   ['healthCard','levelCard'].forEach(id=> $(id).style.display = own ? $(id).style.display : 'none');
   renderWeekCard();
   if(own){

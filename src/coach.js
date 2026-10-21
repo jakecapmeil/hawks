@@ -6,10 +6,11 @@
 // matter whose Claude sent it. The built-in Hawky (gemini.js) uses the same
 // scoring.
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
-import { logTools, callLogTool, LogError, getDays, fiveKFor, getPrs, PR_EVENTS } from './log.js';
+import { logTools, callLogTool, LogError, getDays, compactDays, fiveKFor, getPrs, PR_EVENTS } from './log.js';
 import { getFitness } from './fitness.js';
 import { trackMiles } from './workouts.js';
 import { BODY_PARTS } from './body.js';
+import { conditionsBump, weatherFor } from './conditions.js';
 
 // Health, training status and the body map, as Hawky reads them.
 export async function bodyStatus(db, personId) {
@@ -46,9 +47,11 @@ CATEGORY — pick one per activity:
 - shakeout: short (2-3 mi) easy run the day before or the morning of a race
 - crosstrain: bike, swim, elliptical, walk, hike, lift — anything that isn't a run
 
-EFFORT (1-10) comes from avg HR as a share of the runner's max HR (the highest max HR seen in their logged runs, 200 until known): under 65% = 2, 65-72% = 3, 72-78% = 4, 78-83% = 5, 83-87% = 6, 87-90% = 7, 90-93% = 8, 93-96% = 9, over 96% = 10. With no HR it falls back on the category.
+DIFFICULTY (effort, 1-10) starts from avg HR as a share of the runner's max HR (the highest max HR seen in their logged runs, 200 until known): under 65% = 2, 65-72% = 3, 72-78% = 4, 78-83% = 5, 83-87% = 6, 87-90% = 7, 90-93% = 8, 93-96% = 9, over 96% = 10. With no HR it falls back on the category. Heat and hills always add to it (up to +3): about +1 for each 3% the weather costs (temperature + dew point, Hadley's chart: 120 = 1%, 140 = 3%, 160 = 6%) and +1 for each 60 ft of climbing per mile. Hawks looks up the temperature and dew point for every run itself. Plan matching uses the heart-rate effort alone, so an easy day run easy in the heat still counts as easy.
 
-LOAD = moving minutes x intensity (effort 1-3 = 1, 4-5 = 1.5, 6 = 2, 7 = 2.5, 8 = 3, 9-10 = 4). A 45-minute easy run is about 45-70; a hard workout is about 120-200.
+LOAD = moving minutes x intensity (difficulty 1-3 = 1, 4-5 = 1.5, 6 = 2, 7 = 2.5, 8 = 3, 9-10 = 4). A 45-minute easy run is about 45-70; a hard workout is about 120-200.
+
+CONDITIONS: in your note, say when heat or hills explain a slow pace or a high heart rate. Races at Van Cortlandt run about 5.5% slower than a flat 5K (about a minute for an 18-minute runner), and Fitness States credit them back.
 
 PLAN MATCH (0-100) compares the run to that day's plan:
 - Type, 50 pts: the right kind of run for the day (easy/long/shakeout on easy days, workout/race on workout and race days). Going hard on an easy day gets 15. Running on an off day gets 25 (crosstraining on an off day gets the full 50).
@@ -129,11 +132,17 @@ async function maxHrFor(db, personId) {
 const EFFORT_STEPS = [[0.65, 2], [0.72, 3], [0.78, 4], [0.83, 5], [0.87, 6], [0.90, 7], [0.93, 8], [0.96, 9]];
 const CATEGORY_EFFORT = { recovery: 2, easy: 4, shakeout: 3, long: 5, crosstrain: 4, workout: 7, race: 9 };
 
-function effortOf(w, maxHr) {
+// Heart-rate effort: how hard the heart worked. Plan matching uses this.
+function hrEffortOf(w, maxHr) {
   if (!w.avg_hr) return CATEGORY_EFFORT[w.category] ?? 4;
   const pct = w.avg_hr / maxHr;
   for (const [cut, e] of EFFORT_STEPS) if (pct < cut) return e;
   return 10;
+}
+
+// Difficulty: heart rate, plus what heat and hills took out of the runner.
+function effortOf(w, maxHr) {
+  return Math.min(10, hrEffortOf(w, maxHr) + (w.category === 'crosstrain' ? 0 : conditionsBump(w)));
 }
 
 function loadOf(w, effort) {
@@ -219,7 +228,21 @@ function cleanWorkout(raw) {
     laps: cleanLaps(raw.laps),
     summary: clip(raw.summary, 1000),
     library_id: clip(raw.library_id, 60),
+    temp_f: num(raw.temp_f, { min: -40, max: 130 }),
+    dew_point_f: num(raw.dew_point_f, { min: -60, max: 100 }),
+    metrics: cleanMetrics(raw.metrics),
   };
+}
+
+// Display-only numbers from the watch (see intervals.js), kept small.
+function cleanMetrics(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return '';
+  const out = {};
+  for (const [k, x] of Object.entries(v).slice(0, 30)) {
+    if (typeof x === 'number' && Number.isFinite(x)) out[k] = Math.round(x * 100) / 100;
+    else if (Array.isArray(x) && x.length <= 12 && x.every((n) => Number.isFinite(n))) out[k] = x.map((n) => Math.round(n));
+  }
+  return Object.keys(out).length ? JSON.stringify(out) : '';
 }
 
 function toPublic(row) {
@@ -287,7 +310,7 @@ export function compactFitness(f) {
     fitness_score: f.fitness_score ? { fitness: f.fitness_score.fitness, fatigue: f.fitness_score.fatigue, form: f.fitness_score.form, change_4wk: f.fitness_score.change_4wk } : null,
     confidence: f.confidence,
     based_on: f.sources.map((s) => s.label),
-    race_estimates: Object.fromEntries(f.estimates.map((e) => [e.label, e.time])),
+    race_estimates: Object.fromEntries([...f.estimates, ...(f.course_estimates || [])].map((e) => [e.label, e.time])),
     paces_per_mile: Object.fromEntries(f.zones.map((z) => [z.label, z.per_mile])),
     weekly_miles_last_4_weeks: f.mpw,
     weekly_miles_4_weeks_before: f.mpw_prev,
@@ -321,7 +344,7 @@ export async function getCoachContext(db, person) {
     five_k_time: (await fiveKFor(db, person.id)) || null,
     fitness: compactFitness(await getFitness(db, person.id, today)),
     body: await bodyStatus(db, person.id),
-    training_log_last_14_days: await getDays(db, person.id, addDays(today, -13), today),
+    training_log_last_14_days: compactDays(await getDays(db, person.id, addDays(today, -13), today)),
     rubric: COACH_RUBRIC,
   };
 }
@@ -336,7 +359,7 @@ async function mergeDuplicates(db, personId, clean) {
   const dates = [...new Set(clean.map((w) => w.date))];
   if (!dates.length) return;
   const rows = (await db.prepare(
-    `SELECT strava_id, date, distance_mi, COALESCE(raw_distance_mi, distance_mi) AS gps_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft FROM workouts WHERE person_id = ? AND date IN (${dates.map(() => '?').join(',')})`
+    `SELECT strava_id, date, distance_mi, COALESCE(raw_distance_mi, distance_mi) AS gps_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft, temp_f, dew_point_f FROM workouts WHERE person_id = ? AND date IN (${dates.map(() => '?').join(',')})`
   ).bind(personId, ...dates).all()).results;
   const srcOf = (id) => (id.includes(':') ? id.split(':')[0] : 'strava');
   const sameDistance = (a, b) => a && b && Math.abs(a - b) <= Math.max(0.02, 0.015 * Math.max(a, b));
@@ -355,7 +378,7 @@ async function mergeDuplicates(db, personId, clean) {
   for (const w of clean) {
     const row = rows.find((r) => r.strava_id === w.strava_id);
     if (!row) continue;
-    for (const k of ['distance_mi', 'moving_sec', 'elapsed_sec', 'avg_hr', 'max_hr', 'avg_cadence', 'elev_gain_ft']) {
+    for (const k of ['distance_mi', 'moving_sec', 'elapsed_sec', 'avg_hr', 'max_hr', 'avg_cadence', 'elev_gain_ft', 'temp_f', 'dew_point_f']) {
       if (w[k] === null || w[k] === undefined) w[k] = row[k];
     }
   }
@@ -366,6 +389,12 @@ export async function logWorkouts(db, person, list) {
   if (list.length > 60) throw new CoachError('Send at most 60 workouts per call');
   const clean = list.map(cleanWorkout);
   await mergeDuplicates(db, person.id, clean);
+  // Weather for every run, whichever way it arrived.
+  const needWx = clean.filter((w) => w.temp_f == null && w.category !== 'crosstrain');
+  if (needWx.length) {
+    const wx = await weatherFor(needWx, todayInTz());
+    needWx.forEach((w, i) => { if (wx[i]) Object.assign(w, wx[i]); });
+  }
 
   // Max HR can come from this batch too, so a first sync is scored sensibly.
   const batchMax = Math.max(0, ...clean.map((w) => w.max_hr || 0));
@@ -380,15 +409,16 @@ export async function logWorkouts(db, person, list) {
   const stmts = clean.map((w) => {
     const planned = plannedFor(plan, w.date, meets);
     const effort = effortOf(w, maxHr);
+    const hr_effort = hrEffortOf(w, maxHr);
     const load = loadOf(w, effort);
-    const plan_score = planScoreOf(w, effort, planned);
+    const plan_score = planScoreOf(w, hr_effort, planned);
     const rating = gradeOf(plan_score);
     results.push({ strava_id: w.strava_id, date: w.date, category: w.category, planned: planned ? `${planned.type} ${planned.detail}` : null, effort, load, plan_score });
     return db.prepare(
       `INSERT INTO workouts (id, person_id, strava_id, date, name, sport, category, distance_mi, moving_sec, elapsed_sec,
          avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, start_local, laps,
-         surface, raw_distance_mi, raw_elev_ft, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         surface, raw_distance_mi, raw_elev_ft, temp_f, dew_point_f, weather_checked, hr_effort, metrics, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(person_id, strava_id) DO UPDATE SET
          date=excluded.date, name=COALESCE(NULLIF(excluded.name, ''), name), sport=excluded.sport, category=excluded.category,
          distance_mi=COALESCE(excluded.distance_mi, distance_mi), moving_sec=COALESCE(excluded.moving_sec, moving_sec),
@@ -401,16 +431,43 @@ export async function logWorkouts(db, person, list) {
          start_local=COALESCE(NULLIF(excluded.start_local, ''), start_local), laps=COALESCE(NULLIF(excluded.laps, ''), laps),
          surface=CASE WHEN excluded.surface = 'track' THEN 'track' ELSE surface END,
          raw_distance_mi=COALESCE(excluded.raw_distance_mi, raw_distance_mi), raw_elev_ft=COALESCE(excluded.raw_elev_ft, raw_elev_ft),
+         temp_f=COALESCE(excluded.temp_f, temp_f), dew_point_f=COALESCE(excluded.dew_point_f, dew_point_f),
+         weather_checked=MAX(excluded.weather_checked, COALESCE(weather_checked, 0)), hr_effort=excluded.hr_effort,
+         metrics=COALESCE(NULLIF(excluded.metrics, ''), metrics),
          updated_at=excluded.updated_at`
     ).bind(
       'w_' + crypto.randomUUID(), person.id, w.strava_id, w.date, w.name, w.sport, w.category, w.distance_mi,
       w.moving_sec, w.elapsed_sec, w.avg_hr, w.max_hr, w.avg_cadence, w.elev_gain_ft,
       planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, w.library_id, w.start_local, w.laps,
-      w.surface, w.raw_distance_mi, w.raw_elev_ft, now, now
+      w.surface, w.raw_distance_mi, w.raw_elev_ft, w.temp_f, w.dew_point_f, w.temp_f != null ? 1 : 0, hr_effort, w.metrics, now, now
     );
   });
   await db.batch(stmts);
   return { logged: results, max_hr_used: maxHr, this_week: await weekSummary(db, person, todayInTz()) };
+}
+
+// Runs logged before Hawks read the weather: look it up, then rescore
+// difficulty and load. Newest first, a batch per call (one or two weather
+// requests). Runs the weather service has nothing for are marked 2 so they
+// aren't asked for again.
+export async function backfillConditions(db, personId, limit = 150) {
+  const rows = (await db.prepare(
+    `SELECT strava_id, date, start_local, moving_sec, elapsed_sec, category, avg_hr, distance_mi, elev_gain_ft, surface FROM workouts
+     WHERE person_id = ? AND COALESCE(weather_checked, 0) = 0 AND category != 'crosstrain' AND date <= ? ORDER BY date DESC LIMIT ?`
+  ).bind(personId, todayInTz(), limit).all()).results;
+  if (!rows.length) return 0;
+  const wx = await weatherFor(rows, todayInTz());
+  if (!wx.some(Boolean)) return 0;
+  const maxHr = await maxHrFor(db, personId);
+  const stmts = rows.map((w, i) => {
+    if (!wx[i]) return db.prepare('UPDATE workouts SET weather_checked = 2 WHERE person_id = ? AND strava_id = ?').bind(personId, w.strava_id);
+    Object.assign(w, wx[i]);
+    const effort = effortOf(w, maxHr);
+    return db.prepare('UPDATE workouts SET temp_f = ?, dew_point_f = ?, weather_checked = 1, effort = ?, hr_effort = ?, load = ? WHERE person_id = ? AND strava_id = ?')
+      .bind(w.temp_f, w.dew_point_f, effort, hrEffortOf(w, maxHr), loadOf(w, effort), personId, w.strava_id);
+  });
+  for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+  return wx.filter(Boolean).length;
 }
 
 export async function getMyWorkouts(db, person, args) {

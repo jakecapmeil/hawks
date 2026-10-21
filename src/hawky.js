@@ -17,6 +17,7 @@ import { addDays, weekStartOf, planFor, plannedFor, meetDates, todayInTz } from 
 import { BODY_PARTS } from './body.js';
 import { workoutTargets } from './workouts.js';
 import { getFitness } from './fitness.js';
+import { getDays } from './log.js';
 
 export class PlanError extends Error {}
 
@@ -396,6 +397,8 @@ export async function hawkyState(db, personId, today = todayInTz()) {
   const tomorrowDate = addDays(today, 1);
   const tomorrowWeek = weekStartOf(tomorrowDate) === weekStartOf(today) ? week : await planWeek(db, person, weekStartOf(tomorrowDate), today, health, fitness);
   const level = await levelStatus(db, person, today, health);
+  // What's already been run today, session by session, for the Today card.
+  const ranToday = health.ran_today ? (await getDays(db, person.id, today, today))[0] : null;
   const upcoming = await db.prepare(
     "SELECT id, date, type, miles, detail, reason, source FROM plan_changes WHERE person_id = ? AND date >= ? AND cleared = 0 AND source != 'athlete' ORDER BY date"
   ).bind(person.id, today).all();
@@ -403,6 +406,10 @@ export async function hawkyState(db, personId, today = todayInTz()) {
   const strip = (l) => l && { weekly_miles: l.weekly_miles, next_weekly_miles: l.next_weekly_miles, ready: l.ready, gates: l.gates, recent_weeks: l.recent_weeks };
   return {
     today: week?.days.find((d) => d.date === today) || null,
+    today_done: ranToday ? {
+      miles: ranToday.miles, minutes: ranToday.minutes, difficulty: ranToday.difficulty, plan: ranToday.plan,
+      sessions: ranToday.sessions.map((s) => ({ key: s.key, category: s.category, title: s.title, start: s.start, miles: s.miles, minutes: s.minutes, pace: s.pace, avg_hr: s.avg_hr, effort: s.effort, temp_f: s.temp_f, dew_point_f: s.dew_point_f, elev_ft: s.elev_ft })),
+    } : null,
     tomorrow: tomorrowWeek?.days.find((d) => d.date === tomorrowDate) || null,
     week,
     health,

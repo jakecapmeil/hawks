@@ -9,7 +9,7 @@
 // it's set up, refines the category and writes one report per session.
 // Scoring is the same logWorkouts path Hawky in Claude uses. Old history is
 // imported in chunks with rules only, so it never spends the AI quota.
-import { logWorkouts, todayInTz, COACH_RUBRIC, bodyStatus } from './coach.js';
+import { logWorkouts, todayInTz, COACH_RUBRIC, bodyStatus, backfillConditions } from './coach.js';
 import { saveDay, sessionsOf } from './log.js';
 import { reportSessions, AiError } from './gemini.js';
 import { recomputeFitness } from './fitness.js';
@@ -162,6 +162,30 @@ function wantsLaps(a, maxHr) {
   return WORKOUT_NAME.test(a.name || '') || hrPct >= 0.8 || !!a.interval_summary?.length;
 }
 
+// Extra numbers intervals.icu works out per activity, for the log. Speeds
+// are m/s; anything outside a sane range is left out.
+function metricsOf(a) {
+  const n = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi ? v : undefined);
+  const perMile = (mps) => (n(mps, 1, 10) ? 1609.344 / mps : undefined);
+  const zones = Array.isArray(a.icu_hr_zone_times) && a.icu_hr_zone_times.length <= 12 && a.icu_hr_zone_times.every((x) => Number.isFinite(x)) ? a.icu_hr_zone_times : undefined;
+  const m = {
+    gap_sec_mi: perMile(a.gap),
+    max_pace_sec_mi: perMile(a.max_speed),
+    decoupling: n(a.decoupling, -50, 100),
+    ef: n(a.icu_efficiency_factor, 0.1, 10),
+    hr_zones: zones,
+    icu_load: n(a.icu_training_load, 0, 2000),
+    trimp: n(a.trimp, 0, 2000),
+    intensity: n(a.icu_intensity, 0, 300),
+    stride_m: n(a.average_stride, 0.3, 3),
+    calories: n(a.calories, 1, 10000),
+    elev_loss_ft: n(a.total_elevation_loss, 0, 15000) !== undefined ? Math.round(a.total_elevation_loss * 3.281) : undefined,
+    rpe: n(a.icu_rpe, 1, 10),
+  };
+  for (const k of Object.keys(m)) if (m[k] === undefined) delete m[k];
+  return m;
+}
+
 const timeOf = (a) => (String(a.start_date_local || '').match(/T(\d{2}:\d{2})/) || [])[1] || '';
 const dateOf = (a) => String(a.start_date_local || '').slice(0, 10);
 
@@ -185,6 +209,11 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
       .bind(person.id, ...chunk).all()).results.forEach((r) => logged.add(r.strava_id));
   }
   const fresh = usable.filter((a) => !logged.has(`intervals:${a.id}`));
+  // Runs already in Hawks still get the newest numbers intervals.icu has (no extra requests).
+  const refresh = usable.filter((a) => logged.has(`intervals:${a.id}`)).map((a) => [a, JSON.stringify(metricsOf(a))]).filter(([, m]) => m !== '{}');
+  for (let i = 0; i < refresh.length; i += 50) {
+    await db.batch(refresh.slice(i, i + 50).map(([a, m]) => db.prepare('UPDATE workouts SET metrics = ? WHERE person_id = ? AND strava_id = ?').bind(m, person.id, `intervals:${a.id}`)));
+  }
   if (!fresh.length) return { imported: 0, checked: usable.length, total: all.length, skipped_strava: skippedStrava };
 
   const maxRow = await db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(person.id).first();
@@ -274,6 +303,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
     avg_hr: r.a.average_heartrate, max_hr: r.a.max_heartrate, avg_cadence: r.a.average_cadence,
     elev_gain_ft: r.a.total_elevation_gain != null ? Math.round(r.a.total_elevation_gain * 3.281) : null,
     start_local: r.start, laps: r.laps,
+    metrics: metricsOf(r.a),
     summary: reportById.get(String(r.a.id)) || '',
   }));
   let imported = 0;
@@ -390,7 +420,9 @@ async function syncBestEfforts(env, person, key) {
   return rows.length;
 }
 
-export async function syncPerson(env, personId, { days } = {}) {
+// `backfill` also looks up the weather for older runs (one or two requests):
+// on for syncs from the page, off for the cron, which does it once at the end.
+export async function syncPerson(env, personId, { days, backfill = false } = {}) {
   const db = env.DB;
   const person = await loadPerson(env, personId);
   const today = todayInTz();
@@ -401,6 +433,7 @@ export async function syncPerson(env, personId, { days } = {}) {
     const res = await importRange(env, person, key, { oldest, newest: today, ai: true, lapBudget: MAX_LAP_FETCHES });
     res.wellness_days = await syncWellness(env, person, key, today);
     res.best_efforts = await syncBestEfforts(env, person, key);
+    if (backfill) res.weather = await backfillConditions(db, person.id);
     const note = [res.ai_note, stravaNote(res)].filter(Boolean).join(' ');
     await db.prepare('UPDATE people SET icu_synced_at = ?, icu_status = ? WHERE id = ?').bind(Date.now(), note ? `ok (${note})` : 'ok', person.id).run();
     // Always: the PR search and fitness re-run on everything, not just new runs.
@@ -441,7 +474,7 @@ export async function importHistory(env, personId, { lapBudget = IMPORT_LAP_FETC
 
 // Cron: a few connected people per run, least recently synced first, so the
 // whole team cycles through without hitting per-invocation fetch limits
-// (each sync is at most 1 + 8 lap fetches + 1 AI call). Then one history
+// (each sync is at most 1 + 8 lap fetches + 1 AI call + 1 weather lookup). Then one history
 // window for one person whose import isn't finished, with a smaller lap budget.
 const CRON_IMPORT_LAPS = 8;
 export async function syncDue(env) {
@@ -455,8 +488,22 @@ export async function syncDue(env) {
   const pending = await env.DB.prepare(
     "SELECT id FROM people WHERE icu_key_enc != '' AND COALESCE(icu_import_done, 0) = 0 ORDER BY COALESCE(icu_synced_at, 0) DESC LIMIT 1"
   ).first();
+  let imported = false;
   if (pending) {
-    try { out.push({ id: pending.id, import: await importHistory(env, pending.id, { lapBudget: CRON_IMPORT_LAPS }) }); } catch (err) { out.push({ id: pending.id, import_error: err.message }); }
+    try { out.push({ id: pending.id, import: await importHistory(env, pending.id, { lapBudget: CRON_IMPORT_LAPS }) }); imported = true; } catch (err) { out.push({ id: pending.id, import_error: err.message }); }
+  }
+  // Weather for older runs, one runner per run (watch or not), then their
+  // Fitness States are worked out again with it. Skipped when a history
+  // window was imported this run, to stay under the per-run request cap.
+  const noWx = await env.DB.prepare(
+    "SELECT person_id FROM workouts WHERE COALESCE(weather_checked, 0) = 0 AND category != 'crosstrain' AND date <= ? LIMIT 1"
+  ).bind(todayInTz()).first();
+  if (noWx && !imported) {
+    try {
+      const n = await backfillConditions(env.DB, noWx.person_id);
+      if (n) await recomputeFitness(env.DB, noWx.person_id, todayInTz());
+      out.push({ id: noWx.person_id, weather: n });
+    } catch (err) { out.push({ id: noWx.person_id, weather_error: err.message }); }
   }
   return out;
 }

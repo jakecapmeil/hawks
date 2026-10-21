@@ -1825,7 +1825,7 @@ export default {
           try {
             if (pathname === '/api/intervals/connect') return json(await icuConnect(env, personId, body.athleteId, body.apiKey));
             if (pathname === '/api/intervals/disconnect') return json(await icuDisconnect(env, personId));
-            if (pathname === '/api/intervals/sync') return json(await syncPerson(env, personId, { days: body.days === 60 ? 60 : undefined }));
+            if (pathname === '/api/intervals/sync') return json(await syncPerson(env, personId, { days: body.days === 60 ? 60 : undefined, backfill: true }));
             if (pathname === '/api/intervals/import') return json(await importHistory(env, personId));
             if (pathname === '/api/coach/ask') {
               const person = await env.DB.prepare('SELECT id, name, first_name, class_year, plan_rank FROM people WHERE id = ?').bind(personId).first();

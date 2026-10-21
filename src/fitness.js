@@ -19,7 +19,13 @@
 //      exponent vs Daniels') shifts every distance.
 //   4. Mileage: 10K and half estimates are slowed for low weekly mileage,
 //      since VDOT alone over-predicts long races for low-volume runners.
+//
+// Every race and hard run is first credited back to a flat course in good
+// weather (conditions.js): Van Cortlandt runs ~5.5% slow, other XC courses
+// 2.5% plus their hills, and heat by temperature + dew point. Heart rate on
+// steady runs is read the same way. PRs stay the raw times.
 import { parseReps, snap100 } from './workouts.js';
+import { conditionsOf, heatCost, hillCost, VC_FACTOR, XC_FACTOR, VC_RE } from './conditions.js';
 
 const DAY = 86400000;
 const MILE = 1609.344;
@@ -108,19 +114,23 @@ function addDays(dateKey, n) {
 
 async function loadInputs(db, personId, today) {
   const since = addDays(today, -365);
-  const [person, workouts, days, maxRow, meets, efforts, well, model] = await Promise.all([
+  const [person, workouts, days, maxRow, events, efforts, well, model] = await Promise.all([
     db.prepare('SELECT id, prs, five_k_time, five_k_set_at FROM people WHERE id = ?').bind(personId).first(),
     db.prepare(
-      `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, load
+      `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, load, temp_f, dew_point_f
        FROM workouts WHERE person_id = ? AND date >= ? ORDER BY date`
     ).bind(personId, since).all(),
     db.prepare(
       'SELECT date, manual_miles, splits, split_reps, surface FROM training_days WHERE person_id = ? AND date >= ?'
     ).bind(personId, since).all(),
     db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(personId).first(),
-    db.prepare("SELECT DISTINCT date FROM events WHERE type = 'meet' AND date >= ?").bind(since).all(),
+    // Every event, not just meets: where it was says which course a race was on.
     db.prepare(
-      `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps FROM best_efforts b
+      `SELECT e.date, e.type, e.title, e.location, e.description, l.name AS loc_name FROM events e
+       LEFT JOIN locations l ON l.id = e.location_id WHERE e.date >= ?`
+    ).bind(since).all(),
+    db.prepare(
+      `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps, w.name, w.distance_mi, w.elev_gain_ft, w.surface, w.temp_f, w.dew_point_f FROM best_efforts b
        LEFT JOIN workouts w ON w.person_id = b.person_id AND w.strava_id = 'intervals:' || b.activity_id WHERE b.person_id = ?`
     ).bind(personId).all(),
     db.prepare('SELECT date, vo2max, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
@@ -128,7 +138,8 @@ async function loadInputs(db, personId, today) {
   ]);
   return {
     person, workouts: workouts.results, days: days.results, maxHr: maxRow?.m || null,
-    meets: new Set(meets.results.map((r) => r.date)), efforts: efforts.results, wellness: well.results, paceModel: model || null,
+    events: events.results, meets: new Set(events.results.filter((e) => e.type === 'meet').map((e) => e.date)),
+    efforts: efforts.results, wellness: well.results, paceModel: model || null,
   };
 }
 
@@ -174,7 +185,8 @@ function rawReps(w, dayRow) {
 // ------------------------------------------------------------------ compute
 
 // Race distances a whole run can count as, by GPS distance (3%).
-const RACE_METERS = [1600, MILE, 3200, 2 * MILE, 4000, 5000, 3 * MILE, 6000, 8000, 10000];
+// 2.5 mi before 4000 m: it's the high school course at Van Cortlandt.
+const RACE_METERS = [1600, MILE, 3200, 2 * MILE, 2.5 * MILE, 4000, 5000, 3 * MILE, 6000, 8000, 10000];
 function raceDistance(m) {
   for (const d of RACE_METERS) if (Math.abs(m - d) / d <= 0.03) return d;
   return null;
@@ -182,7 +194,7 @@ function raceDistance(m) {
 // PR events a race distance updates, and the time scaled to that event.
 const PR_FOR = { 1600: '1600', [MILE]: '1600', 3200: '3200', [2 * MILE]: '3200', 5000: '5K' };
 
-export function computeFitness({ person, workouts, days, maxHr, meets = new Set(), efforts = [], wellness = [], paceModel = null }, today) {
+export function computeFitness({ person, workouts, days, maxHr, meets = new Set(), events = [], efforts = [], wellness = [], paceModel = null }, today) {
   const sources = [];
   const prs = parsePrs(person?.prs);
 
@@ -193,12 +205,14 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     if (!m || !sec) continue;
     const dated = /^\d{4}-\d{2}-\d{2}$/.test(v?.date || '');
     const age = dated ? ageDays(v.date, today) : 240;
-    // XC courses run slower than the track; count them about 2% faster.
-    const t = event === 'XC 5K' ? sec * 0.98 : sec;
+    // XC courses run slower than the track. Hawks races are at Van Cortlandt
+    // unless the PR says it was somewhere else.
+    const vc = event === 'XC 5K' && (!v?.meet || VC_RE.test(v.meet));
+    const t = event === 'XC 5K' ? sec / (vc ? VC_FACTOR : XC_FACTOR) : sec;
     sources.push({
       kind: 'pr', max: true, event, m, s: t, age, date: dated ? v.date : null,
       quality: (dated ? 0.9 : 0.5) * (event === 'XC 5K' ? 0.8 : 1),
-      label: `${event} PR ${v.time}${v.meet ? ` (${v.meet})` : ''}`,
+      label: `${event} PR ${v.time}${v.meet ? ` (${v.meet})` : ''}${event === 'XC 5K' ? `: worth ${fmtTime(t)} on a flat course${vc ? ' (Van Cortlandt runs ~5.5% slow)' : ''}` : ''}`,
     });
   }
   const fiveK = parseTime(person?.five_k_time);
@@ -219,11 +233,20 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const hrPct = hrMax && w.avg_hr ? w.avg_hr / hrMax : null;
     const raceDay = w.category === 'race' || meets.has(w.date);
     if (!(hrPct != null ? hrPct >= 0.86 || (raceDay && hrPct >= 0.8) : raceDay)) continue;
+    // Nobody stops mid-race: a long pause means a workout with rests.
+    if (w.elapsed_sec && w.moving_sec && w.elapsed_sec > w.moving_sec * 1.3) continue;
     // Races are timed gun to finish: elapsed time, unless the watch was left running.
     const t = w.elapsed_sec && w.elapsed_sec <= w.moving_sec * 1.05 ? w.elapsed_sec : w.moving_sec;
-    const label = `${raceDay ? 'Race' : 'Hard run'} ${m === MILE ? 'mile' : m === 2 * MILE ? '2 mi' : m === 3 * MILE ? '3 mi' : `${m >= 1000 && m % 1000 === 0 ? m / 1000 + 'K' : m + 'm'}`} in ${fmtTime(t)} (${w.date})`;
-    sources.push({ kind: 'race', max: true, m, s: t, age: ageDays(w.date, today), date: w.date, quality: raceDay ? 1 : 0.9, label });
-    if (PR_FOR[m]) prCandidates.push({ event: PR_FOR[m], sec: t * (m === MILE ? 1600 / MILE : m === 2 * MILE ? 3200 / (2 * MILE) : 1), date: w.date, name: w.name || '' });
+    // Credited back to a flat course in good weather.
+    const cond = conditionsOf(w, events);
+    const adj = t / cond.factor;
+    const credit = cond.factor > 1.004 ? `; ${cond.note}: worth ${fmtTime(adj)} flat and cool` : '';
+    const label = `${raceDay ? 'Race' : 'Hard run'} ${m === MILE ? 'mile' : m === 2 * MILE ? '2 mi' : m === 2.5 * MILE ? '2.5 mi' : m === 3 * MILE ? '3 mi' : `${m >= 1000 && m % 1000 === 0 ? m / 1000 + 'K' : m + 'm'}`} in ${fmtTime(t)} (${w.date}${credit})`;
+    sources.push({ kind: 'race', max: true, m, s: adj, age: ageDays(w.date, today), date: w.date, quality: raceDay ? 1 : 0.9, label });
+    // PRs are the raw time. A cross-country 5K is an XC PR, never a track one.
+    if (cond.course) {
+      if (m === 5000) prCandidates.push({ event: 'XC 5K', sec: t, date: w.date, name: cond.course === 'vc' ? 'Van Cortlandt' : w.name || '' });
+    } else if (PR_FOR[m]) prCandidates.push({ event: PR_FOR[m], sec: t * (m === MILE ? 1600 / MILE : m === 2 * MILE ? 3200 / (2 * MILE) : 1), date: w.date, name: w.name || '' });
   }
 
   // Fastest stretches inside any run (intervals.icu's pace curve). Real
@@ -236,7 +259,13 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     if (e.meters >= 1500 && (e.category === 'workout' || e.laps)) continue;
     const age = e.date ? ageDays(e.date, today) : 120;
     if (age > 365) continue;
-    sources.push({ kind: 'best', max: true, m: e.meters, s: e.sec, age, date: e.date, quality: e.meters >= 1500 ? 0.7 : 0.6, label: `Fastest ${e.meters === 1609 ? 'mile' : e.meters >= 1000 && e.meters % 1000 === 0 ? e.meters / 1000 + 'K' : e.meters + 'm'} in a run: ${fmtTime(e.sec, { tenths: e.meters <= 800 })}${e.date ? ` (${e.date})` : ''}` });
+    // Conditions of the run it came from. A short burst is often the downhill
+    // part of a hilly run, so only long efforts get the course and hill credit.
+    const cond = e.distance_mi ? conditionsOf(e, events, { reps: e.meters < 1500 }) : null;
+    const factor = !cond ? 1 : e.meters >= 1500 ? cond.factor : 1 + cond.heat;
+    const s = e.sec / factor;
+    const what = `Fastest ${e.meters === 1609 ? 'mile' : e.meters >= 1000 && e.meters % 1000 === 0 ? e.meters / 1000 + 'K' : e.meters + 'm'} in a run: ${fmtTime(e.sec, { tenths: e.meters <= 800 })}`;
+    sources.push({ kind: 'best', max: true, m: e.meters, s, age, date: e.date, quality: e.meters >= 1500 ? 0.7 : 0.6, label: `${what}${e.date ? ` (${e.date}${factor > 1.004 ? `; worth ${fmtTime(s, { tenths: e.meters <= 800 })} flat and cool` : ''})` : ''}` });
   }
 
   // 2. Training: rep sessions.
@@ -248,7 +277,8 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     if (reps.length < 2) continue;
     seenDates.add(w.date);
     const work = reps.reduce((a, r) => a + r.m, 0);
-    const secs = reps.reduce((a, r) => a + r.s, 0);
+    // Heat counts half on reps (Hadley); hills don't, since hill reps are run by effort.
+    const secs = reps.reduce((a, r) => a + r.s, 0) / (1 + heatCost(w.temp_f, w.dew_point_f) * 0.5);
     // Reps with recovery are run faster than a continuous race of the same
     // total distance; treat the set as a race of 3/4 of the work.
     const eqM = Math.max(reps[0].m, work * 0.75);
@@ -272,13 +302,16 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       if (!w.avg_hr || !w.distance_mi || !w.moving_sec || w.distance_mi < 2.5 || w.moving_sec < 1200) continue;
       if (!['easy', 'long', 'workout', 'recovery'].includes(w.category)) continue;
       if (w.laps && w.category === 'workout') continue; // intervals, not steady
-      if ((w.elev_gain_ft || 0) / w.distance_mi > 80) continue;
+      if ((w.elev_gain_ft || 0) / w.distance_mi > 150) continue;
       const age = ageDays(w.date, today);
       if (age > 56) continue;
       const pHr = w.avg_hr / hrMax;
       if (pHr < 0.65 || pHr > 0.93) continue;
       const pVo2 = (pHr - 0.37) / 0.64;
-      const v = (w.distance_mi * MILE) / (w.moving_sec / 60);
+      // Heat and hills push heart rate up at a given pace: read the run at
+      // the pace it was worth on flat ground in cool weather.
+      const worth = (1 + heatCost(w.temp_f, w.dew_point_f)) * (1 + (w.surface === 'track' ? 0 : hillCost(w.elev_gain_ft, w.distance_mi)));
+      const v = ((w.distance_mi * MILE) / (w.moving_sec / 60)) * worth;
       hrEst.push({ est: vo2At(v) / pVo2, age, date: w.date });
     }
   }
@@ -288,7 +321,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const all = hrEst.map((x) => x.est).sort((a, b) => a - b);
     const med = all[Math.floor(all.length / 2)];
     const newest = hrEst.reduce((a, b) => (a.date > b.date ? a : b));
-    sources.push({ kind: 'hr', max: false, vdot: med, age: newest.age, date: newest.date, quality: 0.35, label: `Heart rate on ${hrEst.length} steady runs (last 8 weeks)` });
+    sources.push({ kind: 'hr', max: false, vdot: med, age: newest.age, date: newest.date, quality: 0.35, label: `Heart rate on ${hrEst.length} steady runs (last 8 weeks, adjusted for heat and hills)` });
   }
 
   // Garmin's VO2max (heart rate vs speed on steady runs, Firstbeat) tends to
@@ -446,6 +479,14 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     est[e.key] = { ...e, sec: t, raw };
   }
 
+  // The same fitness on the team's home course: what to expect at Van
+  // Cortlandt (the 5K, and the 2.5-mile course by Riegel from the 5K).
+  const vc5 = est['5K'].sec * VC_FACTOR;
+  const courseEstimates = [
+    { key: 'vc5k', label: '5K at Van Cortlandt', meters: 5000, sec: Math.round(vc5 * 10) / 10 },
+    { key: 'vc2.5', label: '2.5 mi at Van Cortlandt', meters: 2.5 * MILE, sec: Math.round(vc5 * Math.pow((2.5 * MILE) / 5000, 1.06) * 10) / 10 },
+  ].map((c) => ({ ...c, time: fmtTime(c.sec), pace_mi: fmtPace((c.sec / c.meters) * MILE) }));
+
   // Zones: race paces from the estimates, aerobic zones from VDOT (Daniels'
   // percentages: easy 62-70%, steady 81%, threshold 88%).
   // Training zones use fitness, not race-readiness: no mileage penalty.
@@ -494,6 +535,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
         time: fmtTime(x.sec, { tenths: e.m <= 800 }), pace_mi: fmtPace((x.sec / e.m) * MILE), confidence: confFor(e.m),
       };
     }),
+    course_estimates: courseEstimates,
     zones,
     cs: cs ? { per_mile: fmtPace(MILE / cs.speed), d_prime_m: Math.round(cs.dPrime), source: cs.source || 'your races' } : null,
     speed_index: round1(speedIndex * 100) / 100,
