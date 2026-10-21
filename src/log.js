@@ -11,7 +11,7 @@ const staleFitness = (db, personId) => db.prepare('UPDATE fitness_states SET com
 export class LogError extends Error {}
 
 export const DAY_TYPES = ['easy', 'recovery', 'long', 'tempo', 'threshold', 'intervals', 'track', 'fartlek', 'hills', 'strides', 'race', 'shakeout', 'crosstrain', 'strength', 'rest'];
-export const PR_EVENTS = ['400', '800', '1600', '3200', '5K', 'XC 5K'];
+export const PR_EVENTS = ['400', '800', '1600', '3200', '5K', 'XC 5K', 'VC 2.5 mi'];
 export const DAY_STATUSES = ['as_planned', 'harder', 'easier', 'missed', 'adjusted', 'rest'];
 
 // Strava workout category -> day type.
@@ -232,7 +232,7 @@ export async function getDays(db, personId, from, to) {
     db.prepare('SELECT * FROM training_days WHERE person_id = ? AND date >= ? AND date <= ?').bind(personId, from, to).all(),
     db.prepare(
       `SELECT strava_id, date, name, category, distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft, effort, hr_effort, load, library_id, summary,
-              start_local, laps, planned_type, planned_miles, surface, temp_f, dew_point_f, metrics
+              start_local, laps, planned_type, planned_miles, surface, course, temp_f, dew_point_f, metrics
        FROM workouts WHERE person_id = ? AND date >= ? AND date <= ? ORDER BY start_local, created_at`
     ).bind(personId, from, to).all(),
     db.prepare(

@@ -81,8 +81,9 @@ const SESSION_SCHEMA = {
               properties: {
                 id: { type: 'string' },
                 category: { type: 'string', enum: ['easy', 'recovery', 'long', 'workout', 'race', 'shakeout', 'crosstrain'] },
+                course: { type: 'string', enum: ['vc', 'xc', 'flat'], description: 'Where it was run: vc = Van Cortlandt Park, xc = another cross-country course, flat = road, track or anywhere flat' },
               },
-              required: ['id', 'category'],
+              required: ['id', 'category', 'course'],
             },
           },
         },
@@ -98,7 +99,7 @@ const SESSION_SCHEMA = {
 };
 
 // sessions: [{ key, date, activities: [{ id, start, name, rule_category, miles, minutes, pace, avg_hr, laps }] }]
-export async function reportSessions(env, db, person, sessions, { rubric, maxHr, today, body }) {
+export async function reportSessions(env, db, person, sessions, { rubric, maxHr, today, body, calendar = [] }) {
   if (!aiEnabled(env) || !sessions.length) return null;
   await spend(db, person.id, today);
   const acts = sessions.reduce((n, x) => n + x.activities.length, 0);
@@ -108,10 +109,11 @@ export async function reportSessions(env, db, person, sessions, { rubric, maxHr,
 Activities are already grouped into sessions (warm-up, workout and cool-down saved separately are ONE session). For each session return:
 - main_id: the main activity (the workout, race or longest run)
 - activities: every activity id with one category (warm-ups/cool-downs around a workout are "easy"). rule_category is a math-based guess; change it only when laps, HR or the name clearly say otherwise.
+- course for every activity: "vc" when it was run at Van Cortlandt Park (the team's home course: hilly, gravel and grass, the 2.5 mi high school course and the 5K), "xc" for another cross-country course, otherwise "flat". Clues: the name or the athlete's note naming the park (Van Cortlandt, VC, Vannie, the Tortoise and Hare), a calendar event that day at Van Cortlandt for a race or workout (see calendar), a race-effort run of 2.5 mi or 5K with real climbing (elev_ft well over 20 per mile) in the Bronx. A track, road or a flat easy run is "flat". When unsure, "flat".
 - report: 2-4 sentences on the whole session: what it was, the reps or pace vs what it should have been, and one thing to focus on.
 Then for each date, one "line": a single plain sentence summing up the day (e.g. "Solid 6x800 averaging 2:46 with an easy double in the evening.").
 
-${JSON.stringify(sessions)}`,
+${calendar.length ? `Team calendar on these days: ${JSON.stringify(calendar)}\n\n` : ''}${JSON.stringify(sessions)}`,
     schema: SESSION_SCHEMA,
     maxTokens: 300 + sessions.length * 220 + acts * 30,
   });

@@ -4306,7 +4306,7 @@ function miniMarkdown(text){
     .replace(/^\s*[*-]\s+/gm, '• ');
 }
 
-const PR_EVENTS = ['400','800','1600','3200','5K','XC 5K'];
+const PR_EVENTS = ['400','800','1600','3200','5K','XC 5K','VC 2.5 mi'];
 function parsePrsClient(raw){ try{ const o = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {}); return o && typeof o === 'object' ? o : {}; }catch(e){ return {}; } }
 
 function renderPrs(p){
@@ -4314,7 +4314,7 @@ function renderPrs(p){
   $('prForm').style.display = p ? '' : 'none';
   if(!p) return;
   const prs = parsePrsClient(p.prs);
-  const ph = { '400':'ss.s', '800':'m:ss', '1600':'m:ss', '3200':'mm:ss', '5K':'mm:ss', 'XC 5K':'mm:ss' };
+  const ph = { '400':'ss.s', '800':'m:ss', '1600':'m:ss', '3200':'mm:ss', '5K':'mm:ss', 'XC 5K':'mm:ss', 'VC 2.5 mi':'mm:ss' };
   $('prGrid').innerHTML = `<div class="pr-row head"><span>Event</span><span>Time</span><span>When</span></div>` + PR_EVENTS.map(e=>`<div class="pr-row">
     <span class="pr-ev">${e}</span>
     <input type="text" data-pr="${e}" value="${escapeHtml(prs[e]?.time || '')}" placeholder="${ph[e]}" maxlength="10" inputmode="decimal" autocomplete="off" aria-label="${e} time">
@@ -4439,7 +4439,7 @@ SETUP. Do these one at a time, in plain friendly language, and wait for me after
 
 5. IMPORT HISTORY. Call sync_watch with full_history: true and keep calling it until done is true. Tell me roughly how far back my runs go. If it says activities came from Strava, explain step 3 again.
 
-6. PRs. Call get_coach_context. If missing_prs isn't empty, ask me in one message for my PRs (time, and roughly when) for 400, 800, 1600, 3200, 5K and XC 5K, plus my next goal race and goal time. Save them with set_prs, including dates (YYYY-MM-DD; first of the month is fine if I only know the month).
+6. PRs. Call get_coach_context. If missing_prs isn't empty, ask me in one message for my PRs (time, and roughly when) for 400, 800, 1600, 3200, 5K, XC 5K and the 2.5 mi at Van Cortlandt (VC 2.5 mi), plus my next goal race and goal time. Save them with set_prs, including dates (YYYY-MM-DD; first of the month is fine if I only know the month).
 
 7. FITNESS STATES. Call get_fitness and explain it simply: what I could race right now from 400 m to half marathon, my VO2max estimate, my weekly mileage, and my training paces (what each pace is for). Say what it's based on and how confident it is.
 
@@ -5766,8 +5766,8 @@ async function renderFitness(refresh){
   }).join('')
     // The same fitness on the home course (hills, gravel and grass: about 5.5% slower).
     + (f.course_estimates || []).map(c=>{
-      const pr = c.key === 'vc5k' && prs['XC 5K']?.time;
-      return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · XC PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
+      const pr = c.key === 'vc5k' ? prs['XC 5K']?.time : c.key === 'vc2.5' ? prs['VC 2.5 mi']?.time : '';
+      return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
     }).join('');
   const hist = (data.history || []).filter(h=>h.vdot).map(h=>({ v: h.vdot, d: h.date }));
   const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';

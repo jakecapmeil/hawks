@@ -264,6 +264,13 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
       strava_id: String(r.a.id), date: r.date, category: r.category, distance_mi: r.a.distance / 1609.344,
       moving_sec: r.a.moving_time, elapsed_sec: r.a.elapsed_time, start_local: r.start, name: r.a.name || '',
     }));
+    // What the team had on those days, so Hawky can tell where a race was.
+    const calendar = (await db.prepare(
+      `SELECT e.date, e.type, e.title, e.location, l.name AS loc_name FROM events e
+       LEFT JOIN locations l ON l.id = e.location_id WHERE e.date >= ?`
+    ).bind(recentFrom).all()).results
+      .filter((e) => pseudo.some((p) => p.date === e.date))
+      .map((e) => ({ date: e.date, type: e.type, title: e.title, location: e.loc_name || e.location || '' }));
     const byDate = new Map();
     pseudo.forEach((p) => byDate.set(p.date, [...(byDate.get(p.date) || []), p]));
     const sessions = [];
@@ -275,6 +282,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
             const r = recent.find((y) => String(y.a.id) === x.id);
             return {
               id: x.id, start: r.start, name: r.a.name || '', type: r.a.type, rule_category: r.category,
+              elev_ft: r.a.total_elevation_gain != null ? Math.round(r.a.total_elevation_gain * 3.281) : null,
               miles: Math.round(r.a.distance / 16.09344) / 100, minutes: Math.round(r.a.moving_time / 60),
               pace: fmtPace(r.a.moving_time / (r.a.distance / 1609.344)), avg_hr: r.a.average_heartrate || null, max_hr: r.a.max_heartrate || null,
               laps: r.splits || null, on_track: r.track || undefined, athlete_note: (r.a.description || '').slice(0, 300) || null,
@@ -284,15 +292,17 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
       }
     }
     try {
-      ai = await reportSessions(env, db, person, sessions, { rubric: COACH_RUBRIC, maxHr, today, body: await bodyStatus(db, person.id) });
+      ai = await reportSessions(env, db, person, sessions, { rubric: COACH_RUBRIC, maxHr, today, body: await bodyStatus(db, person.id), calendar });
     } catch (err) {
       aiNote = err instanceof AiError ? err.message : 'AI unavailable';
     }
   }
   const catById = new Map();
+  const courseById = new Map();
   const reportById = new Map();
   for (const sess of ai?.sessions || []) {
     for (const x of sess.activities || []) if (x?.id && x?.category) catById.set(String(x.id), x.category);
+    for (const x of sess.activities || []) if (x?.id && x?.course) courseById.set(String(x.id), x.course);
     if (sess.main_id && sess.report) reportById.set(String(sess.main_id), sess.report);
   }
 
@@ -307,6 +317,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
     avg_hr: r.a.average_heartrate, max_hr: r.a.max_heartrate, avg_cadence: r.a.average_cadence,
     elev_gain_ft: r.a.total_elevation_gain != null ? Math.round(r.a.total_elevation_gain * 3.281) : null,
     start_local: r.start, laps: r.laps,
+    course: courseById.get(String(r.a.id)) || '',
     metrics: metricsOf(r.a),
     summary: reportById.get(String(r.a.id)) || '',
   }));

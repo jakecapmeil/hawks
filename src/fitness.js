@@ -40,7 +40,8 @@ export const EVENTS = [
   { key: 'half', label: 'Half marathon', m: 21097.5 },
 ];
 
-const PR_METERS = { '400': 400, '800': 800, '1600': 1600, '3200': 3200, '5K': 5000, 'XC 5K': 5000 };
+const VC_MILE_2_5 = 2.5 * MILE;
+const PR_METERS = { '400': 400, '800': 800, '1600': 1600, '3200': 3200, '5K': 5000, 'XC 5K': 5000, 'VC 2.5 mi': VC_MILE_2_5 };
 
 // ------------------------------------------------------------------ Daniels
 
@@ -117,7 +118,7 @@ async function loadInputs(db, personId, today) {
   const [person, workouts, days, maxRow, events, efforts, well, model] = await Promise.all([
     db.prepare('SELECT id, prs, five_k_time, five_k_set_at FROM people WHERE id = ?').bind(personId).first(),
     db.prepare(
-      `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, load, temp_f, dew_point_f
+      `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, course, load, temp_f, dew_point_f
        FROM workouts WHERE person_id = ? AND date >= ? ORDER BY date`
     ).bind(personId, since).all(),
     db.prepare(
@@ -130,7 +131,7 @@ async function loadInputs(db, personId, today) {
        LEFT JOIN locations l ON l.id = e.location_id WHERE e.date >= ?`
     ).bind(since).all(),
     db.prepare(
-      `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps, w.name, w.distance_mi, w.elev_gain_ft, w.surface, w.temp_f, w.dew_point_f FROM best_efforts b
+      `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps, w.name, w.distance_mi, w.elev_gain_ft, w.surface, w.course, w.temp_f, w.dew_point_f FROM best_efforts b
        LEFT JOIN workouts w ON w.person_id = b.person_id AND w.strava_id = 'intervals:' || b.activity_id WHERE b.person_id = ?`
     ).bind(personId).all(),
     db.prepare('SELECT date, vo2max, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
@@ -207,12 +208,13 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const age = dated ? ageDays(v.date, today) : 240;
     // XC courses run slower than the track. Hawks races are at Van Cortlandt
     // unless the PR says it was somewhere else.
-    const vc = event === 'XC 5K' && (!v?.meet || VC_RE.test(v.meet));
-    const t = event === 'XC 5K' ? sec / (vc ? VC_FACTOR : XC_FACTOR) : sec;
+    const onCourse = event === 'XC 5K' || event === 'VC 2.5 mi';
+    const vc = event === 'VC 2.5 mi' || (event === 'XC 5K' && (!v?.meet || VC_RE.test(v.meet)));
+    const t = onCourse ? sec / (vc ? VC_FACTOR : XC_FACTOR) : sec;
     sources.push({
       kind: 'pr', max: true, event, m, s: t, age, date: dated ? v.date : null,
-      quality: (dated ? 0.9 : 0.5) * (event === 'XC 5K' ? 0.8 : 1),
-      label: `${event} PR ${v.time}${v.meet ? ` (${v.meet})` : ''}${event === 'XC 5K' ? `: worth ${fmtTime(t)} on a flat course${vc ? ' (Van Cortlandt runs ~5.5% slow)' : ''}` : ''}`,
+      quality: (dated ? 0.9 : 0.5) * (onCourse ? 0.8 : 1),
+      label: `${event} PR ${v.time}${v.meet ? ` (${v.meet})` : ''}${onCourse ? `: worth ${fmtTime(t)} on a flat course${vc ? ' (Van Cortlandt runs ~5.5% slow)' : ''}` : ''}`,
     });
   }
   const fiveK = parseTime(person?.five_k_time);
@@ -244,7 +246,11 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const label = `${raceDay ? 'Race' : 'Hard run'} ${m === MILE ? 'mile' : m === 2 * MILE ? '2 mi' : m === 2.5 * MILE ? '2.5 mi' : m === 3 * MILE ? '3 mi' : `${m >= 1000 && m % 1000 === 0 ? m / 1000 + 'K' : m + 'm'}`} in ${fmtTime(t)} (${w.date}${credit})`;
     sources.push({ kind: 'race', max: true, m, s: adj, age: ageDays(w.date, today), date: w.date, quality: raceDay ? 1 : 0.9, label });
     // PRs are the raw time. A cross-country 5K is an XC PR, never a track one.
-    if (cond.course) {
+    if (m === VC_MILE_2_5) {
+      // The 2.5 mile course is Van Cortlandt's; it counts there unless the run
+      // was somewhere else or on the track.
+      if (w.surface !== 'track' && cond.course !== 'xc') prCandidates.push({ event: 'VC 2.5 mi', sec: t, date: w.date, name: 'Van Cortlandt' });
+    } else if (cond.course) {
       if (m === 5000) prCandidates.push({ event: 'XC 5K', sec: t, date: w.date, name: cond.course === 'vc' ? 'Van Cortlandt' : w.name || '' });
     } else if (PR_FOR[m]) prCandidates.push({ event: PR_FOR[m], sec: t * (m === MILE ? 1600 / MILE : m === 2 * MILE ? 3200 / (2 * MILE) : 1), date: w.date, name: w.name || '' });
   }

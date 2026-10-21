@@ -54,10 +54,15 @@ const eventText = (e) => [e.title, e.location, e.description, e.loc_name].filter
 // are ruled out first.
 export function courseOf(w, events = []) {
   if (w.surface === 'track') return '';
+  // A run named after the park is there. Otherwise Hawky's read of it (from
+  // the run and the day's calendar) decides, then the rules below.
+  if (VC_RE.test(w.name || '')) return 'vc';
+  if (w.course === 'vc' || w.course === 'xc') return w.course;
+  if (w.course === 'flat') return '';
   const fpm = ftPerMile(w);
   if (fpm != null && fpm < 20) return '';
   const here = events.filter((e) => e.date === w.date);
-  if (VC_RE.test(w.name || '') || here.some((e) => VC_RE.test(eventText(e)))) return 'vc';
+  if (here.some((e) => VC_RE.test(eventText(e)))) return 'vc';
   if (/\bxc\b|cross.?country/i.test(w.name || '')) return 'xc';
   if (here.some((e) => e.type === 'meet') && fpm != null) return 'xc';
   return '';

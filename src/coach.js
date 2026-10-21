@@ -231,6 +231,7 @@ function cleanWorkout(raw) {
     temp_f: num(raw.temp_f, { min: -40, max: 130 }),
     dew_point_f: num(raw.dew_point_f, { min: -60, max: 100 }),
     metrics: cleanMetrics(raw.metrics),
+    course: ['vc', 'xc', 'flat'].includes(raw?.course) ? raw.course : '',
   };
 }
 
@@ -417,8 +418,8 @@ export async function logWorkouts(db, person, list) {
     return db.prepare(
       `INSERT INTO workouts (id, person_id, strava_id, date, name, sport, category, distance_mi, moving_sec, elapsed_sec,
          avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, start_local, laps,
-         surface, raw_distance_mi, raw_elev_ft, temp_f, dew_point_f, weather_checked, hr_effort, metrics, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         surface, raw_distance_mi, raw_elev_ft, temp_f, dew_point_f, weather_checked, hr_effort, metrics, course, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(person_id, strava_id) DO UPDATE SET
          date=excluded.date, name=COALESCE(NULLIF(excluded.name, ''), name), sport=excluded.sport, category=excluded.category,
          distance_mi=COALESCE(excluded.distance_mi, distance_mi), moving_sec=COALESCE(excluded.moving_sec, moving_sec),
@@ -434,12 +435,13 @@ export async function logWorkouts(db, person, list) {
          temp_f=COALESCE(excluded.temp_f, temp_f), dew_point_f=COALESCE(excluded.dew_point_f, dew_point_f),
          weather_checked=MAX(excluded.weather_checked, COALESCE(weather_checked, 0)), hr_effort=excluded.hr_effort,
          metrics=COALESCE(NULLIF(excluded.metrics, ''), metrics),
+         course=COALESCE(NULLIF(excluded.course, ''), course),
          updated_at=excluded.updated_at`
     ).bind(
       'w_' + crypto.randomUUID(), person.id, w.strava_id, w.date, w.name, w.sport, w.category, w.distance_mi,
       w.moving_sec, w.elapsed_sec, w.avg_hr, w.max_hr, w.avg_cadence, w.elev_gain_ft,
       planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, w.library_id, w.start_local, w.laps,
-      w.surface, w.raw_distance_mi, w.raw_elev_ft, w.temp_f, w.dew_point_f, w.temp_f != null ? 1 : 0, hr_effort, w.metrics, now, now
+      w.surface, w.raw_distance_mi, w.raw_elev_ft, w.temp_f, w.dew_point_f, w.temp_f != null ? 1 : 0, hr_effort, w.metrics, w.course, now, now
     );
   });
   await db.batch(stmts);
