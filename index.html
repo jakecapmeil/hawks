@@ -5758,15 +5758,13 @@ async function renderFitness(refresh){
   $('fitHero').innerHTML = tileSub(f.vo2max, 'VO2max', f.vo2max_source === 'Garmin' ? 'from Garmin' : 'estimate') + tileSub(f.vdot, 'race fitness', 'VDOT') + tileSub(fiveK.time, '5K now', '');
   $('fitNewPrs').style.display = f.new_prs?.length ? '' : 'none';
   $('fitNewPrs').innerHTML = (f.new_prs || []).map(p=>`New PR found: <b>${escapeHtml(p.event)} ${escapeHtml(p.time)}</b> on ${escapeHtml(p.date)}`).join('<br>');
-  const prs = parsePrsClient(people.find(x=>x.id===activePersonId)?.prs);
-  const prFor = { '1600':'1600', '3200':'3200', '5K':'5K', '400':'400', '800':'800' };
   $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
-    const pr = prFor[e.event] && prs[prFor[e.event]]?.time;
+    const pr = e.pr?.time;
     return `<div class="fit-row"><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
   }).join('')
     // The same fitness on the home course (hills, gravel and grass: about 5.5% slower).
     + (f.course_estimates || []).map(c=>{
-      const pr = c.key === 'vc5k' ? prs['XC 5K']?.time : c.key === 'vc2.5' ? prs['VC 2.5 mi']?.time : '';
+      const pr = c.pr?.time;
       return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
     }).join('');
   const hist = (data.history || []).filter(h=>h.vdot).map(h=>({ v: h.vdot, d: h.date }));

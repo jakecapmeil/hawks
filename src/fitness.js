@@ -41,7 +41,11 @@ export const EVENTS = [
 ];
 
 const VC_MILE_2_5 = 2.5 * MILE;
-const PR_METERS = { '400': 400, '800': 800, '1600': 1600, '3200': 3200, '5K': 5000, 'XC 5K': 5000, 'VC 2.5 mi': VC_MILE_2_5 };
+// Which PR each estimate row is compared with. The table reads `pr` off the
+// estimate itself, so a new event only needs adding here, in PR_METERS and in
+// PR_EVENTS (log.js); scripts/check-pr-events.mjs fails when they disagree.
+export const PR_FOR_ESTIMATE = { '400': '400', '800': '800', '1600': '1600', '3200': '3200', '5K': '5K', vc5k: 'XC 5K', 'vc2.5': 'VC 2.5 mi' };
+export const PR_METERS = { '400': 400, '800': 800, '1600': 1600, '3200': 3200, '5K': 5000, 'XC 5K': 5000, 'VC 2.5 mi': VC_MILE_2_5 };
 
 // ------------------------------------------------------------------ Daniels
 
@@ -217,6 +221,12 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       label: `${event} PR ${v.time}${v.meet ? ` (${v.meet})` : ''}${onCourse ? `: worth ${fmtTime(t)} on a flat course${vc ? ' (Van Cortlandt runs ~5.5% slow)' : ''}` : ''}`,
     });
   }
+  // The runner's PR for an estimate row, for the table.
+  const prOf = (key) => {
+    const event = PR_FOR_ESTIMATE[key];
+    const v = event && prs[event];
+    return v?.time ? { event, time: v.time, date: v.date || null } : null;
+  };
   const fiveK = parseTime(person?.five_k_time);
   if (fiveK) {
     // Entered before the date was recorded: assume about two months old.
@@ -539,9 +549,10 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       return {
         event: e.key, label: e.label, meters: e.m, sec: Math.round(x.sec * 10) / 10,
         time: fmtTime(x.sec, { tenths: e.m <= 800 }), pace_mi: fmtPace((x.sec / e.m) * MILE), confidence: confFor(e.m),
+        pr: prOf(e.key),
       };
     }),
-    course_estimates: courseEstimates,
+    course_estimates: courseEstimates.map((c) => ({ ...c, pr: prOf(c.key) })),
     zones,
     cs: cs ? { per_mile: fmtPace(MILE / cs.speed), d_prime_m: Math.round(cs.dPrime), source: cs.source || 'your races' } : null,
     speed_index: round1(speedIndex * 100) / 100,

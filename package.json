@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "check": "node scripts/check-pr-events.mjs",
     "migrate:remote": "wrangler d1 migrations apply hawks_calendar_db --remote",
     "migrate:local": "wrangler d1 migrations apply hawks_calendar_db --local"
   },
