@@ -1,11 +1,13 @@
-// Claude Coach. Each runner's own Claude pulls their runs from whatever
-// activity connector they have (COROS, Strava, or a Garmin one) // connector and logs them here through a per-person MCP endpoint
-// (/mcp/coach/<coach_token>). Claude only labels each run and writes a short
-// note; the numbers (effort, load, plan match, grade) are worked out here so
-// every run is scored the same way no matter whose Claude sent it.
+// Hawky in Claude. Each runner's own Claude pulls their runs from whatever
+// activity connector they have (COROS, Strava, or a Garmin one) and logs them
+// here through a per-person MCP endpoint (/mcp/coach/<coach_token>). Claude
+// only labels each run and writes a short note; the numbers (effort, load,
+// plan match) are worked out here so every run is scored the same way no
+// matter whose Claude sent it. The built-in Hawky (gemini.js) uses the same
+// scoring.
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
 import { logTools, callLogTool, LogError, getDays, fiveKFor, getPrs, PR_EVENTS } from './log.js';
-import { pacesFrom5k } from './workouts.js';
+import { getFitness } from './fitness.js';
 
 export class CoachError extends Error {}
 
@@ -37,11 +39,15 @@ PLAN MATCH (0-100) compares the run to that day's plan:
 - Type, 50 pts: the right kind of run for the day (easy/long/shakeout on easy days, workout/race on workout and race days). Going hard on an easy day gets 15. Running on an off day gets 25 (crosstraining on an off day gets the full 50).
 - Distance, 50 pts: 50 x (1 - miss/planned), where a miss within 10% counts as on target.
 - Easy-day guard: an easy, recovery or long run at effort 6+ loses 15 more (easy days should be easy).
-GRADE: A 90+, B 80+, C 70+, D 60+, F below 60. Runs on days with no plan get no grade.
+Hawks shows plan match per DAY, not per activity: a warm-up, workout and cool-down saved separately are one session and are judged together against the day's plan (On plan / Close / Off plan, with the reason).
 
-YOUR NOTE (summary, 1-3 sentences): what the session was, how it compared to the plan, and one useful coaching point (pacing, HR drift, cadence under ~165 spm, too fast on an easy day, a strong workout). Be honest but encouraging, like a good high school XC coach.
+SESSIONS: activities less than ~75 min apart are one session. Write ONE report per session on its main activity (the workout, race or longest run) and leave the warm-up/cool-down summaries empty.
 
-DAILY LOG (log_day) — after logging runs, write one log_day per date like a coach's log: status (as_planned, harder, easier, missed, adjusted, rest), difficulty 1-10 for the whole day, types, planned (the plan's session), summary (dose and pace vs prescription, HR drift, conditions), splits for reps, coach_note (what you'd change for the next days and why), load_note (rolling read on the last 7-10 days). A planned run day with no activity is "missed".
+YOUR NOTE (summary, 2-4 sentences, on the session's main activity): what the session was, how it compared to the plan, how the reps or pace compared to the runner's Fitness States paces, and one useful coaching point (pacing, HR drift, cadence under ~165 spm, too fast on an easy day, a strong workout). Be honest but encouraging, like a good high school XC coach.
+
+FITNESS STATES: fitness (in get_coach_context) holds the runner's current estimates for 400 to half marathon, VO2max estimate, recent mileage and pace zones. Use those paces for every workout target. Never invent a pace that isn't from there or from the library.
+
+DAILY LOG (log_day) — after logging runs, write one log_day per date like a coach's log: status (as_planned, harder, easier, missed, adjusted, rest), types, planned (the plan's session), day_line (one sentence on the whole day), summary (dose and pace vs prescription, HR drift, conditions), split_reps for reps, coach_note (what you'd change for the next days and why), load_note (rolling read on the last 7-10 days). Miles, minutes and difficulty come from the synced runs; don't send them for days with runs. A planned run day with no activity is "missed".
 
 WORKOUT LIBRARY — when suggesting or adjusting a workout, pick it with find_workouts (filter by the race they're training for, phase, level and time available) and give paces from get_workout. Set library_id on the run and the day so get_workout_history can compare it next time. Judge improvement by comparing the same workout over time, not single runs.`;
 
@@ -152,6 +158,16 @@ function cadenceSpm(c) {
   return r(c < 120 ? c * 2 : c);
 }
 
+// Work reps: [{ m, s, hr }], kept small.
+function cleanLaps(v) {
+  let arr = v;
+  if (typeof v === 'string') { try { arr = JSON.parse(v); } catch { return ''; } }
+  if (!Array.isArray(arr)) return '';
+  const out = arr.slice(0, 40).map((l) => ({ m: r(num(l?.m, { max: 20000 })), s: Math.round((num(l?.s, { max: 7200 }) || 0) * 10) / 10, hr: r(num(l?.hr, { min: 30, max: 250 })) }))
+    .filter((l) => l.m && l.s);
+  return out.length ? JSON.stringify(out) : '';
+}
+
 function cleanWorkout(raw) {
   const date = clip(raw?.date, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new CoachError('Each workout needs date as YYYY-MM-DD (the local start date)');
@@ -174,6 +190,8 @@ function cleanWorkout(raw) {
     max_hr: r(num(raw.max_hr, { min: 30, max: 250 })),
     avg_cadence: cadenceSpm(num(raw.avg_cadence, { max: 260 })),
     elev_gain_ft: r(num(raw.elev_gain_ft, { max: 50000 })),
+    start_local: /^\d{1,2}:\d{2}$/.test(clip(raw.start_local, 5)) ? clip(raw.start_local, 5).padStart(5, '0') : '',
+    laps: cleanLaps(raw.laps),
     summary: clip(raw.summary, 1000),
     library_id: clip(raw.library_id, 60),
   };
@@ -212,7 +230,7 @@ async function weekSummary(db, person, today) {
     days.push({
       date, day: DAY_NAMES[new Date(date + 'T12:00:00Z').getUTCDay()],
       planned: planned ? { type: planned.type, miles: planned.miles, detail: planned.detail, notes: planned.notes } : null,
-      logged: done.filter((w) => w.date === date).map((w) => ({ category: w.category, miles: w.distance_mi, rating: w.rating })),
+      logged: done.filter((w) => w.date === date).map((w) => ({ category: w.category, miles: w.distance_mi })),
     });
   }
   const miles = done.filter((w) => w.category !== 'crosstrain').reduce((s, w) => s + (w.distance_mi || 0), 0);
@@ -232,6 +250,22 @@ async function weekSummary(db, person, today) {
 export async function personForToken(db, token) {
   if (!token || token.length < 20) return null;
   return await db.prepare('SELECT id, name, first_name, class_year, plan_rank FROM people WHERE coach_token = ?').bind(token).first();
+}
+
+// What Hawky needs from Fitness States, without the bookkeeping.
+export function compactFitness(f) {
+  if (!f || !f.vdot) return { note: f?.note || 'No fitness data yet', weekly_miles_last_4_weeks: f?.mpw ?? null };
+  return {
+    vo2max_estimate: f.vo2max,
+    confidence: f.confidence,
+    based_on: f.sources.map((s) => s.label),
+    race_estimates: Object.fromEntries(f.estimates.map((e) => [e.label, e.time])),
+    paces_per_mile: Object.fromEntries(f.zones.map((z) => [z.label, z.per_mile])),
+    weekly_miles_last_4_weeks: f.mpw,
+    weekly_miles_4_weeks_before: f.mpw_prev,
+    profile: f.profile,
+    trend: f.trend || null,
+  };
 }
 
 export async function getCoachContext(db, person) {
@@ -257,7 +291,7 @@ export async function getCoachContext(db, person) {
     prs: await getPrs(db, person.id),
     missing_prs: PR_EVENTS.filter((e) => !(e in prsNow)),
     five_k_time: (await fiveKFor(db, person.id)) || null,
-    paces: pacesFrom5k(await fiveKFor(db, person.id)),
+    fitness: compactFitness(await getFitness(db, person.id, today)),
     training_log_last_14_days: await getDays(db, person.id, addDays(today, -13), today),
     rubric: COACH_RUBRIC,
   };
@@ -312,11 +346,11 @@ export async function logWorkouts(db, person, list) {
     const load = loadOf(w, effort);
     const plan_score = planScoreOf(w, effort, planned);
     const rating = gradeOf(plan_score);
-    results.push({ strava_id: w.strava_id, date: w.date, category: w.category, planned: planned ? `${planned.type} ${planned.detail}` : null, effort, load, plan_score, rating });
+    results.push({ strava_id: w.strava_id, date: w.date, category: w.category, planned: planned ? `${planned.type} ${planned.detail}` : null, effort, load, plan_score });
     return db.prepare(
       `INSERT INTO workouts (id, person_id, strava_id, date, name, sport, category, distance_mi, moving_sec, elapsed_sec,
-         avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         avg_hr, max_hr, avg_cadence, elev_gain_ft, planned_type, planned_miles, effort, plan_score, load, rating, summary, library_id, start_local, laps, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(person_id, strava_id) DO UPDATE SET
          date=excluded.date, name=COALESCE(NULLIF(excluded.name, ''), name), sport=excluded.sport, category=excluded.category,
          distance_mi=COALESCE(excluded.distance_mi, distance_mi), moving_sec=COALESCE(excluded.moving_sec, moving_sec),
@@ -326,11 +360,12 @@ export async function logWorkouts(db, person, list) {
          planned_type=excluded.planned_type, planned_miles=excluded.planned_miles, effort=excluded.effort,
          plan_score=excluded.plan_score, load=excluded.load, rating=excluded.rating,
          summary=COALESCE(NULLIF(excluded.summary, ''), summary), library_id=COALESCE(NULLIF(excluded.library_id, ''), library_id),
+         start_local=COALESCE(NULLIF(excluded.start_local, ''), start_local), laps=COALESCE(NULLIF(excluded.laps, ''), laps),
          updated_at=excluded.updated_at`
     ).bind(
       'w_' + crypto.randomUUID(), person.id, w.strava_id, w.date, w.name, w.sport, w.category, w.distance_mi,
       w.moving_sec, w.elapsed_sec, w.avg_hr, w.max_hr, w.avg_cadence, w.elev_gain_ft,
-      planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, w.library_id, now, now
+      planned?.type ?? '', planned?.miles ?? null, effort, plan_score, load, rating, w.summary, w.library_id, w.start_local, w.laps, now, now
     );
   });
   await db.batch(stmts);
@@ -387,12 +422,12 @@ export async function issueCoachToken(db, personId, regenerate) {
 export const COACH_TOOLS = [
   {
     name: 'get_coach_context',
-    description: "Start here every time. Returns who you're coaching, today's date, this week's Hawks training plan day by day (planned type and miles) with what's already logged, the last 14 days of logged runs, the activity ids already logged per source (skip those), the runner's PRs, and the scoring rubric to follow when picking categories.",
+    description: "Start here every time. Returns who you're coaching, today's date, this week's Hawks training plan day by day (planned type and miles) with what's already logged, the last 14 days of logged runs, the activity ids already logged per source (skip those), the runner's PRs, their Fitness States (race estimates, VO2max estimate, mileage and pace zones) and the scoring rubric to follow when picking categories.",
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'log_workouts',
-    description: 'Save activities from the runner\'s COROS, Strava or Garmin connector to Hawks. Send the raw numbers, your category, and a short coaching note for each; Hawks works out effort (1-10), training load, plan match (0-100) and the letter grade, saves it to the Training tab, and returns the scores plus the updated week. Re-sending the same source + activity_id updates it.',
+    description: 'Save activities from the runner\'s COROS, Strava or Garmin connector to Hawks. Send the raw numbers, local start time, your category, work laps if it was a workout, and one session report on the main activity of each session; Hawks works out effort (1-10), training load and plan match, saves it to the Training log, and returns the scores plus the updated week. Re-sending the same source + activity_id updates it.',
     inputSchema: {
       type: 'object',
       required: ['workouts'],
@@ -418,7 +453,9 @@ export const COACH_TOOLS = [
               max_hr: { type: 'integer' },
               avg_cadence: { type: 'integer', description: 'Average cadence as the connector reports it; Hawks doubles one-foot values (under 120) automatically.' },
               elev_gain_ft: { type: 'integer', description: 'Feet (meters x 3.281)' },
-              summary: { type: 'string', description: '1-3 sentence coaching note, per the rubric' },
+              start_local: { type: 'string', description: 'Local start time HH:MM (groups warm-up, workout and cool-down into one session)' },
+              laps: { type: 'array', description: 'Work reps only (not warm-up/recovery): meters, seconds, avg HR', items: { type: 'object', properties: { m: { type: 'number' }, s: { type: 'number' }, hr: { type: 'number' } }, required: ['m', 's'] } },
+              summary: { type: 'string', description: 'Session report (2-4 sentences) on the main activity of the session; empty for warm-ups and cool-downs' },
               library_id: { type: 'string', description: 'Workout library id if this run was a library workout (see find_workouts)' },
             },
             additionalProperties: false,

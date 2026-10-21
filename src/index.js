@@ -1,8 +1,9 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
 import { logTools, callLogTool, LogError, getLog, saveDay, libraryMeta, setFiveK, fiveKFor, setPrs, getPrs } from './log.js';
-import { WORKOUTS, pacesFrom5k } from './workouts.js';
+import { WORKOUTS, WORKOUT_GROUPS, workoutGroup, workoutTargets } from './workouts.js';
 import { todayInTz, getCoachContext } from './coach.js';
-import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
+import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
+import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
 import { aiEnabled, askCoach, AiError } from './gemini.js';
 import { COACH_TOOLS, callCoachTool, personForToken, workoutsForApp, issueCoachToken, teamTraining } from './coach.js';
 
@@ -981,7 +982,7 @@ const MCP_TOOLS_BASE = [
   },
   {
     name: 'get_team_training',
-    description: "Claude Coach results for the whole team: for each person, whether they've connected Claude Coach, this week's miles vs plan, load, average plan score (0-100), days run, and their graded runs over the last N days (default 7). Use it to see who's putting in the work.",
+    description: "Training for the whole team: for each person, whether they've connected Hawky in Claude, this week's miles vs plan, load, average plan score (0-100), days run, and their scored runs over the last N days (default 7). Use it to see who's putting in the work.",
     inputSchema: {
       type: 'object',
       properties: { days: { type: 'integer', minimum: 1, maximum: 60 } },
@@ -1206,11 +1207,11 @@ async function handleMcp(request, env, ctx) {
   return await serveMcp(request, 'hawks-calendar', MCP_TOOLS, (name, args) => callMcpTool(name, args, env, ctx));
 }
 
-// Claude Coach: one runner's own Claude, scoped to just their workouts. The
+// Hawky in Claude: one runner's own Claude, scoped to just their workouts. The
 // token is in the path because claude.ai custom connectors can't send headers.
 async function handleCoachMcp(request, env, token) {
   const person = await personForToken(env.DB, token);
-  if (!person) return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unknown coach link. Get a new one from Hawks > Personal > Claude Coach.' } }, 401);
+  if (!person) return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unknown Hawky link. Get a new one from Hawks > You > Settings > Hawky in Claude.' } }, 401);
   return await serveMcp(request, 'hawks-coach', COACH_TOOLS, (name, args) => callCoachTool(env.DB, person, name, args));
 }
 
@@ -1429,6 +1430,50 @@ async function sendMeetDayReminders(env) {
   return { sent };
 }
 
+// Team mileage: weekly totals for the last 8 weeks and each athlete's week.
+// Synced runs count; hand-logged miles count on days with no synced runs.
+async function teamMileage(db) {
+  const today = todayInTz();
+  const dow = new Date(today + 'T12:00:00Z').getUTCDay();
+  const shift = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const weekStart = shift(today, dow === 0 ? -6 : 1 - dow);
+  const from = shift(weekStart, -7 * 7);
+  const [people, runs, manual] = await Promise.all([
+    db.prepare("SELECT id, name, color, class_year, health_status, training_status, icu_key_enc != '' AS watch FROM people ORDER BY name").all(),
+    db.prepare("SELECT person_id, date, SUM(distance_mi) AS mi FROM workouts WHERE date >= ? AND category != 'crosstrain' GROUP BY person_id, date").bind(from).all(),
+    db.prepare('SELECT person_id, date, manual_miles AS mi FROM training_days WHERE date >= ? AND manual_miles > 0').bind(from).all(),
+  ]);
+  const byPerson = new Map();
+  const put = (pid, date, mi, synced) => {
+    if (!byPerson.has(pid)) byPerson.set(pid, new Map());
+    const m = byPerson.get(pid);
+    if (synced || !m.has(date)) m.set(date, { mi, synced });
+  };
+  runs.results.forEach((r) => put(r.person_id, r.date, r.mi || 0, true));
+  manual.results.forEach((r) => { const m = byPerson.get(r.person_id); if (!m?.get(r.date)?.synced) put(r.person_id, r.date, r.mi, false); });
+  const weekIdx = (date) => Math.floor((Date.parse(date + 'T12:00:00Z') - Date.parse(from + 'T12:00:00Z')) / (7 * 86400000));
+  const round = (n) => Math.round(n * 10) / 10;
+  const weeks = Array.from({ length: 8 }, (_, i) => ({ week_of: shift(from, i * 7), miles: 0, athletes: 0 }));
+  const athletes = people.results.map((p) => {
+    const perWeek = Array(8).fill(0);
+    let daysThisWeek = 0;
+    for (const [date, d] of byPerson.get(p.id) || []) {
+      const i = weekIdx(date);
+      if (i < 0 || i > 7) continue;
+      perWeek[i] += d.mi;
+      if (i === 7 && d.mi > 0) daysThisWeek++;
+    }
+    perWeek.forEach((mi, i) => { weeks[i].miles += mi; if (mi > 0) weeks[i].athletes++; });
+    return {
+      id: p.id, name: p.name, color: p.color, class_year: p.class_year || '', health: p.health_status, training: p.training_status, watch: !!p.watch,
+      this_week: round(perWeek[7]), last_week: round(perWeek[6]), avg4: round((perWeek[3] + perWeek[4] + perWeek[5] + perWeek[6]) / 4), days_this_week: daysThisWeek,
+      weeks: perWeek.map(round),
+    };
+  });
+  weeks.forEach((w) => { w.miles = round(w.miles); });
+  return { today, week_of: weekStart, weeks, athletes, this_week: weeks[7].miles, last_week: weeks[6].miles };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     if (event.cron === SYNC_CRON) {
@@ -1488,8 +1533,28 @@ export default {
       }
 
       if (pathname === '/api/library' && request.method === 'GET') {
-        const fiveK = await fiveKFor(env.DB, str(reqUrl.searchParams.get('personId'), 100));
-        return json({ ...libraryMeta(), workouts: WORKOUTS, five_k_time: fiveK, paces: pacesFrom5k(fiveK), prs: await getPrs(env.DB, str(reqUrl.searchParams.get('personId'), 100)) });
+        const personId = str(reqUrl.searchParams.get('personId'), 100);
+        const person = personId ? await env.DB.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first() : null;
+        const fitness = person ? await getFitness(env.DB, personId, todayInTz()) : null;
+        return json({
+          ...libraryMeta(),
+          groups: WORKOUT_GROUPS,
+          workouts: WORKOUTS.map((w) => ({ ...w, group: workoutGroup(w), targets: workoutTargets(w, fitness) })),
+          fitness,
+          five_k_time: person ? await fiveKFor(env.DB, personId) : '',
+          prs: person ? await getPrs(env.DB, personId) : {},
+        });
+      }
+
+      if (pathname === '/api/fitness' && request.method === 'GET') {
+        const personId = str(reqUrl.searchParams.get('personId'), 100);
+        const person = await env.DB.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first();
+        if (!person) return json({ error: 'Unknown person' }, 404);
+        return json({ fitness: await getFitness(env.DB, personId, todayInTz()), history: await fitnessHistory(env.DB, personId) });
+      }
+
+      if (pathname === '/api/team' && request.method === 'GET') {
+        return json(await teamMileage(env.DB));
       }
 
       if (pathname === '/api/workouts' && request.method === 'GET') {
@@ -1531,11 +1596,27 @@ export default {
         if (pathname === '/api/schedule/week/clear') return await clearWeekTemplate(env.DB, body);
         if (pathname === '/api/people/personal') return await upsertPersonal(env.DB, body, env, ctx);
         if (pathname === '/api/travel-estimate') return await upsertTravelEstimate(env.DB, body);
-        if (pathname === '/api/log/day' || pathname === '/api/people/5k' || pathname === '/api/people/prs') {
+        if (pathname === '/api/log/day' || pathname === '/api/people/5k' || pathname === '/api/people/prs' || pathname === '/api/fitness/refresh') {
+          const personId = str(body.personId, 100);
           try {
-            if (pathname === '/api/people/prs') return json(await setPrs(env.DB, str(body.personId, 100), body.prs));
-            if (pathname === '/api/people/5k') return json(await setFiveK(env.DB, str(body.personId, 100), body.time));
-            return json(await saveDay(env.DB, str(body.personId, 100), str(body.date, 10), body.fields || {}));
+            if (pathname === '/api/fitness/refresh') return json({ fitness: await recomputeFitness(env.DB, personId, todayInTz()) });
+            if (pathname === '/api/people/prs') {
+              const out = await setPrs(env.DB, personId, body.prs);
+              return json({ ...out, fitness: await recomputeFitness(env.DB, personId, todayInTz()) });
+            }
+            if (pathname === '/api/people/5k') {
+              const out = await setFiveK(env.DB, personId, body.time);
+              return json({ ...out, fitness: await recomputeFitness(env.DB, personId, todayInTz()) });
+            }
+            // Watch days are locked: their miles, minutes, runs and difficulty
+            // come from the synced activities.
+            const date = str(body.date, 10);
+            const fields = { ...(body.fields || {}) };
+            const synced = await env.DB.prepare('SELECT 1 FROM workouts WHERE person_id = ? AND date = ? LIMIT 1').bind(personId, date).first();
+            if (synced) ['manual_miles', 'minutes', 'runs', 'difficulty'].forEach((k) => delete fields[k]);
+            const day = await saveDay(env.DB, personId, date, fields);
+            if ('split_reps' in fields || 'manual_miles' in fields) await env.DB.prepare('UPDATE fitness_states SET computed_at = 0 WHERE person_id = ?').bind(personId).run();
+            return json(day);
           } catch (err) {
             if (err instanceof LogError) return json({ error: err.message }, 400);
             throw err;
@@ -1547,6 +1628,7 @@ export default {
             if (pathname === '/api/intervals/connect') return json(await icuConnect(env, personId, body.athleteId, body.apiKey));
             if (pathname === '/api/intervals/disconnect') return json(await icuDisconnect(env, personId));
             if (pathname === '/api/intervals/sync') return json(await syncPerson(env, personId, { days: body.days === 60 ? 60 : undefined }));
+            if (pathname === '/api/intervals/import') return json(await importHistory(env, personId));
             if (pathname === '/api/coach/ask') {
               const person = await env.DB.prepare('SELECT id, name, first_name, class_year, plan_rank FROM people WHERE id = ?').bind(personId).first();
               if (!person) return json({ error: 'Unknown person' }, 400);

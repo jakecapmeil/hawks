@@ -226,11 +226,10 @@
   }
 
   /* contact icons */
-  .contact-row{display:flex;gap:8px;flex-shrink:0;padding-top:2px;}
+  .contact-row{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-top:2px;}
   .icon-btn{
     width:var(--tap-min);height:var(--tap-min);
     display:flex;align-items:center;justify-content:center;
-    display:block;
     text-decoration:none;
     background:none;border:none;padding:0;cursor:pointer;
   }
@@ -628,18 +627,20 @@
   .lib-dl dd{margin:0;}
   .lib-count{font-size:var(--fs-footnote);color:var(--ink-soft);margin-bottom:var(--sp-2);}
 
-  /* ---- Claude Coach / PRs ---------------------------------------------- */
+  /* ---- Hawky in Claude / PRs ------------------------------------------- */
   .coach-steps{margin:0;padding-left:20px;font-size:var(--fs-footnote);color:var(--ink-soft);display:flex;flex-direction:column;gap:var(--sp-2);line-height:1.45;}
   .coach-steps b{color:var(--ink);}
   .coach-prompt{width:100%;min-height:160px;font-family:var(--font-mono);font-size:12px;line-height:1.45;}
-  .pr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-3);}
-  .pr-grid input{width:100%;font-variant-numeric:tabular-nums;}
+  .pr-grid{display:flex;flex-direction:column;gap:var(--sp-2);}
+  .pr-row{display:grid;grid-template-columns:58px minmax(0,1fr) minmax(0,1.2fr);gap:var(--sp-2);align-items:center;}
+  .pr-row.head{font-size:var(--fs-caption2);font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;}
+  .pr-ev{font-weight:700;font-size:var(--fs-subhead);}
+  .pr-grid input{width:100%;min-width:0;font-variant-numeric:tabular-nums;}
 
   @media (max-width:420px){
     .stat{padding:var(--sp-2) 2px;}
     .stat b{font-size:var(--fs-callout);}
     .stat span{font-size:10px;}
-    .pr-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
     .lib-paces{grid-template-columns:repeat(2,minmax(0,1fr));}
     .tl-cell{min-height:50px;padding:3px;}
     .tl-tag{display:none;}
@@ -768,7 +769,7 @@
   }
 
   /* grid */
-  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;}
   .dow{
     text-align:center;font-weight:600;
     font-size:var(--fs-caption);letter-spacing:var(--tr-caption);
@@ -778,7 +779,7 @@
     aspect-ratio:1/1;border-radius:var(--r-row);border:1px solid var(--line);
     background:var(--bg);
     display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-    padding:3px 1px;cursor:pointer;position:relative;
+    padding:3px 1px;cursor:pointer;position:relative;min-width:0;overflow:hidden;
   }
   .day:active{background:var(--press);}
   .day.empty{visibility:hidden;cursor:default;}
@@ -1199,6 +1200,195 @@
     margin-right:5px;vertical-align:middle;
   }
 
+
+  /* ---- Header sync menu ---------------------------------------------- */
+  .head-right{display:flex;align-items:center;gap:var(--sp-2);}
+  .sync-wrap{position:relative;}
+  .sync-pill{
+    height:34px;padding:0 12px 0 10px;border-radius:var(--r-pill);
+    border:1px solid var(--line);background:var(--card);color:var(--ink);
+    display:flex;align-items:center;gap:7px;font-size:var(--fs-footnote);font-weight:600;
+  }
+  .sync-pill .sdot{width:8px;height:8px;border-radius:50%;background:var(--ink-soft);flex-shrink:0;}
+  .sync-pill.ok .sdot{background:var(--int-1);}
+  .sync-pill.busy .sdot{background:var(--int-2);animation:pulse 1s ease-in-out infinite;}
+  .sync-pill.err .sdot{background:var(--int-4);}
+  .sync-pill .slabel{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sync-pill .sicon{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:none;}
+  .sync-pill.busy .sicon{animation:spin 1.2s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  /* Phones: the wordmark and two contact icons leave room for an icon only. */
+  @media (max-width:479px){
+    .sync-pill{width:var(--tap-min);height:var(--tap-min);padding:0;justify-content:center;position:relative;border:none;background:transparent;}
+    .sync-pill .sicon{display:block;width:22px;height:22px;}
+    .sync-pill .slabel{display:none;}
+    .sync-pill .sdot{position:absolute;top:9px;right:8px;width:9px;height:9px;border:2px solid var(--bg);box-sizing:content-box;}
+    .head-right{gap:0;}
+    .contact-row{gap:0;}
+  }
+  @keyframes pulse{50%{opacity:.35;}}
+  .sync-menu{position:absolute;top:42px;right:0;min-width:230px;transform-origin:top right;}
+  .sync-menu .sync-info{padding:8px 12px 6px;font-size:var(--fs-footnote);color:var(--ink-soft);line-height:1.4;white-space:normal;}
+  .sync-menu hr{border:0;height:1px;background:var(--line);margin:2px 4px;}
+
+  /* ---- Hawky ------------------------------------------------------------ */
+  .hawky-mark{
+    width:28px;height:28px;border-radius:9px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+    background:var(--gold);color:var(--on-fill);font-family:var(--font-display);font-weight:900;font-size:15px;margin-right:8px;
+  }
+  @media (prefers-color-scheme:dark){ .hawky-mark{color:#141119;} }
+  .hawky-card .chip-scroll{margin-bottom:var(--sp-3);}
+  .hawky-today{background:var(--gold-bg);color:var(--gold-ink);border-radius:var(--r-control);padding:var(--sp-3);font-size:var(--fs-subhead);line-height:1.45;margin-bottom:var(--sp-3);}
+  .hawky-today b{display:block;font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
+  .full-btn{width:100%;}
+  .hawky-box{max-width:560px;}
+  .hawky-box .modal-head h3{display:flex;align-items:center;}
+  .hawky-body{padding:4px 16px 18px;display:flex;flex-direction:column;gap:var(--sp-3);}
+  .hawky-body .chip-scroll{margin:0 -16px;padding:0 16px 2px;}
+  .hawky-answer{background:var(--bg);border-radius:var(--r-control);padding:var(--sp-3);white-space:pre-wrap;font-size:var(--fs-subhead);line-height:1.5;max-height:50vh;overflow-y:auto;}
+  .hawky-line{font-size:var(--fs-subhead);line-height:1.45;background:var(--gold-bg);color:var(--gold-ink);border-radius:var(--r-control);padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);}
+  .hawky-note{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-subhead);line-height:1.45;background:var(--bg);border-radius:var(--r-control);padding:var(--sp-3);}
+  .hawky-note b{font-size:var(--fs-caption);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+
+  /* ---- Plan tags (replace letter grades) -------------------------------- */
+  .tone-on{background:var(--int-1-bg);color:var(--int-1-ink);}
+  .tone-close{background:var(--int-2-bg);color:var(--int-2-ink);}
+  .tone-off{background:var(--int-4-bg);color:var(--int-4-ink);}
+  .plan-note{font-size:var(--fs-footnote);color:var(--ink-soft);margin:-4px 0 var(--sp-3);}
+  .week-days{display:flex;flex-direction:column;margin-top:var(--sp-3);}
+  .week-day{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:2px var(--sp-2);align-items:center;padding:var(--sp-2) 0;border-top:1px solid var(--line);background:none;border-left:0;border-right:0;border-bottom:0;height:auto;color:var(--ink);text-align:left;font-weight:500;white-space:normal;border-radius:0;}
+  .week-day:first-child{border-top:none;}
+  .week-day:active{transform:none;}
+  .week-day .wd-name{font-size:var(--fs-footnote);font-weight:700;color:var(--ink-soft);}
+  .week-day .wd-main{font-size:var(--fs-footnote);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .week-day .wd-main b{font-weight:700;}
+  .week-day.today .wd-name{color:var(--gold);}
+
+  /* ---- Log: sessions, lock, splits -------------------------------------- */
+  .lock-note{display:flex;align-items:center;gap:6px;font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:var(--sp-2);}
+  .lock-note svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0;}
+  #tlManual{margin-top:var(--sp-3);}
+  .sessions{display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-3);}
+  .session{border:1px solid var(--line);border-radius:var(--r-control);padding:var(--sp-3);}
+  .session-head{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;}
+  .session-head .list-title{flex:1;min-width:0;}
+  .session-meta{font-size:var(--fs-footnote);color:var(--ink-soft);margin-top:2px;}
+  .session-acts{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--sp-2);}
+  .session-acts span{font-size:var(--fs-caption);background:var(--bg);border-radius:var(--r-pill);padding:2px 8px;color:var(--ink-soft);}
+  .session-report{margin-top:var(--sp-2);font-size:var(--fs-subhead);line-height:1.45;}
+  .session-report b{color:var(--gold);font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;}
+  .tl-events{display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-3);}
+  .tl-event{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .tl-event i{width:3px;height:16px;border-radius:2px;flex-shrink:0;}
+  .split-builder{display:flex;flex-direction:column;gap:6px;}
+  .split-row{display:grid;grid-template-columns:16px minmax(0,1fr) minmax(0,1.1fr) 44px minmax(0,1fr) 28px;gap:5px;align-items:center;}
+  .split-row.head{font-size:var(--fs-caption2);font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;}
+  .split-row .n{font-size:var(--fs-caption);color:var(--ink-soft);font-weight:700;text-align:center;}
+  .split-row input{width:100%;min-width:0;padding:8px 5px;text-align:center;font-variant-numeric:tabular-nums;}
+  .split-row .pace{font-size:var(--fs-footnote);font-weight:700;font-variant-numeric:tabular-nums;text-align:right;}
+  .split-row .x{width:28px;height:28px;padding:0;border-radius:50%;background:transparent;color:var(--ink-soft);border:1px solid var(--line);font-size:12px;}
+  .split-empty{font-size:var(--fs-footnote);color:var(--ink-soft);padding:var(--sp-2) 0;}
+  .split-add{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:var(--sp-2);font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .split-add input{width:78px;padding:8px 6px;text-align:center;}
+  .split-add button{height:var(--btn-h-sm);}
+  .sm-btn{height:var(--btn-h-sm);padding:0 var(--sp-3);font-size:var(--fs-footnote);}
+
+  /* ---- Workouts: picker tiles ------------------------------------------- */
+  .wo-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-2);margin-bottom:var(--sp-4);}
+  .wo-tile{
+    height:auto;min-height:92px;padding:var(--sp-3);border-radius:var(--r-card);
+    border:1px solid var(--line);background:var(--card);color:var(--ink);
+    display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:var(--sp-2);
+    text-align:left;white-space:normal;font-weight:600;
+  }
+  .wo-tile:active{transform:scale(.98);}
+  .wo-tile svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--workout);}
+  .wo-tile b{font-size:var(--fs-subhead);line-height:1.2;}
+  .wo-tile small{display:block;font-size:var(--fs-caption);font-weight:500;color:var(--ink-soft);line-height:1.3;margin-top:2px;}
+  .wo-tile.on{background:var(--fill);border-color:var(--fill);color:var(--on-fill);}
+  .wo-tile.on svg,.wo-tile.on small{color:var(--on-fill);opacity:.9;}
+  .wo-tile.hawky svg{color:var(--gold);}
+  .wo-tile.hawky{background:var(--gold-bg);border-color:transparent;color:var(--gold-ink);}
+  .wo-tile.hawky small{color:var(--gold-ink);opacity:.85;}
+  .lib-targets{display:flex;flex-direction:column;gap:4px;margin-top:6px;}
+  .lib-target{display:flex;align-items:baseline;gap:6px;font-size:var(--fs-footnote);flex-wrap:wrap;}
+  .lib-target b{font-variant-numeric:tabular-nums;}
+  .lib-target .tz{color:var(--ink-soft);}
+  .lib-target .tr{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums;color:var(--workout);}
+  .lib-actions{display:flex;gap:var(--sp-2);flex-wrap:wrap;padding-bottom:var(--sp-4);}
+
+  /* ---- Fitness ------------------------------------------------------------ */
+  .stack-cards{display:flex;flex-direction:column;gap:var(--sp-4);}
+  .stack-cards > .card{margin-bottom:0;}
+  .fit-hero{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-2);margin-bottom:var(--sp-4);}
+  .fit-hero .stat b{font-size:var(--fs-title2);}
+  .fit-table{display:flex;flex-direction:column;}
+  .fit-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) 22px;gap:var(--sp-2);align-items:center;padding:var(--sp-2) 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums;}
+  .fit-row:first-child{border-top:none;}
+  .fit-row.head{font-size:var(--fs-caption2);color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  .fit-row .ev{font-weight:600;font-size:var(--fs-subhead);}
+  .fit-row .tm{font-weight:800;font-size:var(--fs-headline);}
+  .fit-row .pc{font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .conf{width:10px;height:10px;border-radius:50%;justify-self:end;}
+  .conf.high{background:var(--int-1);} .conf.medium{background:var(--int-2);} .conf.low{background:var(--ink-soft);opacity:.5;}
+  .fit-trend{margin-top:var(--sp-4);}
+  .fit-trend svg{width:100%;height:70px;display:block;}
+  .fit-trend .hint{margin-top:4px;}
+  .fit-how summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
+  .fit-how summary::-webkit-details-marker{display:none;}
+  .fit-how summary::after{content:'';width:8px;height:8px;border-right:2px solid var(--ink-soft);border-bottom:2px solid var(--ink-soft);transform:rotate(45deg);transition:transform .2s ease;}
+  .fit-how[open] summary::after{transform:rotate(-135deg);}
+  .fit-how p{margin:0;font-size:var(--fs-footnote);line-height:1.5;color:var(--ink-soft);}
+  .fit-how p b{color:var(--ink);}
+  .fit-empty{text-align:center;padding:var(--sp-5) var(--sp-3);}
+
+  /* ---- Team ---------------------------------------------------------------- */
+  .stat-grid-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .team-bars{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;align-items:end;height:120px;margin-top:var(--sp-4);}
+  .team-bar{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px;min-width:0;}
+  .team-bar i{display:block;width:100%;max-width:34px;border-radius:6px 6px 2px 2px;background:var(--gold-bg);min-height:3px;}
+  .team-bar.cur i{background:var(--gold);}
+  .team-bar span{font-size:10px;color:var(--ink-soft);white-space:nowrap;}
+  .team-bar b{font-size:var(--fs-caption2);font-variant-numeric:tabular-nums;}
+  .seg-sm .seg-btn{height:28px;font-size:var(--fs-caption);}
+  .seg-sm{min-width:0;}
+  .leader{display:flex;flex-direction:column;}
+  .leader-row{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(70px,1.2fr) 48px;gap:var(--sp-2);align-items:center;padding:var(--sp-2) 0;border-top:1px solid var(--line);}
+  .leader-row:first-child{border-top:none;}
+  .leader-row .rk{font-size:var(--fs-caption);font-weight:800;color:var(--ink-soft);text-align:center;}
+  .leader-row .nm{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--fs-subhead);font-weight:600;}
+  .leader-row .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .leader-row .nm small{font-size:var(--fs-caption2);color:var(--ink-soft);font-weight:500;}
+  .leader-row .bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden;}
+  .leader-row .bar i{display:block;height:100%;background:var(--gold);border-radius:4px;}
+  .leader-row .mi{font-weight:800;font-variant-numeric:tabular-nums;text-align:right;font-size:var(--fs-subhead);}
+  .leader-row .sub{grid-column:2 / -1;font-size:var(--fs-caption);color:var(--ink-soft);margin-top:-4px;}
+  .leader-row.me .nm span{color:var(--gold);}
+
+  /* ---- Settings: setup steps ---------------------------------------------- */
+  .setup-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;}
+  .setup-steps li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:var(--sp-3);padding:var(--sp-4) 0;border-top:1px solid var(--line);}
+  .setup-steps li:first-child{border-top:none;padding-top:var(--sp-2);}
+  .setup-num{width:28px;height:28px;border-radius:50%;background:var(--bg);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:var(--fs-footnote);}
+  .setup-steps li.done .setup-num{background:var(--int-1-bg);color:var(--int-1-ink);font-size:0;}
+  .setup-steps li.done .setup-num::after{content:'✓';font-size:var(--fs-subhead);}
+  .setup-body{display:flex;flex-direction:column;gap:var(--sp-2);min-width:0;}
+  .setup-body > b{font-size:var(--fs-subhead);}
+  .setup-body p{margin:0;font-size:var(--fs-footnote);line-height:1.5;color:var(--ink-soft);}
+  .setup-body p b{color:var(--ink);}
+  .link-btn{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:var(--btn-h-sm);padding:0 var(--sp-3);border-radius:var(--r-control);background:var(--gold-bg);color:var(--gold-ink);font-weight:700;font-size:var(--fs-footnote);text-decoration:none;}
+  .link-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.2;}
+  .import-bar{height:6px;border-radius:3px;background:var(--bg);overflow:hidden;display:none;}
+  .import-bar.show{display:block;}
+  .import-bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .4s ease;}
+
+  /* ---- Calendar: event chips (desktop) and the log link ------------------- */
+  .ev-chips{display:none;flex-direction:column;gap:2px;margin-top:3px;min-width:0;}
+  .ev-chip{font-size:10.5px;line-height:1.25;font-weight:600;padding:1px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .ev-more{font-size:10px;color:var(--ink-soft);padding-left:5px;}
+  .log-link{display:inline-flex;align-items:center;gap:4px;}
+  #schViews,#youViews{max-width:300px;}
+
   /* =====================================================================
      DESKTOP. Phones get the single 460px column above; from 720px the
      column widens, and from 1024px the app becomes a two-column dashboard:
@@ -1207,6 +1397,7 @@
   @media (min-width:720px){
     body{padding:calc(28px + env(safe-area-inset-top)) 28px 56px;}
     .wrap{max-width:760px;}
+    .wo-tiles{grid-template-columns:repeat(3,minmax(0,1fr));}
   }
   @media (min-width:1024px){
     .wrap{
@@ -1222,16 +1413,26 @@
     .card{padding:var(--sp-5) var(--sp-5);}
     .card-title,#dayDetail h3{font-size:var(--fs-title3);}
 
-    #pageCalendar{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-areas:"cal detail" "cal posts";gap:var(--sp-5);align-items:start;}
-    #pageCalendar > .card{margin-bottom:0;}
-    #pageCalendar > .card:has(#calendarSection){grid-area:cal;}
-    #pageCalendar > #dayDetail{grid-area:detail;}
-    #pageCalendar > #postCard{grid-area:posts;}
+    /* Schedule: the month fills the left column at viewport height, the day
+       and posts scroll beside it, so nothing needs a long page scroll. */
+    #schCalView{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-areas:"cal detail" "cal posts";gap:var(--sp-5);align-items:start;}
+    #schCalView > .card{margin-bottom:0;}
+    #schCalView > .card:has(#calendarSection){grid-area:cal;position:sticky;top:var(--sp-5);}
+    #schCalView > #dayDetail{grid-area:detail;max-height:calc(100vh - 2 * var(--sp-5));overflow-y:auto;}
+    #schCalView > #postCard{grid-area:posts;}
+    #calGrid .day{aspect-ratio:auto;height:clamp(68px, calc((100vh - 400px) / 6), 116px);align-items:stretch;padding:5px 6px;}
+    #calGrid .day .num{text-align:left;font-size:var(--fs-footnote);}
+    #calGrid .day .event-marks{display:none;}
+    #calGrid .day .ev-chips{display:flex;}
+    #calGrid .day .dots{justify-content:flex-start;}
+    #schMeetsView > .card{margin-bottom:0;}
 
-    #pageBody,#pagePersonal{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-5);align-items:start;}
-    #pageBody > .card,#pagePersonal > .card{margin-bottom:0;}
-    #pagePersonal > #coachCard{grid-column:1 / -1;}
-    #pageMeets > .card{margin-bottom:0;}
+    .you-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-5);align-items:start;}
+    .you-grid > .card{margin-bottom:0;}
+    .you-grid > .setup-card{grid-row:span 2;}
+    .split-team{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);}
+    .split-fit{grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);}
+    .wo-tiles{grid-template-columns:repeat(6,minmax(0,1fr));}
 
     .page-head{margin-top:0;}
     .split{display:grid;gap:var(--sp-5);align-items:start;}
@@ -1252,7 +1453,18 @@
   <header>
     <div>
       <h1><span id="secretTapZone">HAWKS</span> <span>CALENDAR</span></h1>
-      <div class="tagline">Hunter Hawks · team availability</div>
+      <div class="tagline">Hunter Hawks · schedule &amp; training</div>
+    </div>
+    <div class="head-right">
+    <div class="sync-wrap" id="syncWrap" hidden>
+      <button type="button" class="sync-pill" id="syncPill" aria-haspopup="menu" aria-expanded="false" aria-label="Watch sync"><svg class="sicon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg><span class="sdot"></span><span class="slabel" id="syncLabel">Sync</span></button>
+      <div class="pop-menu sync-menu" id="syncMenu" role="menu">
+        <div class="sync-info" id="syncInfo"></div>
+        <hr>
+        <button type="button" id="syncNowItem">Sync now</button>
+        <button type="button" id="syncImportItem">Import full history</button>
+        <button type="button" id="syncSetupItem">Watch setup</button>
+      </div>
     </div>
     <div class="contact-row">
       <a class="icon-btn" id="whatsappBtn" href="https://chat.whatsapp.com/Gu5pVyyKQsBDRwrhO6qCW1?s=cl&p=i&ilr=4&amv=1" target="_blank" rel="noopener" title="Team WhatsApp"><img src="data:image/png;base64,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" alt="WhatsApp"></a>
@@ -1263,6 +1475,7 @@
           <button type="button" id="emailTeamMenuItem">Email Team</button>
         </div>
       </div>
+    </div>
     </div>
   </header>
 
@@ -1310,284 +1523,127 @@
   </div>
 
   <div class="page-tabs" role="tablist" aria-label="Sections">
-    <button type="button" class="page-tab active" id="pageTabCalendar" role="tab" aria-selected="true" aria-controls="pageCalendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle class="fill" cx="8.5" cy="14.5" r="1.1"/><circle class="fill" cx="12" cy="14.5" r="1.1"/><circle class="fill" cx="15.5" cy="14.5" r="1.1"/></svg><span>Calendar</span></button>
+    <button type="button" class="page-tab active" id="pageTabSchedule" role="tab" aria-selected="true" aria-controls="pageSchedule"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle class="fill" cx="8.5" cy="14.5" r="1.1"/><circle class="fill" cx="12" cy="14.5" r="1.1"/><circle class="fill" cx="15.5" cy="14.5" r="1.1"/></svg><span>Schedule</span></button>
     <button type="button" class="page-tab" id="pageTabTraining" role="tab" aria-selected="false" aria-controls="pageTraining"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.500c0-1.7.5-3 1.8-3.400l3.2-1 1.4 1.800c.7.9 1.7 1.4 2.8 1.400H17c2.2 0 4 1.4 4 3.200V17H3z"/><path d="M8 11.100V8.500M3.5 19.500h17M12.7 13.300l.8-1.300M15 13.600l.8-1.3"/></svg><span>Training</span></button>
-    <button type="button" class="page-tab" id="pageTabMeets" role="tab" aria-selected="false" aria-controls="pageMeets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V3.5M4 21h4"/><path d="M6 4.5c3-1.6 5 1.4 8 0 1.8-.9 3-.6 4.5-.2v7.600c-1.5-.4-2.7-.7-4.5.2-3 1.4-5-1.6-8 0"/></svg><span>Meets</span></button>
-    <button type="button" class="page-tab" id="pageTabBody" role="tab" aria-selected="false" aria-controls="pageBody"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.6" r="2.2"/><path d="M7 9.4c1.6.8 3.2 1 5 1s3.4-.2 5-1M12 10.6v4.2M12 14.8l-3 5.4M12 14.8l3 5.4"/><path d="M9.2 20.2H7.8M15 20.2h1.4"/></svg><span>Body</span></button>
-    <button type="button" class="page-tab" id="pageTabPersonal" role="tab" aria-selected="false" aria-controls="pagePersonal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3.5"/><circle cx="9" cy="11" r="2.1"/><path d="M5.8 16.2c.6-1.6 1.9-2.4 3.2-2.4s2.6.8 3.2 2.4M14.5 10H18M14.5 13.5H17"/></svg><span>Personal</span></button>
+    <button type="button" class="page-tab" id="pageTabTeam" role="tab" aria-selected="false" aria-controls="pageTeam"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.5" cy="8" r="2.6"/><circle cx="16.5" cy="9" r="2.2"/><path d="M3.5 19c.4-3 2.5-4.8 5-4.8s4.6 1.8 5 4.8M13.6 14.6c.8-.6 1.8-.9 2.9-.9 2.2 0 3.7 1.5 4 4.3"/></svg><span>Team</span></button>
+    <button type="button" class="page-tab" id="pageTabYou" role="tab" aria-selected="false" aria-controls="pageYou"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c.7-3.700 3.5-5.800 7-5.800s6.300 2.100 7 5.800"/></svg><span>You</span></button>
   </div>
 
-  <div id="pageCalendar">
-  <div class="card" id="postCard">
-    <div class="card-title">Posts</div>
-    <div class="post-composer" id="postComposer">
-      <input type="text" id="postHeaderInput" placeholder="Header (optional)" maxlength="80">
-      <div class="post-composer-row">
-        <textarea id="postText" placeholder="Write a post for the team…"></textarea>
-        <button id="submitPostBtn">Post</button>
-      </div>
-    </div>
-    <div class="post-hint" id="postHint">Reload and pick your name to post.</div>
-    <div id="postList"></div>
-    <button class="ghost" id="viewAllPostsBtn">See all posts</button>
-  </div>
-
-  <div class="card">
-    <div id="calendarSection">
-      <div class="month-nav">
-        <button class="navbtn" id="prevMonth" aria-label="Previous month">‹</button>
-        <div class="label" id="monthLabel" aria-live="polite"></div>
-        <button class="navbtn" id="nextMonth" aria-label="Next month">›</button>
-      </div>
-      <div class="cal-toolbar">
-        <div class="cal-toolbar-left">
-          <button class="chip-toggle" id="availToggle" type="button" aria-pressed="false"
-                  title="Show or hide who's available on each day">
-            <span class="chip-dots"><i></i><i></i><i></i></span>Availability
-          </button>
-          <button class="ghost" id="todayBtn">Jump to today</button>
-        </div>
-        <button id="editModeBtn">Edit availability</button>
-      </div>
-      <div class="edit-banner" id="editBanner">
-        <span>Tap days to toggle your availability</span>
-        <div class="edit-banner-actions">
-          <button type="button" id="alwaysFreeBtn">Always free</button>
-          <button type="button" id="neverFreeBtn">Never free</button>
-          <button id="doneEditBtn">Done</button>
-        </div>
-      </div>
-      <div class="grid" id="dowRow"></div>
-      <div class="grid" id="calGrid" style="margin-top:4px;"></div>
-    </div>
-  </div>
-
-  <div class="card" id="dayDetail">
-    <h3 id="detailTitle"></h3>
-
-    <div class="section-label">Events</div>
-    <div id="eventsList"></div>
-    <button class="ghost" id="toggleEventForm">+ Add event</button>
-    <div id="eventFormRow">
-      <input type="text" id="eventTitle" placeholder="Event title (e.g. Track practice, Meet vs. Xavier)">
-      <input type="text" id="eventTime" placeholder="Time (e.g. 4:00 PM)">
-      <input type="text" id="eventEndTime" placeholder="End time (optional, e.g. 5:30 PM)">
-      <input type="text" id="eventLocation" list="knownLocations" placeholder="Location (e.g. Van Cortlandt Park, or a full address)">
-      <textarea id="eventDesc" placeholder="Details — who's expected, notes…"></textarea>
+  <div id="pageSchedule">
+    <div class="page-head">
       <div>
-        <div class="event-type-label">Event type</div>
-        <div class="event-type-picker" id="eventTypePicker">
-          <div class="event-type-slider" id="eventTypeSlider"></div>
-          <button type="button" class="event-type-opt" data-type="practice">Practice</button>
-          <button type="button" class="event-type-opt" data-type="meet">Meet</button>
-          <button type="button" class="event-type-opt" data-type="other">Other</button>
+        <div class="eyebrow">Schedule</div>
+        <h2 class="page-title">Team schedule</h2>
+      </div>
+      <div class="seg" id="schViews" role="tablist" aria-label="Schedule view">
+        <button type="button" class="seg-btn active" role="tab" data-sview="calendar">Calendar</button>
+        <button type="button" class="seg-btn" role="tab" data-sview="meets">Meets</button>
+      </div>
+    </div>
+    <div id="schCalView">
+    <div class="card" id="postCard">
+      <div class="card-title">Posts</div>
+      <div class="post-composer" id="postComposer">
+        <input type="text" id="postHeaderInput" placeholder="Header (optional)" maxlength="80">
+        <div class="post-composer-row">
+          <textarea id="postText" placeholder="Write a post for the team…"></textarea>
+          <button id="submitPostBtn">Post</button>
         </div>
       </div>
-      <div class="kind-wrap" id="eventKindWrap">
-        <div class="event-type-label">Practice type</div>
-        <div class="event-type-picker" id="eventKindPicker">
-          <div class="event-type-slider" id="eventKindSlider"></div>
-          <button type="button" class="event-type-opt" data-kind="easy">Easy</button>
-          <button type="button" class="event-type-opt" data-kind="workout">Workout</button>
-          <button type="button" class="event-type-opt" data-kind="long_run">Long Run</button>
-        </div>
-      </div>
-      <div class="btn-row">
-        <button id="saveEventBtn">Save event</button>
-        <button class="ghost" id="cancelEventBtn">Cancel</button>
-      </div>
-    </div>
-    <datalist id="knownLocations"></datalist>
-
-    <div class="section-label">Availability</div>
-    <div id="detailList"></div>
-
-    <div class="section-label">Notes</div>
-    <div id="notesList"></div>
-    <div class="note-form" id="noteForm" style="display:none;">
-      <textarea id="dayNote" placeholder="Add a note about your availability (optional)"></textarea>
-      <button id="saveNoteBtn">Save note</button>
-    </div>
-
-    <div class="copy-row">
-      <textarea id="copyString" readonly rows="1"></textarea>
-      <button id="copyBtn">Copy</button>
-    </div>
-  </div>
-  </div>
-
-  <div id="pageBody" style="display:none;">
-    <div class="card">
-      <div class="card-title">How do you feel?</div>
-      <div class="event-type-picker" id="healthPicker">
-        <div class="event-type-slider" id="healthSlider"></div>
-        <button type="button" class="event-type-opt" data-type="healthy">Healthy</button>
-        <button type="button" class="event-type-opt" data-type="injured">Injured</button>
-        <button type="button" class="event-type-opt" data-type="sick">Sick</button>
-      </div>
-
-      <div class="card-title" style="margin-top:18px;">Training status</div>
-      <div class="event-type-picker" id="trainingPicker">
-        <div class="event-type-slider" id="trainingSlider"></div>
-        <button type="button" class="event-type-opt" data-type="resting">Resting</button>
-        <button type="button" class="event-type-opt" data-type="running">Running</button>
-        <button type="button" class="event-type-opt" data-type="crosstraining">Cross-train</button>
-      </div>
-      <div class="hint" id="bodyStatusHint" style="margin-top:10px;">Reload and pick your name to update your status.</div>
+      <div class="post-hint" id="postHint">Reload and pick your name to post.</div>
+      <div id="postList"></div>
+      <button class="ghost" id="viewAllPostsBtn">See all posts</button>
     </div>
 
     <div class="card">
-      <div class="card-title">Body map</div>
-      <div class="bodymap-panel">
-        <div id="bodyMapMount"></div>
-        <div class="bodymap-chips" id="bodyMapChips"></div>
-        <button type="button" class="bodymap-flip-btn" id="bodyMapFlipBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1 21 6l-4 3.9"/><path d="M3 12.6v-2a4 4 0 0 1 4-4h14"/><path d="M7 21.9 3 18l4-3.9"/><path d="M21 11.4v2a4 4 0 0 1-4 4H3"/></svg>
-          <span id="bodyMapFlipLabel">Front</span>
-        </button>
-      </div>
-      <div class="bodymap-legend">
-        <span><span class="swatch" style="background:var(--bodymap-grey);"></span>OK</span>
-        <span><span class="swatch" style="background:var(--sore);"></span>Sore</span>
-        <span><span class="swatch" style="background:var(--pain);"></span>Pain</span>
-      </div>
-      <div class="hint" id="bodyMapHint" style="margin-top:10px;">Tap a body part to mark it — tap again to cycle sore → pain → clear.</div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Team status</div>
-      <div id="teamStatusList"></div>
-    </div>
-  </div>
-
-  <div id="pagePersonal" style="display:none;">
-    <div class="card">
-      <div class="card-title">Your info</div>
-      <div class="hint" id="personalHint">Reload and pick your name to see and edit your info.</div>
-      <div id="personalForm" class="personal-form">
-        <input type="text" id="personalFirstName" placeholder="First name" maxlength="100">
-        <select id="personalClassYear">
-          <option value="">Class…</option>
-          <option value="Freshman">Freshman</option>
-          <option value="Sophomore">Sophomore</option>
-          <option value="Junior">Junior</option>
-          <option value="Senior">Senior</option>
-        </select>
-        <input type="text" id="personalTrackId" placeholder="Track ID" maxlength="40">
-        <label class="personal-field-label">Date entered
-          <input type="date" id="personalDateEntered">
-        </label>
-        <input type="text" id="personalBorough" placeholder="Borough" maxlength="60">
-        <input type="text" id="personalHomeAddress" placeholder="Home address" maxlength="300">
-        <div class="personal-subtitle">Out of class by period (leave blank if unknown)</div>
-        <div class="personal-out-grid">
-          <label>Mon<input type="number" min="1" max="12" id="personalOutMon"></label>
-          <label>Tue<input type="number" min="1" max="12" id="personalOutTue"></label>
-          <label>Wed<input type="number" min="1" max="12" id="personalOutWed"></label>
-          <label>Thu<input type="number" min="1" max="12" id="personalOutThu"></label>
-          <label>Fri<input type="number" min="1" max="12" id="personalOutFri"></label>
+      <div id="calendarSection">
+        <div class="month-nav">
+          <button class="navbtn" id="prevMonth" aria-label="Previous month">‹</button>
+          <div class="label" id="monthLabel" aria-live="polite"></div>
+          <button class="navbtn" id="nextMonth" aria-label="Next month">›</button>
         </div>
-        <textarea id="personalNotes" placeholder="Notes (schedule exceptions, etc.)" rows="3" maxlength="2000"></textarea>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button id="savePersonalBtn">Save</button>
-          <span class="hint" id="personalSaveHint" style="display:none;">Saved.</span>
+        <div class="cal-toolbar">
+          <div class="cal-toolbar-left">
+            <button class="chip-toggle" id="availToggle" type="button" aria-pressed="false"
+                    title="Show or hide who's available on each day">
+              <span class="chip-dots"><i></i><i></i><i></i></span>Availability
+            </button>
+            <button class="ghost" id="todayBtn">Jump to today</button>
+          </div>
+          <button id="editModeBtn">Edit availability</button>
         </div>
+        <div class="edit-banner" id="editBanner">
+          <span>Tap days to toggle your availability</span>
+          <div class="edit-banner-actions">
+            <button type="button" id="alwaysFreeBtn">Always free</button>
+            <button type="button" id="neverFreeBtn">Never free</button>
+            <button id="doneEditBtn">Done</button>
+          </div>
+        </div>
+        <div class="grid" id="dowRow"></div>
+        <div class="grid" id="calGrid" style="margin-top:4px;"></div>
       </div>
     </div>
 
-    <div class="card" id="prCard">
-      <div class="section-head">
+    <div class="card" id="dayDetail">
+      <h3 id="detailTitle"></h3>
+
+      <div class="section-label">Events</div>
+      <div id="eventsList"></div>
+      <button class="ghost" id="toggleEventForm">+ Add event</button>
+      <div id="eventFormRow">
+        <input type="text" id="eventTitle" placeholder="Event title (e.g. Track practice, Meet vs. Xavier)">
+        <input type="text" id="eventTime" placeholder="Time (e.g. 4:00 PM)">
+        <input type="text" id="eventEndTime" placeholder="End time (optional, e.g. 5:30 PM)">
+        <input type="text" id="eventLocation" list="knownLocations" placeholder="Location (e.g. Van Cortlandt Park, or a full address)">
+        <textarea id="eventDesc" placeholder="Details — who's expected, notes…"></textarea>
         <div>
-          <div class="card-title">Personal records</div>
-          <div class="hint">Claude Coach uses these to set your paces and goals.</div>
+          <div class="event-type-label">Event type</div>
+          <div class="event-type-picker" id="eventTypePicker">
+            <div class="event-type-slider" id="eventTypeSlider"></div>
+            <button type="button" class="event-type-opt" data-type="practice">Practice</button>
+            <button type="button" class="event-type-opt" data-type="meet">Meet</button>
+            <button type="button" class="event-type-opt" data-type="other">Other</button>
+          </div>
+        </div>
+        <div class="kind-wrap" id="eventKindWrap">
+          <div class="event-type-label">Practice type</div>
+          <div class="event-type-picker" id="eventKindPicker">
+            <div class="event-type-slider" id="eventKindSlider"></div>
+            <button type="button" class="event-type-opt" data-kind="easy">Easy</button>
+            <button type="button" class="event-type-opt" data-kind="workout">Workout</button>
+            <button type="button" class="event-type-opt" data-kind="long_run">Long Run</button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="saveEventBtn">Save event</button>
+          <button class="ghost" id="cancelEventBtn">Cancel</button>
         </div>
       </div>
-      <div class="hint" id="prHint">Reload and pick your name to add your PRs.</div>
-      <div class="stack" id="prForm" style="display:none;">
-        <div class="pr-grid" id="prGrid"></div>
-        <div class="cluster">
-          <button id="savePrsBtn" type="button">Save PRs</button>
-          <span class="hint" id="prSaved" style="display:none;">Saved</span>
-        </div>
-      </div>
-    </div>
+      <datalist id="knownLocations"></datalist>
 
-    <div class="card" id="travelCard">
-      <div class="card-title">Getting there</div>
-      <div class="hint" id="travelHint">Approximate transit time from your home address — weekday for practices, weekend for meets. Tap a place to open directions.</div>
-      <div id="travelList"></div>
-    </div>
+      <div class="section-label">Availability</div>
+      <div id="detailList"></div>
 
-    <div class="card" id="calendarFeedCard" style="display:none;">
-      <div class="card-title">Google Calendar</div>
-      <div class="hint">Paste this into Google Calendar → Settings → Add calendar → From URL, and it'll stay in sync with meets (not practices) and your RSVPs.</div>
-      <div class="copy-row" style="margin-top:8px;">
-        <textarea id="calendarFeedUrl" readonly rows="1"></textarea>
-        <button id="copyCalendarFeedBtn">Copy</button>
+      <div class="section-label">Notes</div>
+      <div id="notesList"></div>
+      <div class="note-form" id="noteForm" style="display:none;">
+        <textarea id="dayNote" placeholder="Add a note about your availability (optional)"></textarea>
+        <button id="saveNoteBtn">Save note</button>
       </div>
-    </div>
-    <div class="card" id="icuCard" style="display:none;">
-      <div class="section-head">
-        <div>
-          <div class="card-title">Watch sync</div>
-          <div class="hint">Pulls your Garmin or COROS runs into your log automatically through intervals.icu (free). No Claude or Strava needed.</div>
-        </div>
-        <span id="icuBadge"></span>
-      </div>
-      <div id="icuSetup" class="stack">
-        <ol class="coach-steps">
-          <li>Make a free account at <b>intervals.icu</b> and connect <b>Garmin</b> or <b>COROS</b> there (Settings → Connections). Don't use its Strava link: Strava won't share those runs.</li>
-          <li>On intervals.icu, open <b>Settings</b>. Copy your <b>athlete id</b> (looks like i12345) and, under <b>Developer Settings</b>, your <b>API key</b>.</li>
-          <li>Paste both here. Hawks checks them, then syncs about every hour.</li>
-        </ol>
-        <div class="field-grid">
-          <label class="field"><span>Athlete id</span><input type="text" id="icuAthlete" placeholder="i12345" maxlength="14" autocomplete="off"></label>
-          <label class="field"><span>API key</span><input type="password" id="icuKey" placeholder="Paste key" maxlength="200" autocomplete="off"></label>
-        </div>
-        <div class="cluster"><button id="icuConnectBtn" type="button">Connect</button><span class="hint" id="icuMsg"></span></div>
-      </div>
-      <div id="icuLinked" class="stack" style="display:none;">
-        <div class="hint" id="icuInfo"></div>
-        <div class="cluster">
-          <button id="icuSyncBtn" type="button">Sync now</button>
-          <button class="ghost" id="icuBackfillBtn" type="button">Pull last 60 days</button>
-          <button class="ghost" id="icuDisconnectBtn" type="button">Disconnect</button>
-        </div>
-        <div class="hint" id="icuSyncMsg"></div>
-      </div>
-    </div>
 
-    <div class="card" id="coachCard" style="display:none;">
-      <div class="card-title">Claude Coach</div>
-      <div class="hint">Claude reads runs from your watch's connector, grades each one against your Hawks plan, and saves them to your Training log. About 3 minutes to set up with a free Claude account.</div>
-      <div class="field" style="margin-top:var(--sp-3);"><span>Your watch</span>
-        <div class="seg" id="coachSource" role="tablist" aria-label="Watch">
-          <button type="button" class="seg-btn" data-src="coros">COROS</button>
-          <button type="button" class="seg-btn" data-src="garmin">Garmin</button>
-          <button type="button" class="seg-btn" data-src="strava">Strava</button>
-          <button type="button" class="seg-btn" data-src="intervals">Watch sync</button>
-        </div>
-      </div>
-      <ol class="coach-steps" id="coachSteps" style="margin-top:var(--sp-3);"></ol>
-      <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Your Hawks Coach link</div>
-      <div class="copy-row" style="margin-top:6px;">
-        <textarea id="coachUrl" readonly rows="1" placeholder="Tap Get link"></textarea>
-        <button id="coachUrlBtn">Get link</button>
-      </div>
-      <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Setup prompt</div>
-      <textarea id="coachPrompt" class="coach-prompt" readonly></textarea>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-        <button id="copyCoachPromptBtn">Copy prompt</button>
-        <button class="ghost" id="resetCoachBtn" type="button">Reset link</button>
+      <div class="copy-row">
+        <textarea id="copyString" readonly rows="1"></textarea>
+        <button id="copyBtn">Copy</button>
       </div>
     </div>
-  </div>
-
-  <div id="pageMeets" style="display:none;">
-    <div class="card">
-      <div class="card-title">Meets</div>
-      <div class="hint">Distance and time to arrive are estimated from your home address on the Personal tab. Reload and pick your name to see your own numbers.</div>
-      <div id="meetsList" class="meets-list"></div>
+    </div>
+    <div id="schMeetsView" style="display:none;">
+      <div class="card">
+        <div class="card-title">Meets</div>
+        <div class="hint">Distance and time to arrive are estimated from your home address on the Personal tab. Reload and pick your name to see your own numbers.</div>
+        <div id="meetsList" class="meets-list"></div>
+      </div>
     </div>
   </div>
 
@@ -1601,6 +1657,7 @@
         <button type="button" class="seg-btn active" role="tab" data-tview="plan">Plan</button>
         <button type="button" class="seg-btn" role="tab" data-tview="log">Log</button>
         <button type="button" class="seg-btn" role="tab" data-tview="library">Workouts</button>
+        <button type="button" class="seg-btn" role="tab" data-tview="fitness">Fitness</button>
       </div>
     </div>
 
@@ -1618,29 +1675,29 @@
         <div class="tp-total" id="tpTotal"></div>
       </section>
       <div class="split-side">
-        <section class="card" id="askCard" style="display:none;">
+        <section class="card hawky-card" id="askCard" style="display:none;">
           <div class="section-head">
-            <div>
-              <div class="card-title">Ask Coach</div>
-              <div class="hint">AI answers from your plan, log, PRs and the workout library.</div>
+            <div class="cluster" style="gap:var(--sp-2);flex-wrap:nowrap;">
+              <span class="hawky-mark" aria-hidden="true">H</span>
+              <div>
+                <div class="card-title">Hawky</div>
+                <div class="hint">Your AI coach. Knows your plan, log and Fitness States.</div>
+              </div>
             </div>
           </div>
-          <div class="stack">
-            <div class="chip-scroll" id="askSuggest"></div>
-            <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. What should I do tomorrow if my legs are tired?"></textarea>
-            <div class="cluster"><button id="askBtn" type="button">Ask</button><span class="hint" id="askStatus"></span></div>
-            <div class="inset" id="askAnswer" style="display:none;white-space:pre-wrap;font-size:var(--fs-subhead);line-height:1.5;"></div>
-          </div>
+          <div class="hawky-today" id="hawkyToday" style="display:none;"></div>
+          <div class="chip-scroll" id="askSuggest"></div>
+          <button type="button" id="openHawkyBtn" class="full-btn">Ask Hawky</button>
         </section>
-        <section class="card" id="coachRunsCard" style="display:none;">
+        <section class="card" id="weekCard" style="display:none;">
           <div class="section-head">
             <div>
               <div class="card-title">This week</div>
-              <div class="hint" id="coachRunsHint"></div>
+              <div class="hint" id="weekHint"></div>
             </div>
           </div>
-          <div class="stat-grid" id="coachWeek"></div>
-          <div class="list" id="coachRuns" style="margin-top:var(--sp-4);"></div>
+          <div class="stat-grid" id="weekStats"></div>
+          <div class="week-days" id="weekDays"></div>
         </section>
         <section class="card">
           <div class="card-title">Workout menu</div>
@@ -1669,7 +1726,7 @@
       <div class="split-side">
         <section class="card tl-empty" id="tlEmpty">
           <div class="card-title" style="margin-bottom:var(--sp-2);">Pick a day</div>
-          <div class="hint">Tap any day to see its runs and log how it went. Claude Coach fills days in from your watch.</div>
+          <div class="hint">Tap any day to see its sessions and Hawky's report. Days synced from your watch fill in on their own.</div>
         </section>
         <section class="card" id="tlDayCard" style="display:none;">
           <div class="section-head">
@@ -1679,16 +1736,34 @@
             </div>
             <span id="tlDayBadge"></span>
           </div>
+          <div class="plan-note" id="tlPlanNote" style="display:none;"></div>
+          <div class="hawky-line" id="tlDayLine" style="display:none;"></div>
           <div class="stat-grid" id="tlDayStats"></div>
-          <div class="list" id="tlStrava" style="margin-top:var(--sp-4);"></div>
+          <div class="lock-note" id="tlLockNote" style="display:none;"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Miles, time and difficulty come from your watch.</div>
+          <div class="field-grid" id="tlManual">
+            <label class="field"><span>Miles</span><input type="number" step="0.01" min="0" id="tlMiles" inputmode="decimal"></label>
+            <label class="field"><span>Minutes</span><input type="number" step="1" min="0" id="tlMinutes" inputmode="numeric"></label>
+            <label class="field"><span>Runs</span><input type="number" step="1" min="0" max="10" id="tlRuns" inputmode="numeric"></label>
+            <label class="field"><span>Difficulty 1-10</span><input type="number" step="1" min="1" max="10" id="tlDifficulty" inputmode="numeric"></label>
+          </div>
+          <div class="sessions" id="tlSessions"></div>
+          <div class="tl-events" id="tlEvents"></div>
           <hr class="divider">
           <div class="stack-lg">
-            <div class="eyebrow">Session</div>
-            <div class="field-grid">
-              <label class="field"><span>Miles</span><input type="number" step="0.01" min="0" id="tlMiles" inputmode="decimal"></label>
-              <label class="field"><span>Minutes</span><input type="number" step="1" min="0" id="tlMinutes" inputmode="numeric"></label>
-              <label class="field"><span>Runs</span><input type="number" step="1" min="0" max="10" id="tlRuns" inputmode="numeric"></label>
-              <label class="field"><span>Difficulty 1-10</span><input type="number" step="1" min="1" max="10" id="tlDifficulty" inputmode="numeric"></label>
+            <div>
+              <div class="section-head" style="margin-bottom:var(--sp-2);">
+                <div class="eyebrow">Splits</div>
+                <span class="hint" id="splitSummary"></span>
+              </div>
+              <div class="split-builder" id="splitBuilder"></div>
+              <div class="split-add">
+                <input type="number" id="splitAddN" min="1" max="40" value="4" inputmode="numeric" aria-label="Number of reps">
+                <span>x</span>
+                <input type="number" id="splitAddM" min="100" max="10000" step="100" value="800" inputmode="numeric" aria-label="Rep distance in meters">
+                <span>m</span>
+                <button type="button" class="ghost" id="splitAddSet">Add set</button>
+                <button type="button" class="ghost" id="splitAddOne">+ Rep</button>
+              </div>
             </div>
             <div class="field"><span>Type</span><div class="cluster" id="tlTypes"></div></div>
             <div class="field-grid">
@@ -1698,11 +1773,10 @@
               </select></label>
               <label class="field"><span>Library workout</span><select id="tlLibrary"><option value="">None</option></select></label>
               <label class="field full"><span>Planned</span><input type="text" id="tlPlanned" maxlength="500" placeholder="What the plan said"></label>
-              <label class="field full"><span>Splits</span><input type="text" id="tlSplits" maxlength="500" placeholder="6:47, 6:33, 6:24, 5:57"></label>
             </div>
             <div class="eyebrow">Notes</div>
+            <div class="hawky-note" id="tlCoachWrap" style="display:none;"><b>Hawky's note</b><span id="tlCoach"></span></div>
             <label class="field"><span>What happened</span><textarea id="tlSummary" rows="3" maxlength="4000"></textarea></label>
-            <label class="field"><span>Coach note</span><textarea id="tlCoach" rows="2" maxlength="4000" placeholder="Claude fills this in"></textarea></label>
             <label class="field"><span>Your notes</span><textarea id="tlNotes" rows="2" maxlength="2000"></textarea></label>
             <div class="eyebrow">Recovery</div>
             <div class="field-grid">
@@ -1719,48 +1793,352 @@
       </div>
     </div>
 
-    <div id="tpLibraryView" class="split split-lib" style="display:none;">
-      <div class="split-side">
+    <div id="tpLibraryView" style="display:none;">
+      <div class="wo-tiles" id="woTiles" role="tablist" aria-label="Kind of workout"></div>
+      <div class="split split-lib">
+        <div class="split-side">
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <div class="card-title">Your paces</div>
+                <div class="hint" id="libHint">From your Fitness States.</div>
+              </div>
+              <button type="button" class="ghost sm-btn" id="libToFitness">Fitness</button>
+            </div>
+            <div class="lib-paces" id="libPaces"></div>
+          </section>
+          <section class="card">
+            <div class="card-title">Customize</div>
+            <div class="stack">
+              <div class="field" id="libMoreWrap"><span>Also show</span><div class="cluster" id="libTypes"></div></div>
+              <div class="field-grid">
+                <label class="field"><span>Racing</span><select id="libRace"><option value="">Any race</option></select></label>
+                <label class="field"><span>Season phase</span><select id="libPhase"><option value="">Any phase</option></select></label>
+                <label class="field"><span>Time you have</span><select id="libLen"><option value="">Any length</option><option value="35">Up to 35 min</option><option value="50">Up to 50 min</option><option value="65">Up to 65 min</option><option value="999">Over 65 min</option></select></label>
+                <label class="field"><span>Level</span><select id="libLevel"><option value="">Any level</option><option value="1">Beginner</option><option value="2">Intermediate</option><option value="3">Advanced</option></select></label>
+              </div>
+              <button type="button" class="ghost" id="libReset">Reset</button>
+            </div>
+          </section>
+        </div>
         <section class="card">
           <div class="section-head">
             <div>
-              <div class="card-title">Your paces</div>
-              <div class="hint" id="libHint">From your current 5K fitness.</div>
+              <div class="card-title" id="libTitle">Workouts</div>
+              <div class="hint" id="libSub">Targets are worked out from your Fitness States.</div>
             </div>
           </div>
-          <div class="cluster" id="libFiveKRow" style="flex-wrap:nowrap;margin-bottom:var(--sp-3);">
-            <input type="text" id="libFiveK" placeholder="5K time, e.g. 19:25" maxlength="8" inputmode="decimal" style="flex:1;min-width:0;">
-            <button id="libFiveKBtn" type="button">Set</button>
-          </div>
-          <div class="lib-paces" id="libPaces"></div>
-        </section>
-        <section class="card">
-          <div class="card-title">Filter</div>
-          <div class="stack">
-            <div class="field"><span>Type</span><div class="chip-scroll" id="libTypes"></div></div>
-            <div class="field-grid">
-              <label class="field"><span>Race</span><select id="libRace"><option value="">Any race</option></select></label>
-              <label class="field"><span>Phase</span><select id="libPhase"><option value="">Any phase</option></select></label>
-              <label class="field"><span>Length</span><select id="libLen"><option value="">Any length</option><option value="35">Up to 35 min</option><option value="50">Up to 50 min</option><option value="65">Up to 65 min</option><option value="999">Over 65 min</option></select></label>
-              <label class="field"><span>Level</span><select id="libLevel"><option value="">Any level</option><option value="1">Beginner</option><option value="2">Intermediate</option><option value="3">Advanced</option></select></label>
-            </div>
-          </div>
+          <div class="lib-count" id="libCount"></div>
+          <div id="libList"></div>
         </section>
       </div>
+    </div>
+
+    <div id="tpFitnessView" class="split split-fit" style="display:none;">
+      <div class="stack-cards">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <div class="card-title">Fitness States</div>
+              <div class="hint" id="fitHint">What you could race right now, from your races, PRs and training.</div>
+            </div>
+            <span id="fitBadge"></span>
+          </div>
+          <div class="fit-hero" id="fitHero"></div>
+          <div class="fit-table" id="fitTable"></div>
+          <div class="fit-trend" id="fitTrend"></div>
+        </section>
+        <section class="card">
+          <div class="card-title">Training paces</div>
+          <div class="hint" style="margin:-6px 0 var(--sp-3);">Every workout in Hawks uses these.</div>
+          <div class="lib-paces" id="fitZones"></div>
+        </section>
+      </div>
+      <div class="split-side">
+        <section class="card">
+          <div class="card-title">Based on</div>
+          <div class="list" id="fitSources"></div>
+          <div class="cluster" style="margin-top:var(--sp-3);">
+            <button type="button" class="ghost" id="fitRefresh">Recalculate</button>
+            <button type="button" class="ghost" id="fitAddPrs">Update PRs</button>
+          </div>
+        </section>
+        <section class="card">
+          <details class="fit-how">
+            <summary><span class="card-title" style="margin:0;">How it works</span></summary>
+            <div class="stack" style="margin-top:var(--sp-3);">
+              <p><b>Races come first.</b> Every race and PR is turned into a fitness score (VDOT, from Jack Daniels' running formula), weighted by how recent it is. A PR from a year ago counts much less than last week's meet.</p>
+              <p><b>Training fills the gaps.</b> Rep sessions from your watch or split builder, and your heart rate on steady runs, only move the number when your last race is old: if you've gotten fitter since, or lost some fitness.</p>
+              <p><b>Each distance gets its own estimate.</b> From 1600 to 5K, a critical-speed curve fitted to your recent races sharpens the numbers (it's accurate to about 1-2% there). 400 and 800 lean on your recent PRs, since speed isn't something aerobic models capture. Your own speed-vs-endurance profile shifts every distance.</p>
+              <p><b>Mileage matters for long races.</b> 10K and half marathon estimates slow down when your last 4 weeks are low on miles.</p>
+              <p><b>VO2max is an estimate</b> (the same number as VDOT), not a lab test.</p>
+            </div>
+          </details>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="pageTeam" style="display:none;">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Team</div>
+        <h2 class="page-title">Hawks mileage</h2>
+      </div>
+    </div>
+    <div class="split split-team">
       <section class="card">
         <div class="section-head">
           <div>
-            <div class="card-title">Workout library</div>
-            <div class="hint">From the Hawks plans, your own sessions and standard distance training.</div>
+            <div class="card-title">Team total</div>
+            <div class="hint" id="teamHint">Miles from watches and hand-logged days, Monday to Sunday.</div>
           </div>
         </div>
-        <div class="lib-count" id="libCount"></div>
-        <div id="libList"></div>
+        <div class="stat-grid stat-grid-3" id="teamStats"></div>
+        <div class="team-bars" id="teamBars"></div>
+        <hr class="divider">
+        <div class="section-head" style="margin-bottom:var(--sp-2);">
+          <div class="card-title" style="font-size:var(--fs-headline);">This week</div>
+          <div class="seg seg-sm" id="teamSort" role="tablist" aria-label="Sort by">
+            <button type="button" class="seg-btn active" data-sort="this_week">Week</button>
+            <button type="button" class="seg-btn" data-sort="avg4">4-wk avg</button>
+          </div>
+        </div>
+        <div class="leader" id="teamLeader"></div>
       </section>
+      <div class="split-side">
+      <section class="card">
+        <div class="card-title">Team status</div>
+        <div id="teamStatusList"></div>
+      </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="pageYou" style="display:none;">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">You</div>
+        <h2 class="page-title" id="youTitle">You</h2>
+      </div>
+      <div class="seg" id="youViews" role="tablist" aria-label="You view">
+        <button type="button" class="seg-btn active" role="tab" data-yview="profile">Profile</button>
+        <button type="button" class="seg-btn" role="tab" data-yview="body">Body</button>
+        <button type="button" class="seg-btn" role="tab" data-yview="settings">Settings</button>
+      </div>
+    </div>
+    <div id="youProfileView" class="you-grid">
+      <div class="card">
+        <div class="card-title">Your info</div>
+        <div class="hint" id="personalHint">Reload and pick your name to see and edit your info.</div>
+        <div id="personalForm" class="personal-form">
+          <input type="text" id="personalFirstName" placeholder="First name" maxlength="100">
+          <select id="personalClassYear">
+            <option value="">Class…</option>
+            <option value="Freshman">Freshman</option>
+            <option value="Sophomore">Sophomore</option>
+            <option value="Junior">Junior</option>
+            <option value="Senior">Senior</option>
+          </select>
+          <input type="text" id="personalTrackId" placeholder="Track ID" maxlength="40">
+          <label class="personal-field-label">Date entered
+            <input type="date" id="personalDateEntered">
+          </label>
+          <input type="text" id="personalBorough" placeholder="Borough" maxlength="60">
+          <input type="text" id="personalHomeAddress" placeholder="Home address" maxlength="300">
+          <div class="personal-subtitle">Out of class by period (leave blank if unknown)</div>
+          <div class="personal-out-grid">
+            <label>Mon<input type="number" min="1" max="12" id="personalOutMon"></label>
+            <label>Tue<input type="number" min="1" max="12" id="personalOutTue"></label>
+            <label>Wed<input type="number" min="1" max="12" id="personalOutWed"></label>
+            <label>Thu<input type="number" min="1" max="12" id="personalOutThu"></label>
+            <label>Fri<input type="number" min="1" max="12" id="personalOutFri"></label>
+          </div>
+          <textarea id="personalNotes" placeholder="Notes (schedule exceptions, etc.)" rows="3" maxlength="2000"></textarea>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button id="savePersonalBtn">Save</button>
+            <span class="hint" id="personalSaveHint" style="display:none;">Saved.</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="prCard">
+        <div class="section-head">
+          <div>
+            <div class="card-title">Personal records</div>
+            <div class="hint">These anchor your Fitness States, so add the date if you know it: recent PRs count more.</div>
+          </div>
+        </div>
+        <div class="hint" id="prHint">Reload and pick your name to add your PRs.</div>
+        <div class="stack" id="prForm" style="display:none;">
+          <div class="pr-grid" id="prGrid"></div>
+          <div class="cluster">
+            <button id="savePrsBtn" type="button">Save PRs</button>
+            <span class="hint" id="prSaved" style="display:none;">Saved</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="travelCard">
+        <div class="card-title">Getting there</div>
+        <div class="hint" id="travelHint">Approximate transit time from your home address — weekday for practices, weekend for meets. Tap a place to open directions.</div>
+        <div id="travelList"></div>
+      </div>
+    </div>
+    <div id="youBodyView" class="you-grid" style="display:none;">
+      <div class="card">
+        <div class="card-title">How do you feel?</div>
+        <div class="event-type-picker" id="healthPicker">
+          <div class="event-type-slider" id="healthSlider"></div>
+          <button type="button" class="event-type-opt" data-type="healthy">Healthy</button>
+          <button type="button" class="event-type-opt" data-type="injured">Injured</button>
+          <button type="button" class="event-type-opt" data-type="sick">Sick</button>
+        </div>
+
+        <div class="card-title" style="margin-top:18px;">Training status</div>
+        <div class="event-type-picker" id="trainingPicker">
+          <div class="event-type-slider" id="trainingSlider"></div>
+          <button type="button" class="event-type-opt" data-type="resting">Resting</button>
+          <button type="button" class="event-type-opt" data-type="running">Running</button>
+          <button type="button" class="event-type-opt" data-type="crosstraining">Cross-train</button>
+        </div>
+        <div class="hint" id="bodyStatusHint" style="margin-top:10px;">Reload and pick your name to update your status.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Body map</div>
+        <div class="bodymap-panel">
+          <div id="bodyMapMount"></div>
+          <div class="bodymap-chips" id="bodyMapChips"></div>
+          <button type="button" class="bodymap-flip-btn" id="bodyMapFlipBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1 21 6l-4 3.9"/><path d="M3 12.6v-2a4 4 0 0 1 4-4h14"/><path d="M7 21.9 3 18l4-3.9"/><path d="M21 11.4v2a4 4 0 0 1-4 4H3"/></svg>
+            <span id="bodyMapFlipLabel">Front</span>
+          </button>
+        </div>
+        <div class="bodymap-legend">
+          <span><span class="swatch" style="background:var(--bodymap-grey);"></span>OK</span>
+          <span><span class="swatch" style="background:var(--sore);"></span>Sore</span>
+          <span><span class="swatch" style="background:var(--pain);"></span>Pain</span>
+        </div>
+        <div class="hint" id="bodyMapHint" style="margin-top:10px;">Tap a body part to mark it — tap again to cycle sore → pain → clear.</div>
+      </div>
+    </div>
+    <div id="youSettingsView" class="you-grid" style="display:none;">
+      <div class="card setup-card" id="setupCard">
+        <div class="section-head">
+          <div>
+            <div class="card-title">Set up your watch</div>
+            <div class="hint">About 5 minutes, once. After that your runs, splits and Fitness States update on their own every time you open Hawks.</div>
+          </div>
+          <span id="icuBadge"></span>
+        </div>
+        <ol class="setup-steps" id="setupSteps">
+          <li data-step="1">
+            <div class="setup-num">1</div>
+            <div class="setup-body">
+              <b>Make a free intervals.icu account</b>
+              <p>intervals.icu is a free training site. It's the bridge between your watch and Hawks: Garmin and COROS send runs to it officially, and Hawks reads them from there.</p>
+              <a class="link-btn" href="https://intervals.icu" target="_blank" rel="noopener">Open intervals.icu<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+            </div>
+          </li>
+          <li data-step="2">
+            <div class="setup-num">2</div>
+            <div class="setup-body">
+              <b>Connect your watch there</b>
+              <p>On intervals.icu go to <b>Settings → Connections</b> and connect <b>Garmin</b> (or COROS). Then use the option on that connection to <b>import your old activities</b>, so your full history comes across, not just new runs.</p>
+              <p class="hint">Don't connect Strava there instead: Strava doesn't let intervals.icu share your runs, so Hawks can't see them.</p>
+            </div>
+          </li>
+          <li data-step="3">
+            <div class="setup-num">3</div>
+            <div class="setup-body">
+              <b>Copy your athlete id and API key</b>
+              <p>Still in intervals.icu <b>Settings</b>: your <b>athlete id</b> is under your name (looks like i12345). Scroll to <b>Developer Settings</b> for the <b>API key</b>.</p>
+              <div id="icuSetup" class="stack">
+                <div class="field-grid">
+                  <label class="field"><span>Athlete id</span><input type="text" id="icuAthlete" placeholder="i12345" maxlength="14" autocomplete="off"></label>
+                  <label class="field"><span>API key</span><input type="password" id="icuKey" placeholder="Paste key" maxlength="200" autocomplete="off"></label>
+                </div>
+                <div class="cluster"><button id="icuConnectBtn" type="button">Connect</button><span class="hint" id="icuMsg"></span></div>
+              </div>
+              <div id="icuLinked" class="stack" style="display:none;">
+                <div class="hint" id="icuInfo"></div>
+                <div class="cluster">
+                  <button id="icuSyncBtn" type="button">Sync now</button>
+                  <button class="ghost" id="icuDisconnectBtn" type="button">Disconnect</button>
+                </div>
+                <div class="hint" id="icuSyncMsg"></div>
+              </div>
+            </div>
+          </li>
+          <li data-step="4">
+            <div class="setup-num">4</div>
+            <div class="setup-body">
+              <b>Import your full history</b>
+              <p>Hawks pulls everything intervals.icu has, a few months at a time. It keeps going in the background, so you can leave this page.</p>
+              <div class="import-bar" id="importBar"><i></i></div>
+              <div class="cluster"><button class="ghost" id="icuImportBtn" type="button">Import full history</button><span class="hint" id="importMsg"></span></div>
+            </div>
+          </li>
+          <li data-step="5">
+            <div class="setup-num">5</div>
+            <div class="setup-body">
+              <b>Add your PRs</b>
+              <p>PRs anchor your Fitness States until your watch has enough races. Add the date if you remember it.</p>
+              <button class="ghost" id="setupPrsBtn" type="button">Add PRs</button>
+            </div>
+          </li>
+        </ol>
+      </div>
+      <div class="card" id="coachCard" style="display:none;">
+        <div class="card-title">Hawky in Claude <span class="badge" style="vertical-align:3px;">Optional</span></div>
+        <div class="hint">Talk to Hawky inside the Claude app: it reads your Hawks plan, log and Fitness States, and can review runs from a COROS, Garmin or Strava connector. Not needed if Watch sync above is set up.</div>
+        <div class="field" style="margin-top:var(--sp-3);"><span>Your watch</span>
+          <div class="seg" id="coachSource" role="tablist" aria-label="Watch">
+            <button type="button" class="seg-btn" data-src="coros">COROS</button>
+            <button type="button" class="seg-btn" data-src="garmin">Garmin</button>
+            <button type="button" class="seg-btn" data-src="strava">Strava</button>
+            <button type="button" class="seg-btn" data-src="intervals">Watch sync</button>
+          </div>
+        </div>
+        <ol class="coach-steps" id="coachSteps" style="margin-top:var(--sp-3);"></ol>
+        <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Your Hawky link</div>
+        <div class="copy-row" style="margin-top:6px;">
+          <textarea id="coachUrl" readonly rows="1" placeholder="Tap Get link"></textarea>
+          <button id="coachUrlBtn">Get link</button>
+        </div>
+        <div class="card-title" style="margin-top:14px;font-size:var(--fs-footnote);">Setup prompt</div>
+        <textarea id="coachPrompt" class="coach-prompt" readonly></textarea>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+          <button id="copyCoachPromptBtn">Copy prompt</button>
+          <button class="ghost" id="resetCoachBtn" type="button">Reset link</button>
+        </div>
+      </div>
+      <div class="card" id="calendarFeedCard" style="display:none;">
+        <div class="card-title">Google Calendar</div>
+        <div class="hint">Paste this into Google Calendar → Settings → Add calendar → From URL, and it'll stay in sync with meets (not practices) and your RSVPs.</div>
+        <div class="copy-row" style="margin-top:8px;">
+          <textarea id="calendarFeedUrl" readonly rows="1"></textarea>
+          <button id="copyCalendarFeedBtn">Copy</button>
+        </div>
+      </div>
     </div>
   </div>
 
 </div>
+
+<div class="modal-overlay" id="hawkyOverlay">
+  <div class="modal-box hawky-box" role="dialog" aria-modal="true" aria-label="Ask Hawky">
+    <div class="modal-head">
+      <h3><span class="hawky-mark" aria-hidden="true">H</span>Ask Hawky</h3>
+      <button class="ghost" id="closeHawky" aria-label="Close">✕</button>
+    </div>
+    <div class="hawky-body">
+      <div class="chip-scroll" id="hawkySuggest"></div>
+      <textarea id="askInput" rows="2" maxlength="1000" placeholder="e.g. Build me a tempo workout for tomorrow"></textarea>
+      <div class="cluster"><button id="askBtn" type="button">Ask</button><span class="hint" id="askStatus"></span></div>
+      <div class="hawky-answer" id="askAnswer" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
 
 <div class="modal-overlay modal-lock" id="welcomeOverlay">
   <div class="modal-box welcome-box" role="dialog" aria-modal="true" aria-label="Choose who you are">
@@ -1852,8 +2230,11 @@ let viewYear, viewMonth;
 let selectedDate = null;
 let editMode = false;
 let showPastEvents = false;
-let currentPage = 'calendar';
-const PAGES = ['calendar','training','meets','body','personal'];
+let currentPage = 'schedule';
+const PAGES = ['schedule','training','team','you'];
+let scheduleView = 'calendar';
+let youView = 'profile';
+try{ scheduleView = localStorage.getItem('hawksScheduleView') === 'meets' ? 'meets' : 'calendar'; }catch(e){}
 const LAST_USER_KEY = 'hawksLastUser';
 let trainingGrade = null;
 let trainingWeek = null;
@@ -2208,9 +2589,13 @@ function renderCalendar(){
     const dots = (showAvailability || editMode)
       ? availablePeople.slice(0,10).map(p=>`<span class="d" style="background:${p.color}"></span>`).join('')
       : '';
+    // Desktop has room for the event names themselves (CSS hides these on phones).
+    const chips = dayEvents.slice(0, 3).map(ev=>{ const st = eventStyle(ev); return `<span class="ev-chip" style="background:${st.bg};color:${st.text}">${escapeHtml(ev.title)}</span>`; }).join('')
+      + (dayEvents.length > 3 ? `<span class="ev-more">+${dayEvents.length - 3} more</span>` : '');
     html += `<div class="${cls}" data-date="${dk}">
       <div class="num">${d}</div>
       <div class="event-marks">${marks}</div>
+      <div class="ev-chips">${chips}</div>
       <div class="dots">${dots}</div>
     </div>`;
   }
@@ -2280,7 +2665,7 @@ async function cycleRsvp(eventId){
   else rsvps[eventId][activePersonId] = next;
   await saveRsvpRemote(eventId, activePersonId, next);
   renderEvents();
-  if(currentPage === 'meets') renderMeets();
+  if(currentPage === 'schedule' && scheduleView === 'meets') renderMeets();
 }
 
 const rsvpLabel = {unknown:'Unknown', available:'Coming', unavailable:'Not coming'};
@@ -2314,6 +2699,7 @@ function renderEvents(){
         ${ev.desc ? `<div class="event-desc">${escapeHtml(ev.desc)}</div>` : ''}
         <div class="event-actions">
           ${isRealPerson() ? `<button class="rsvp-btn tap44 ${status}" data-event="${ev.id}">${rsvpLabel[status]}</button>` : ''}
+          ${isRealPerson() && (ev.type || 'practice') !== 'other' && selectedDate <= todayKey() ? `<button class="rsvp-btn tap44 log-btn" data-log="${selectedDate}">Training log</button>` : ''}
           <button class="rsvp-btn tap44 share-btn" data-share="${ev.id}">Share${DD_CHEVRON}</button>
           <button class="rsvp-btn tap44 info-btn" data-contact="${ev.id}">Contact attendees${DD_CHEVRON}</button>
         </div>
@@ -2327,6 +2713,7 @@ function renderEvents(){
     $('eventsList').querySelectorAll('.rsvp-btn[data-event]').forEach(btn=>{
       btn.addEventListener('click', ()=> cycleRsvp(btn.dataset.event));
     });
+    $('eventsList').querySelectorAll('[data-log]').forEach(btn=> btn.addEventListener('click', ()=> openLogDay(btn.dataset.log)));
     $('eventsList').querySelectorAll('.share-btn').forEach(btn=>{
       btn.addEventListener('click', e=>{
         e.stopPropagation();
@@ -3071,7 +3458,7 @@ function renderAdminModal(){
       renderAdminModal();
       renderEvents();
       renderCalendar();
-      if(currentPage === 'meets') renderMeets();
+      if(currentPage === 'schedule' && scheduleView === 'meets') renderMeets();
     });
   });
   $('weekPracticeTime').addEventListener('input', e=>{
@@ -3112,6 +3499,7 @@ async function submitPost(){
 }
 
 function setPage(page){
+  if(!PAGES.includes(page)) page = 'schedule';
   currentPage = page;
   PAGES.forEach(name=>{
     const cap = name[0].toUpperCase() + name.slice(1);
@@ -3120,9 +3508,51 @@ function setPage(page){
     $('pageTab' + cap).setAttribute('aria-selected', String(on));
     $('page' + cap).style.display = on ? '' : 'none';
   });
-  if(page === 'personal') renderPersonal();
-  if(page === 'meets') renderMeets();
+  try{ localStorage.setItem('hawksPage', page); }catch(e){}
+  if(page === 'schedule') renderSchedule();
+  if(page === 'you') renderYou();
   if(page === 'training') renderTraining();
+  if(page === 'team') renderTeam();
+}
+
+function paintSeg(segId, attr, value){
+  $(segId).querySelectorAll(`[data-${attr}]`).forEach(b=>{
+    const on = b.dataset[attr] === value;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+}
+
+function renderSchedule(){
+  paintSeg('schViews', 'sview', scheduleView);
+  $('schCalView').style.display = scheduleView === 'calendar' ? '' : 'none';
+  $('schMeetsView').style.display = scheduleView === 'meets' ? '' : 'none';
+  if(scheduleView === 'meets') renderMeets();
+}
+
+function setScheduleView(v){
+  scheduleView = v === 'meets' ? 'meets' : 'calendar';
+  try{ localStorage.setItem('hawksScheduleView', scheduleView); }catch(e){}
+  renderSchedule();
+}
+
+function renderYou(){
+  paintSeg('youViews', 'yview', youView);
+  ['profile','body','settings'].forEach(v=>{ $('you' + v[0].toUpperCase() + v.slice(1) + 'View').style.display = v === youView ? '' : 'none'; });
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  $('youTitle').textContent = p ? (p.first_name || p.name) : activePersonId === COACH_ID ? 'Coach' : 'Guest';
+  if(youView !== 'body') renderPersonal();
+  else renderBodyMap();
+}
+
+function setYouView(v){
+  youView = ['profile','body','settings'].includes(v) ? v : 'profile';
+  renderYou();
+}
+
+function goToPrs(){
+  setPage('you'); setYouView('profile');
+  setTimeout(()=> $('prCard').scrollIntoView({ behavior:'smooth', block:'start' }), 60);
 }
 
 function currentHealthStatus(){
@@ -3345,7 +3775,7 @@ function renderPersonal(){
   $('travelCard').style.display = p ? '' : 'none';
   $('calendarFeedCard').style.display = p ? '' : 'none';
   $('coachCard').style.display = p ? '' : 'none';
-  $('icuCard').style.display = p ? '' : 'none';
+  $('setupCard').style.display = p ? '' : 'none';
   if(!p) return;
 
   $('personalFirstName').value = p.first_name || '';
@@ -3367,10 +3797,10 @@ function renderPersonal(){
   $('calendarFeedUrl').value = `${location.origin}/api/calendar/${p.id}.ics`;
   renderCoachSetup(p);
   renderPrs(p);
-  renderIcu(p);
+  renderSetup(p);
 }
 
-// --- Watch sync (intervals.icu) and Ask Coach (Gemini) -----------------------
+// --- Watch sync (intervals.icu) and Hawky (Gemini) ---------------------------
 let icuState = {};
 async function fetchIcuStatus(personId){
   try{
@@ -3388,8 +3818,49 @@ function timeAgo(ms){
   return h < 24 ? h + ' hr ago' : Math.round(h / 24) + ' days ago';
 }
 
-async function renderIcu(p){
-  $('icuCard').style.display = p ? '' : 'none';
+// The header sync pill: shows the last sync, syncs automatically when the
+// app opens, and keeps a full-history import going in the background.
+let syncBusy = false, importBusy = false, autoSyncedFor = null;
+
+function shortAgo(ms){
+  const m = Math.round((Date.now() - ms) / 60000);
+  if(m < 1) return 'now';
+  if(m < 60) return m + 'm ago';
+  const h = Math.round(m / 60);
+  return h < 24 ? h + 'h ago' : Math.round(h / 24) + 'd ago';
+}
+
+function monthLabel(dateKey){
+  return dateKey ? new Date(dateKey + 'T12:00:00').toLocaleDateString(undefined, { month:'short', year:'numeric' }) : '';
+}
+
+function renderSyncPill(){
+  const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
+  $('syncWrap').hidden = !p;
+  if(!p) return;
+  const st = icuState[p.id];
+  const err = st?.status?.startsWith('error');
+  const pill = $('syncPill');
+  pill.classList.toggle('busy', syncBusy || importBusy);
+  pill.classList.toggle('ok', !!st?.connected && !err && !syncBusy && !importBusy);
+  pill.classList.toggle('err', !!err && !syncBusy);
+  $('syncLabel').textContent = syncBusy ? 'Syncing…' : importBusy ? 'Importing…'
+    : !st ? 'Sync' : !st.connected ? 'Connect watch' : err ? 'Sync issue' : st.synced_at ? 'Synced ' + shortAgo(st.synced_at) : 'Not synced';
+  const lines = [];
+  if(!st?.connected) lines.push('Your watch isn’t connected yet. Set it up once and Hawks syncs every time you open it.');
+  else {
+    lines.push(st.synced_at ? `Last synced ${timeAgo(st.synced_at)}.` : 'Not synced yet.');
+    if(err) lines.push(st.status.replace(/^error:\s*/, ''));
+    else if(st.status && st.status.startsWith('ok (')) lines.push(st.status.slice(4, -1));
+    lines.push(st.import_done ? 'Full history imported.' : importBusy ? `Importing history… back to ${monthLabel(st.import_cursor) || 'now'}.` : 'Full history not imported yet.');
+  }
+  $('syncInfo').textContent = lines.join(' ');
+  $('syncNowItem').hidden = !st?.connected;
+  $('syncImportItem').hidden = !st?.connected || !!st.import_done;
+  $('syncSetupItem').textContent = st?.connected ? 'Watch settings' : 'Set up watch sync';
+}
+
+async function renderSetup(p){
   if(!p) return;
   const st = await fetchIcuStatus(p.id);
   if(!st || activePersonId !== p.id) return;
@@ -3398,41 +3869,110 @@ async function renderIcu(p){
   $('icuSetup').style.display = st.connected ? 'none' : '';
   $('icuLinked').style.display = st.connected ? '' : 'none';
   if(st.connected){
-    $('icuInfo').textContent = `Athlete ${st.athlete}. ${st.synced_at ? 'Last synced ' + timeAgo(st.synced_at) : 'Not synced yet'}.${st.status && st.status !== 'ok' && st.status !== 'connected' ? ' ' + st.status : ''}${st.ai ? ' Runs are labelled by AI.' : ''}`;
+    $('icuInfo').textContent = `Athlete ${st.athlete}. ${st.synced_at ? 'Last synced ' + timeAgo(st.synced_at) : 'Not synced yet'}.${st.status && st.status !== 'ok' && st.status !== 'connected' ? ' ' + st.status.replace(/^ok \((.*)\)$/, '$1') : ''}${st.ai ? ' Hawky writes a report for each session.' : ''}`;
   }
+  const hasPrs = Object.keys(parsePrsClient(p.prs)).length > 0;
+  const done = { 1: st.connected, 2: st.connected, 3: st.connected, 4: st.connected && st.import_done, 5: hasPrs };
+  $('setupSteps').querySelectorAll('li[data-step]').forEach(li=> li.classList.toggle('done', !!done[li.dataset.step]));
+  $('icuImportBtn').disabled = !st.connected || importBusy || st.import_done;
+  $('icuImportBtn').textContent = st.import_done ? 'History imported' : importBusy ? 'Importing…' : 'Import full history';
+  if(!importBusy) $('importMsg').textContent = !st.connected ? 'Connect first (step 3).' : st.import_done ? 'Everything intervals.icu has is in your log.' : st.import_cursor ? `Imported back to ${monthLabel(st.import_cursor)} so far.` : '';
+  renderSyncPill();
 }
 
-async function icuAction(path, body, msgId, btnId){
-  const btn = $(btnId); const orig = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Working…'; $(msgId).textContent = '';
-  const res = await apiPost(path, { personId: activePersonId, ...body });
-  btn.disabled = false; btn.textContent = orig;
-  if(!res || res.error){ $(msgId).textContent = res?.error || 'Couldn’t reach Hawks. Check your connection.'; return null; }
+// Fresh data from the watch: everything that reads the log or fitness reloads.
+function afterNewRuns(){
+  library = null; fitnessData = null;
+  if(currentPage === 'training') renderTraining();
+  if(currentPage === 'team') renderTeam();
+}
+
+async function runSync({ quiet } = {}){
+  if(syncBusy || !isRealPerson()) return null;
+  const personId = activePersonId;
+  syncBusy = true; renderSyncPill();
+  if(!quiet){ $('icuSyncBtn').disabled = true; $('icuSyncMsg').textContent = 'Syncing…'; }
+  const res = await apiPost('/api/intervals/sync', { personId });
+  syncBusy = false;
+  $('icuSyncBtn').disabled = false;
+  await fetchIcuStatus(personId);
+  if(personId !== activePersonId) return res;
+  if(!res || res.error) $('icuSyncMsg').textContent = res?.error || 'Couldn’t reach Hawks. Check your connection.';
+  else $('icuSyncMsg').textContent = (res.imported ? `Imported ${res.imported} new ${res.imported === 1 ? 'activity' : 'activities'}.` : 'Up to date.') + (res.note ? ' ' + res.note : '');
+  renderSyncPill();
+  const p = people.find(x=>x.id===personId);
+  if(p && currentPage === 'you') renderSetup(p);
+  if(res?.imported) afterNewRuns();
   return res;
 }
 
-async function icuSync(days){
-  const res = await icuAction('/api/intervals/sync', days ? { days } : {}, 'icuSyncMsg', days ? 'icuBackfillBtn' : 'icuSyncBtn');
-  if(res) $('icuSyncMsg').textContent = res.imported ? `Imported ${res.imported} new ${res.imported === 1 ? 'activity' : 'activities'}.${res.ai_note ? ' ' + res.ai_note : ''}` : 'Up to date.';
-  const p = people.find(x=>x.id===activePersonId); if(p) renderIcu(p);
+async function runImport(){
+  if(importBusy || !isRealPerson()) return;
+  const personId = activePersonId;
+  importBusy = true;
+  $('importBar').classList.add('show');
+  let total = 0;
+  for(let guard = 0; guard < 40; guard++){
+    renderSyncPill();
+    const p = people.find(x=>x.id===personId);
+    if(p && currentPage === 'you') renderSetup(p);
+    const res = await apiPost('/api/intervals/import', { personId });
+    if(!res || res.error){ $('importMsg').textContent = res?.error || 'Import stopped: couldn’t reach Hawks. It picks up where it left off next time.'; break; }
+    total += res.imported || 0;
+    if(icuState[personId]) Object.assign(icuState[personId], { import_cursor: res.cursor, import_done: res.done });
+    const years = res.cursor ? Math.min(1, (Date.now() - Date.parse(res.cursor)) / (3 * 365 * 86400000)) : 0;
+    $('importBar').firstElementChild.style.width = (res.done ? 100 : Math.max(8, Math.round(years * 100))) + '%';
+    $('importMsg').textContent = res.done ? `Done: ${total} activities imported.` : `Imported back to ${monthLabel(res.cursor)} (${total} activities)…` + (res.note ? ' ' + res.note : '');
+    if(res.imported) afterNewRuns();
+    if(res.done) break;
+  }
+  importBusy = false;
+  await fetchIcuStatus(personId);
+  renderSyncPill();
+  const p = people.find(x=>x.id===personId);
+  if(p && currentPage === 'you') renderSetup(p);
+  afterNewRuns();
 }
 
-const ASK_SUGGESTIONS = ['How was my week?', 'What should I run tomorrow?', 'Give me a workout for my next race', 'Am I running my easy days too hard?'];
-async function renderAsk(){
+// Once per person per page load: sync if it's been 10+ minutes, then keep
+// importing history if that isn't finished.
+async function autoSync(){
+  if(!isRealPerson() || autoSyncedFor === activePersonId) return;
+  autoSyncedFor = activePersonId;
+  const st = await fetchIcuStatus(activePersonId);
+  renderSyncPill();
+  if(!st?.connected) return;
+  if(!st.synced_at || Date.now() - st.synced_at > 10 * 60000) await runSync({ quiet: true });
+  if(!icuState[activePersonId]?.import_done) runImport();
+}
+
+// --- Hawky ------------------------------------------------------------------
+const ASK_SUGGESTIONS = ['How was my week?', 'What should I run tomorrow?', 'Build me a workout for my next race', 'Am I running my easy days too hard?', 'What do my Fitness States say I can run?'];
+
+async function renderHawkyCard(){
   const card = $('askCard');
   if(!isRealPerson()){ card.style.display = 'none'; return; }
   const st = icuState[activePersonId] || await fetchIcuStatus(activePersonId);
   card.style.display = st?.ai ? '' : 'none';
   if(!$('askSuggest').children.length){
-    $('askSuggest').innerHTML = ASK_SUGGESTIONS.map(q=>`<button type="button" class="chip" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('');
-    $('askSuggest').querySelectorAll('[data-q]').forEach(b=> b.addEventListener('click', ()=>{ $('askInput').value = b.dataset.q; askCoachNow(); }));
+    $('askSuggest').innerHTML = ASK_SUGGESTIONS.slice(0, 4).map(q=>`<button type="button" class="chip" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('');
+    $('askSuggest').querySelectorAll('[data-q]').forEach(b=> b.addEventListener('click', ()=> openHawky(b.dataset.q, true)));
   }
+}
+
+function openHawky(question, ask){
+  if(!isRealPerson()){ alert('Pick your name first so Hawky knows whose training to look at.'); return; }
+  $('hawkySuggest').innerHTML = ASK_SUGGESTIONS.map(q=>`<button type="button" class="chip" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('');
+  $('hawkySuggest').querySelectorAll('[data-q]').forEach(b=> b.addEventListener('click', ()=>{ $('askInput').value = b.dataset.q; askCoachNow(); }));
+  if(question !== undefined) $('askInput').value = question;
+  $('hawkyOverlay').classList.add('show');
+  if(ask) askCoachNow(); else setTimeout(()=>{ $('askInput').focus(); $('askInput').setSelectionRange(9999, 9999); }, 50);
 }
 
 async function askCoachNow(){
   const q = $('askInput').value.trim();
   if(!q || !isRealPerson()) return;
-  $('askBtn').disabled = true; $('askStatus').textContent = 'Thinking…';
+  $('askBtn').disabled = true; $('askStatus').textContent = 'Hawky is thinking…';
   const res = await apiPost('/api/coach/ask', { personId: activePersonId, question: q });
   $('askBtn').disabled = false; $('askStatus').textContent = '';
   const out = $('askAnswer'); out.style.display = '';
@@ -3457,8 +3997,11 @@ function renderPrs(p){
   if(!p) return;
   const prs = parsePrsClient(p.prs);
   const ph = { '400':'ss.s', '800':'m:ss', '1600':'m:ss', '3200':'mm:ss', '5K':'mm:ss', 'XC 5K':'mm:ss' };
-  $('prGrid').innerHTML = PR_EVENTS.map(e=>`<label class="field"><span>${e}</span>
-    <input type="text" data-pr="${e}" value="${escapeHtml(prs[e]?.time || '')}" placeholder="${ph[e]}" maxlength="10" inputmode="decimal" autocomplete="off"></label>`).join('');
+  $('prGrid').innerHTML = `<div class="pr-row head"><span>Event</span><span>Time</span><span>When</span></div>` + PR_EVENTS.map(e=>`<div class="pr-row">
+    <span class="pr-ev">${e}</span>
+    <input type="text" data-pr="${e}" value="${escapeHtml(prs[e]?.time || '')}" placeholder="${ph[e]}" maxlength="10" inputmode="decimal" autocomplete="off" aria-label="${e} time">
+    <input type="date" data-prdate="${e}" value="${escapeHtml(prs[e]?.date || '')}" aria-label="${e} date">
+  </div>`).join('');
   $('prSaved').style.display = 'none';
 }
 
@@ -3470,23 +4013,30 @@ async function savePrs(){
   $('prGrid').querySelectorAll('[data-pr]').forEach(inp=>{
     const time = inp.value.trim();
     const e = inp.dataset.pr;
-    if(time !== (current[e]?.time || '')) prs[e] = time ? { ...(current[e] || {}), time } : { time: '' };
+    const date = $('prGrid').querySelector(`[data-prdate="${e}"]`).value;
+    if(time !== (current[e]?.time || '') || date !== (current[e]?.date || '')){
+      const next = { ...(current[e] || {}), time };
+      if(date) next.date = date; else delete next.date;
+      prs[e] = time ? next : { time: '' };
+    }
   });
   if(!Object.keys(prs).length){ $('prSaved').style.display = ''; return; }
   const res = await apiPost('/api/people/prs', { personId: p.id, prs });
   if(!res || res.error){ alert(res?.error || 'Couldn’t save. Check your connection.'); return; }
   p.prs = JSON.stringify(res.prs);
-  library = null;
+  library = null; fitnessData = null;
+  const est = res.fitness?.estimates?.find(x=>x.event === '5K');
+  $('prSaved').textContent = est ? `Saved. Fitness updated: 5K now ${est.time}.` : 'Saved';
   $('prSaved').style.display = '';
 }
 
-// --- Claude Coach -----------------------------------------------------------
+// --- Hawky in Claude ---------------------------------------------------------
 // The runner's own Claude does the work: their watch's connector in (COROS,
-// Strava, or a Garmin one), the Hawks Coach connector (a per-person MCP link)
+// Strava, or a Garmin one), the Hawky connector (a per-person MCP link)
 // out. The server does the scoring math.
 let coachLinks = {};
 let coachSource = 'coros';
-try{ coachSource = localStorage.getItem('hawksCoachSource') || 'coros'; }catch(e){}
+try{ coachSource = localStorage.getItem('hawksCoachSource') || 'intervals'; }catch(e){}
 
 const COACH_SOURCES = {
   coros: {
@@ -3505,7 +4055,7 @@ const COACH_SOURCES = {
   },
   intervals: {
     label: 'Hawks Watch sync',
-    connect: '<b>Turn on Watch sync</b> (the card above). Your Garmin or COROS runs then land in Hawks on their own, so Claude only needs the Hawks Coach connector.',
+    connect: '<b>Turn on Watch sync</b> (the card above). Your Garmin or COROS runs then land in Hawks on their own, so Claude only needs the Hawky connector.',
     pull: 'My runs already sync into Hawks from my watch (Watch sync via intervals.icu), so do not use another connector. Take the new activities from recent_workouts in get_coach_context',
     detail: 'everything is already there (distance, times, HR, cadence, and splits on the training log). Review any run whose summary is empty or whose category looks wrong, and re-send it with log_workouts using source "intervals" and activity_id = its strava_id without the "intervals:" prefix.',
     extra: '',
@@ -3523,9 +4073,9 @@ function coachPrompt(name){
   const PR_LIST = PR_EVENTS.join(', ');
   const src = COACH_SOURCES[coachSource] || COACH_SOURCES.coros;
   const key = COACH_SOURCES[coachSource] ? coachSource : 'coros';
-  return `You are my running coach for the Hawks cross country team. You have two connectors: ${src.label} (my runs) and Hawks Coach (my team training plan, training log, workout library, and the place my graded runs go). Follow these steps exactly, every time I say "coach me" (or when this runs as a scheduled task).
+  return `You are Hawky, my running coach for the Hawks cross country team. You have two connectors: ${src.label} (my runs) and Hawky (my team training plan, training log, workout library, and the place my graded runs go). Follow these steps exactly, every time I say "coach me" (or when this runs as a scheduled task).
 
-STEP 1 - CONTEXT. Call the Hawks Coach tool get_coach_context. It tells you today's date, my plan for this week day by day, my recent training log, which activity ids are already logged (already_logged, per source), my PRs and paces, and the scoring rubric. Read the rubric and follow it.
+STEP 1 - CONTEXT. Call the Hawky tool get_coach_context. It tells you today's date, my plan for this week day by day, my recent training log, which activity ids are already logged (already_logged, per source), my PRs and paces, and the scoring rubric. Read the rubric and follow it.
 
 STEP 1b - PRs AND GOALS (first run, or whenever prs comes back empty). Before anything else, ask me in one message: my PRs for ${PR_LIST} (time, and roughly when/where if I remember), which race I'm training for next, and my goal time for it. Wait for my answer. Save the PRs with set_prs (skip events I've never run). If five_k_time is empty, set it with set_5k_time from my best recent 5K or XC 5K; if I have no 5K, estimate it (3200 time x 1.65, or 1600 time x 3.5) and tell me it's an estimate. Mention I can update PRs any time on the Hawks Personal tab or by telling you a new PR.
 
@@ -3533,15 +4083,15 @@ ${key === 'intervals' ? `STEP 2 - REVIEW RUNS. ${src.pull} (last 14 days the fir
 
 STEP 3 - CLASSIFY. For each activity pick exactly one category from the rubric: easy, recovery, long, workout, race, shakeout or crosstrain. Use the laps and pace changes to spot workouts; use HR as a share of max HR to tell easy from hard. Compare with the planned type for that date.
 
-STEP 4 - CONVERT. distance_mi = meters / 1609.34 (2 decimals). elev_gain_ft = meters x 3.281. Times in whole seconds. Send cadence as the connector gives it (Hawks fixes one-foot values). Leave out anything the connector doesn't have; never guess numbers.
+STEP 4 - CONVERT. distance_mi = meters / 1609.34 (2 decimals). elev_gain_ft = meters x 3.281. Times in whole seconds. start_local = local start time HH:MM. For workouts, send the work reps as laps [{m, s, hr}]. Send cadence as the connector gives it (Hawks fixes one-foot values). Leave out anything the connector doesn't have; never guess numbers.
 
-STEP 5 - NOTE. Write a 1-3 sentence coaching note per activity as the rubric describes.
+STEP 5 - REPORT PER SESSION. Activities less than ~75 min apart (warm-up, workout, cool-down) are ONE session. Write one 2-4 sentence report on the session's main activity, comparing reps and paces with my Fitness States; leave the warm-up and cool-down summaries empty.
 
-STEP 6 - SAVE. Call log_workouts once with ${key === 'intervals' ? 'only the runs you re-labelled or wrote notes for' : 'all the new activities'}, each with source "${key}" and its activity_id. Hawks calculates effort, load, plan match and the letter grade.
+STEP 6 - SAVE. Call log_workouts once with ${key === 'intervals' ? 'only the runs you re-labelled or wrote notes for' : 'all the new activities'}, each with source "${key}" and its activity_id. Hawks calculates effort, load and plan match for the whole day.
 
-STEP 6b - LOG THE DAYS. For each date from step 2, and any planned run day with no activity, call log_day: status vs plan, difficulty 1-10, types, planned, summary, splits for reps, coach_note and load_note, as the rubric describes. If a run was a library workout, set library_id and call get_workout_history to compare with last time.
+STEP 6b - LOG THE DAYS. For each date from step 2, and any planned run day with no activity, call log_day: status vs plan, types, planned, day_line (one sentence on the day), summary, split_reps for reps, coach_note and load_note, as the rubric describes. Don't send miles, minutes or difficulty for days with runs: those come from the watch. If a run was a library workout, set library_id and call get_workout_history to compare with last time.
 
-STEP 7 - REPORT. Reply to me with a short coach's report: a table of each new run (date, category, miles, pace, avg HR, grade), this week's miles vs plan and average plan score from the response, what's coming up next on my plan (with my paces from get_workout if it's a workout), and one or two specific things to focus on. When I ask for a workout, use find_workouts filtered by my race, the season phase and the time I have. If nothing new was found, say so and preview the next planned day.${src.extra}
+STEP 7 - REPORT. Reply to me with a short coach's report: a table of each new session (date, category, miles, pace, avg HR, on plan or not), this week's miles vs plan from the response, what's coming up next on my plan (with my paces from get_workout if it's a workout), and one or two specific things to focus on. When I ask for a workout, use find_workouts filtered by my race, the season phase and the time I have. If nothing new was found, say so and preview the next planned day.${src.extra}
 
 RULES: Only ever log my own activities. Never invent or estimate data. If a connector is missing or fails, stop and tell me which one so I can fix it in Settings > Connectors. Keep the tone of a supportive high school XC coach.
 
@@ -3554,7 +4104,7 @@ function renderCoachSteps(){
   const src = COACH_SOURCES[coachSource] || COACH_SOURCES.coros;
   $('coachSource').querySelectorAll('[data-src]').forEach(b=> b.classList.toggle('active', b.dataset.src === coachSource));
   $('coachSteps').innerHTML = `<li>${src.connect}</li>
-    <li><b>Add your Hawks link.</b> Same Connectors page: Add custom connector → name it <b>Hawks Coach</b> → paste the link below. Keep it private; it's your login.</li>
+    <li><b>Add your Hawks link.</b> Same Connectors page: Add custom connector → name it <b>Hawky</b> → paste the link below. Keep it private; it's your login.</li>
     <li><b>Paste the prompt.</b> Start a new chat and paste the setup prompt. Claude asks for your PRs and goal race, syncs your last 2 weeks, then you just say <b>"coach me"</b> after each run.</li>`;
 }
 
@@ -3602,46 +4152,63 @@ const intensityOf = (d)=> !d ? 0 : d <= 3 ? 1 : d <= 5 ? 2 : d <= 7 ? 3 : 4;
 const cap = (t)=> t ? t[0].toUpperCase() + t.slice(1) : '';
 const statTile = (v, l)=> `<div class="stat"><b>${escapeHtml(String(v))}</b><span>${escapeHtml(l)}</span></div>`;
 
-async function renderCoachRuns(){
-  const card = $('coachRunsCard');
+// This week on the Plan view: planned vs done per day, with the plan tag
+// for each day (the per-run letter grades are gone).
+function addDaysKey(dateKey, n){ const d = new Date(dateKey + 'T12:00:00'); d.setDate(d.getDate() + n); return dateKeyOf(d); }
+
+async function renderWeekCard(){
+  const card = $('weekCard');
   if(!isRealPerson()){ card.style.display = 'none'; return; }
   const personId = activePersonId;
-  let data = null;
+  let wk = null, log = null;
   try{
     const res = await fetch('/api/workouts?personId=' + encodeURIComponent(personId), { cache: 'no-store' });
-    if(res.ok) data = await res.json();
+    if(res.ok) wk = await res.json();
+    if(wk){
+      const r2 = await fetch(`/api/log?personId=${encodeURIComponent(personId)}&from=${wk.this_week.week_of}&to=${addDaysKey(wk.this_week.week_of, 6)}`, { cache:'no-store' });
+      if(r2.ok) log = await r2.json();
+    }
   }catch(e){}
   if(currentPage !== 'training' || personId !== activePersonId) return;
-  if(!data){ card.style.display = 'none'; return; }
+  if(!wk){ card.style.display = 'none'; return; }
   card.style.display = '';
-  const w = data.this_week;
-  $('coachWeek').innerHTML = [
+  const w = wk.this_week;
+  const byDate = {}; (log?.days || []).forEach(d=>{ byDate[d.date] = d; });
+  const tagged = Object.values(byDate).filter(d=>d.plan);
+  const onPlan = tagged.filter(d=>d.plan.tone === 'on').length;
+  $('weekStats').innerHTML = [
     [w.miles_done, `of ${w.planned_miles} mi`],
-    [w.avg_plan_score ?? '–', 'plan score'],
-    [w.load || 0, 'load'],
     [w.days.filter(d=>d.logged.length).length, 'days run'],
+    [tagged.length ? `${onPlan}/${tagged.length}` : '–', 'on plan'],
+    [w.load || 0, 'load'],
   ].map(([v,l])=>statTile(v,l)).join('');
-  const recent = data.workouts.slice(0, 8);
-  if(!recent.length){
-    $('coachRunsHint').textContent = data.connected
-      ? 'Nothing logged yet. Say "coach me" in Claude to sync your runs.'
-      : 'Set up Claude Coach on the Personal tab to see graded runs here.';
-    $('coachRuns').innerHTML = '';
-    return;
-  }
-  $('coachRunsHint').textContent = 'Recent runs, graded against your plan.';
-  $('coachRuns').innerHTML = recent.map(r=>{
-    const when = new Date(r.date + 'T12:00:00').toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
-    const meta = [r.distance_mi != null && `${r.distance_mi.toFixed(1)} mi`, fmtDuration(r.moving_sec), r.pace_per_mi && `${r.pace_per_mi}/mi`, r.avg_hr && `${r.avg_hr} bpm`].filter(Boolean).join(' · ');
-    return `<div class="list-row">
-      <div class="grade g-${r.rating || 'none'}">${escapeHtml(r.rating || '–')}</div>
-      <div class="list-main">
-        <div class="cluster" style="gap:6px;"><span class="list-title">${escapeHtml(when)}</span><span class="badge ${toneOf(r.category)}">${escapeHtml(cap(r.category))}</span></div>
-        <div class="list-meta num">${escapeHtml(meta)}</div>
-        ${r.summary ? `<div class="list-body">${escapeHtml(r.summary)}</div>` : ''}
-      </div>
-    </div>`;
+  $('weekHint').textContent = w.week_type ? `${w.week_type} week. Tap a day to open it in your log.` : 'Tap a day to open it in your log.';
+  const today = todayKey();
+  $('weekDays').innerHTML = w.days.map(d=>{
+    const day = byDate[d.date];
+    const planned = d.planned ? (d.planned.type.toLowerCase() === 'off' ? 'Off' : `${d.planned.type === 'LR' ? 'Long run' : d.planned.type} ${d.planned.miles || ''}${d.planned.miles ? ' mi' : ''}`) : '';
+    const done = day?.miles ? `<b>${Math.round(day.miles*10)/10} mi</b>` : (d.date < today && d.planned && d.planned.miles ? '<span style="color:var(--ink-soft)">nothing logged</span>' : '');
+    const tag = day?.plan ? `<span class="badge tone-${day.plan.tone}" title="${escapeHtml(day.plan.reason)}">${escapeHtml(day.plan.label)}</span>` : '';
+    return `<button type="button" class="week-day ${d.date === today ? 'today' : ''}" data-date="${d.date}">
+      <span class="wd-name">${d.day.slice(0,3)}</span>
+      <span class="wd-main">${escapeHtml(planned)}${planned && done ? ' · ' : ''}${done}</span>
+      ${tag}
+    </button>`;
   }).join('');
+  $('weekDays').querySelectorAll('[data-date]').forEach(b=> b.addEventListener('click', ()=> openLogDay(b.dataset.date)));
+  // Hawky's latest day line.
+  const latest = Object.values(byDate).filter(d=>d.day_line && d.date <= today).sort((a,b)=> b.date.localeCompare(a.date))[0];
+  $('hawkyToday').style.display = latest ? '' : 'none';
+  if(latest) $('hawkyToday').innerHTML = `<b>Hawky · ${new Date(latest.date + 'T12:00:00').toLocaleDateString(undefined,{ weekday:'long' })}</b>${escapeHtml(latest.day_line)}`;
+}
+
+function openLogDay(date){
+  const d = new Date(date + 'T12:00:00');
+  tlYear = d.getFullYear(); tlMonthIdx = d.getMonth(); tlSelected = date;
+  trainingView = 'log';
+  try{ localStorage.setItem('hawksTrainingView', 'log'); }catch(e){}
+  setPage('training');
+  if(window.innerWidth < 960) setTimeout(()=> $('tlDayCard').scrollIntoView({ behavior:'smooth', block:'start' }), 300);
 }
 
 function resolvedMeetLocation(ev){
@@ -3913,9 +4480,11 @@ function renderAll(){
   renderTrainingPicker();
   renderBodyMap();
   renderTeamStatus();
-  if(currentPage === 'personal') renderPersonal();
-  if(currentPage === 'meets') renderMeets();
-  if(currentPage === 'training') renderTraining();
+  renderSyncPill();
+  if(currentPage === 'you') renderYou();
+  if(currentPage === 'schedule' && scheduleView === 'meets') renderMeets();
+  if(currentPage === 'training' && !tlDirty) renderTraining();
+  if(currentPage === 'team') renderTeam();
 }
 
 function wireUI(){
@@ -4111,11 +4680,9 @@ function wireUI(){
     btn.addEventListener('click', ()=> setEventKind(btn.dataset.kind));
   });
 
-  $('pageTabCalendar').addEventListener('click', ()=> setPage('calendar'));
-  $('pageTabBody').addEventListener('click', ()=> setPage('body'));
-  $('pageTabPersonal').addEventListener('click', ()=> setPage('personal'));
-  $('pageTabMeets').addEventListener('click', ()=> setPage('meets'));
-  $('pageTabTraining').addEventListener('click', ()=> setPage('training'));
+  PAGES.forEach(name=> $('pageTab' + name[0].toUpperCase() + name.slice(1)).addEventListener('click', ()=> setPage(name)));
+  $('schViews').querySelectorAll('[data-sview]').forEach(b=> b.addEventListener('click', ()=> setScheduleView(b.dataset.sview)));
+  $('youViews').querySelectorAll('[data-yview]').forEach(b=> b.addEventListener('click', ()=> setYouView(b.dataset.yview)));
   $('savePersonalBtn').addEventListener('click', savePersonal);
 
   $('healthPicker').querySelectorAll('.event-type-opt').forEach(btn=>{
@@ -4157,28 +4724,54 @@ function wireUI(){
   $('tlPrev').addEventListener('click', ()=>{ tlMonthIdx--; if(tlMonthIdx < 0){ tlMonthIdx = 11; tlYear--; } tlSelected = null; renderTrainingLog(); });
   $('tlNext').addEventListener('click', ()=>{ tlMonthIdx++; if(tlMonthIdx > 11){ tlMonthIdx = 0; tlYear++; } tlSelected = null; renderTrainingLog(); });
   $('tlSave').addEventListener('click', saveTrainingDay);
-  ['libRace','libPhase','libLen','libLevel'].forEach(id=> $(id).addEventListener('change', renderLibrary));
-  $('libFiveKBtn').addEventListener('click', async ()=>{
-    const res = await apiPost('/api/people/5k', { personId: activePersonId, time: $('libFiveK').value.trim() });
-    if(res && res.error){ alert(res.error); return; }
-    library = null; renderLibrary();
+  $('tlDayCard').addEventListener('input', ()=>{ tlDirty = true; });
+  $('splitAddSet').addEventListener('click', ()=>{
+    const n = Math.min(40, Math.max(1, parseInt($('splitAddN').value, 10) || 1));
+    const m = Math.max(50, parseInt($('splitAddM').value, 10) || 400);
+    addSplitSet(n, m);
   });
+  $('splitAddOne').addEventListener('click', ()=> addSplitSet(1, splitRows.length ? splitRows[splitRows.length - 1].m : (parseInt($('splitAddM').value, 10) || 400)));
+  $('libToFitness').addEventListener('click', ()=> setTrainingView('fitness'));
+  $('libReset').addEventListener('click', ()=>{ ['libRace','libPhase','libLen','libLevel'].forEach(id=> $(id).value = ''); libType = ''; renderLibrary(); });
+  $('fitRefresh').addEventListener('click', ()=> renderFitness(true));
+  $('fitAddPrs').addEventListener('click', goToPrs);
+  $('teamSort').querySelectorAll('[data-sort]').forEach(b=> b.addEventListener('click', ()=>{ teamSort = b.dataset.sort; renderTeam(); }));
+  ['libRace','libPhase','libLen','libLevel'].forEach(id=> $(id).addEventListener('change', renderLibrary));
 
   $('savePrsBtn').addEventListener('click', savePrs);
   $('icuConnectBtn').addEventListener('click', async ()=>{
-    const res = await icuAction('/api/intervals/connect', { athleteId: $('icuAthlete').value.trim(), apiKey: $('icuKey').value.trim() }, 'icuMsg', 'icuConnectBtn');
-    if(!res) return;
+    const btn = $('icuConnectBtn');
+    btn.disabled = true; btn.textContent = 'Checking…'; $('icuMsg').textContent = '';
+    const res = await apiPost('/api/intervals/connect', { personId: activePersonId, athleteId: $('icuAthlete').value.trim(), apiKey: $('icuKey').value.trim() });
+    btn.disabled = false; btn.textContent = 'Connect';
+    if(!res || res.error){ $('icuMsg').textContent = res?.error || 'Couldn’t reach Hawks. Check your connection.'; return; }
     $('icuKey').value = '';
-    const p = people.find(x=>x.id===activePersonId); if(p) await renderIcu(p);
-    icuSync(60);
+    const p = people.find(x=>x.id===activePersonId); if(p) await renderSetup(p);
+    await runSync();
+    runImport();
   });
-  $('icuSyncBtn').addEventListener('click', ()=> icuSync());
-  $('icuBackfillBtn').addEventListener('click', ()=> icuSync(60));
+  $('icuSyncBtn').addEventListener('click', ()=> runSync());
+  $('icuImportBtn').addEventListener('click', ()=> runImport());
   $('icuDisconnectBtn').addEventListener('click', async ()=>{
     if(!confirm('Disconnect intervals.icu? Runs already imported stay in your log.')) return;
-    await icuAction('/api/intervals/disconnect', {}, 'icuSyncMsg', 'icuDisconnectBtn');
-    const p = people.find(x=>x.id===activePersonId); if(p) renderIcu(p);
+    await apiPost('/api/intervals/disconnect', { personId: activePersonId });
+    const p = people.find(x=>x.id===activePersonId); if(p) renderSetup(p);
   });
+  $('setupPrsBtn').addEventListener('click', goToPrs);
+  $('syncPill').addEventListener('click', e=>{
+    e.stopPropagation();
+    const open = !$('syncMenu').classList.contains('show');
+    $('syncMenu').classList.toggle('show', open);
+    $('syncPill').setAttribute('aria-expanded', String(open));
+    if(open && isRealPerson()) fetchIcuStatus(activePersonId).then(renderSyncPill);
+  });
+  document.addEventListener('click', e=>{ if(!$('syncWrap').contains(e.target)) $('syncMenu').classList.remove('show'); });
+  $('syncNowItem').addEventListener('click', ()=>{ $('syncMenu').classList.remove('show'); runSync(); });
+  $('syncImportItem').addEventListener('click', ()=>{ $('syncMenu').classList.remove('show'); runImport(); });
+  $('syncSetupItem').addEventListener('click', ()=>{ $('syncMenu').classList.remove('show'); setPage('you'); setYouView('settings'); });
+  $('openHawkyBtn').addEventListener('click', ()=> openHawky());
+  $('closeHawky').addEventListener('click', ()=> $('hawkyOverlay').classList.remove('show'));
+  $('hawkyOverlay').addEventListener('click', e=>{ if(e.target === $('hawkyOverlay')) $('hawkyOverlay').classList.remove('show'); });
   $('askBtn').addEventListener('click', askCoachNow);
   $('askInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); askCoachNow(); } });
   $('coachSource').querySelectorAll('[data-src]').forEach(b=> b.addEventListener('click', ()=>{
@@ -4193,7 +4786,7 @@ function wireUI(){
   });
   $('copyCoachPromptBtn').addEventListener('click', ()=> copyField('coachPrompt', 'copyCoachPromptBtn'));
   $('resetCoachBtn').addEventListener('click', async ()=>{
-    if(!confirm('Make a new Hawks Coach link? The old one stops working, so you’ll need to update the connector in Claude.')) return;
+    if(!confirm('Make a new Hawky link? The old one stops working, so you’ll need to update the connector in Claude.')) return;
     await fetchCoachLink(true);
   });
 
@@ -4321,40 +4914,119 @@ async function renderTrainingLog(){
   renderTrainingDay();
 }
 
+let tlDirty = false;
+let splitRows = [];
+
+// "2:45", "2:45.3" or "165" -> seconds.
+function parseClock(v){
+  const t = String(v || '').trim();
+  if(!t) return null;
+  const m = t.match(/^(?:(\d{1,2}):)?(\d{1,2}(?:\.\d{1,2})?)$/);
+  if(!m) return null;
+  const sec = (m[1] ? Number(m[1]) * 60 : 0) + Number(m[2]);
+  return sec > 0 ? sec : null;
+}
+function clock(sec){
+  if(!sec) return '';
+  const r = Math.round(sec * 10) / 10;
+  const m = Math.floor(r / 60), ss = r - m * 60;
+  const whole = Math.abs(ss - Math.round(ss)) < 0.05;
+  const sStr = whole ? String(Math.round(ss)).padStart(2,'0') : ss.toFixed(1).padStart(4,'0');
+  return m ? `${m}:${sStr}` : (whole ? String(Math.round(ss)) : ss.toFixed(1));
+}
+const pacePerMile = (m, s)=> m > 0 && s > 0 ? clock(Math.round(s / m * 1609.344)) : '';
+
+function renderSplitBuilder(){
+  const wrap = $('splitBuilder');
+  if(!splitRows.length){
+    wrap.innerHTML = '<div class="split-empty">No reps yet. Add a set below. On workout days they fill in from your watch.</div>';
+    $('splitSummary').textContent = '';
+    return;
+  }
+  wrap.innerHTML = `<div class="split-row head"><span class="n">#</span><span>Meters</span><span>Time</span><span style="text-align:right">/mi</span><span>Rest</span><span></span></div>` +
+    splitRows.map((r,i)=>`<div class="split-row" data-i="${i}">
+      <span class="n">${i+1}</span>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" data-k="m" value="${r.m || ''}" aria-label="Rep ${i+1} meters">
+      <input type="text" inputmode="decimal" data-k="s" value="${escapeHtml(r.sText ?? clock(r.s))}" placeholder="2:45" aria-label="Rep ${i+1} time">
+      <span class="pace">${pacePerMile(r.m, r.s)}</span>
+      <input type="text" data-k="rest" value="${escapeHtml(r.rest || '')}" placeholder="2:00" maxlength="12" aria-label="Rep ${i+1} rest">
+      <button type="button" class="x" data-del="${i}" aria-label="Remove rep ${i+1}">✕</button>
+    </div>`).join('');
+  wrap.querySelectorAll('.split-row[data-i] input').forEach(inp=> inp.addEventListener('input', ()=>{
+    const row = splitRows[Number(inp.closest('.split-row').dataset.i)];
+    if(inp.dataset.k === 'm') row.m = parseInt(inp.value, 10) || 0;
+    if(inp.dataset.k === 's'){ row.sText = inp.value; row.s = parseClock(inp.value) || 0; }
+    if(inp.dataset.k === 'rest') row.rest = inp.value;
+    inp.closest('.split-row').querySelector('.pace').textContent = pacePerMile(row.m, row.s);
+    updateSplitSummary();
+  }));
+  wrap.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{ splitRows.splice(Number(b.dataset.del), 1); tlDirty = true; renderSplitBuilder(); }));
+  updateSplitSummary();
+}
+
+function updateSplitSummary(){
+  const ok = splitRows.filter(r=>r.m > 0 && r.s > 0);
+  if(!ok.length){ $('splitSummary').textContent = ''; return; }
+  const m = ok.reduce((a,r)=>a+r.m,0), sec = ok.reduce((a,r)=>a+r.s,0);
+  const same = ok.every(r=>r.m === ok[0].m);
+  $('splitSummary').textContent = `${same ? `${ok.length} x ${ok[0].m}m · avg ${clock(sec / ok.length)}` : `${ok.length} reps · ${(m/1609.344).toFixed(2)} mi`} · ${pacePerMile(m, sec)}/mi`;
+}
+
+const SESSION_LABEL = { easy:'Easy run', recovery:'Recovery run', long:'Long run', workout:'Workout', race:'Race', shakeout:'Shakeout', crosstrain:'Cross-training' };
+
 async function renderTrainingDay(){
   const card = $('tlDayCard');
   $('tlEmpty').style.display = tlSelected ? 'none' : '';
   if(!tlSelected){ card.style.display = 'none'; return; }
   card.style.display = '';
-  const day = tlDays[tlSelected] || { types: [], strava: [] };
+  const day = tlDays[tlSelected] || { types: [], sessions: [], split_reps: [] };
   const d = new Date(tlSelected + 'T12:00:00');
   $('tlDayEyebrow').textContent = d.toLocaleDateString(undefined, { weekday:'long' });
   $('tlDayTitle').textContent = d.toLocaleDateString(undefined, { month:'long', day:'numeric', year:'numeric' });
   const lvl = intensityOf(day.difficulty);
-  $('tlDayBadge').innerHTML = day.status
-    ? `<span class="badge ${day.status === 'missed' ? 'tone-int-4' : day.status === 'as_planned' ? 'tone-int-1' : 'tone-int-2'}">${escapeHtml(TL_STATUS[day.status] || '')}</span>`
+  $('tlDayBadge').innerHTML = day.plan
+    ? `<span class="badge tone-${day.plan.tone}">${escapeHtml(day.plan.label)}</span>`
+    : day.status ? `<span class="badge ${day.status === 'missed' ? 'tone-int-4' : day.status === 'as_planned' ? 'tone-int-1' : 'tone-int-2'}">${escapeHtml(TL_STATUS[day.status] || '')}</span>`
     : (lvl ? `<span class="badge tone-int-${lvl}">Difficulty ${day.difficulty}</span>` : '');
+  $('tlPlanNote').style.display = day.plan ? '' : 'none';
+  if(day.plan) $('tlPlanNote').textContent = `Plan: ${day.plan.planned}. ${day.plan.reason === day.plan.planned ? 'Matched.' : day.plan.reason + '.'}`;
+  $('tlDayLine').style.display = day.day_line ? '' : 'none';
+  if(day.day_line) $('tlDayLine').innerHTML = `<b>Hawky:</b> ${escapeHtml(day.day_line)}`;
   $('tlDayStats').innerHTML = statTile(day.miles != null ? Math.round(day.miles*100)/100 : '–', 'miles')
     + statTile(day.minutes != null ? Math.round(day.minutes) : '–', 'minutes')
     + statTile(day.runs ?? '–', day.runs === 1 ? 'run' : 'runs')
     + statTile(day.difficulty ?? '–', 'difficulty');
-  const fromStrava = !!(day.strava && day.strava.length);
-  $('tlStrava').innerHTML = fromStrava ? day.strava.map(r=>`<div class="list-row">
-      <div class="grade g-${r.rating || 'none'}">${escapeHtml(String(r.rating || r.effort || '–'))}</div>
-      <div class="list-main">
-        <div class="cluster" style="gap:6px;"><span class="list-title">${escapeHtml(r.name || 'Run')}</span><span class="badge ${toneOf(r.category)}">${escapeHtml(cap(r.category))}</span></div>
-        <div class="list-meta num">${[r.miles != null && r.miles.toFixed(2) + ' mi', r.minutes && r.minutes + ' min', r.avg_hr && r.avg_hr + ' bpm', r.effort && 'effort ' + r.effort].filter(Boolean).join(' · ')}</div>
-      </div>
-    </div>`).join('') : '';
-  $('tlStrava').style.display = fromStrava ? '' : 'none';
-  ['tlMiles','tlMinutes','tlRuns'].forEach(id=> $(id).disabled = fromStrava);
-  $('tlMiles').value = day.miles ?? ''; $('tlMinutes').value = day.minutes ?? ''; $('tlRuns').value = day.runs ?? '';
-  $('tlDifficulty').value = day.difficulty ?? '';
+  // Watch days are locked; hand-logged days keep their inputs.
+  const locked = !!day.locked;
+  $('tlLockNote').style.display = locked ? '' : 'none';
+  $('tlManual').style.display = locked ? 'none' : '';
+  $('tlMiles').value = locked ? '' : (day.miles ?? ''); $('tlMinutes').value = locked ? '' : (day.minutes ?? ''); $('tlRuns').value = locked ? '' : (day.runs ?? '');
+  $('tlDifficulty').value = locked ? '' : (day.difficulty ?? '');
+
+  $('tlSessions').innerHTML = (day.sessions || []).map(sx=>{
+    const meta = [sx.start && sx.start, `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `effort ${sx.effort}`].filter(Boolean).join(' · ');
+    const acts = sx.activities.length > 1 ? `<div class="session-acts">${sx.activities.map(a=>`<span>${escapeHtml(a.start ? a.start + ' ' : '')}${escapeHtml(cap(a.category))} ${a.miles != null ? Math.round(a.miles*10)/10 + ' mi' : ''}</span>`).join('')}</div>` : '';
+    return `<div class="session">
+      <div class="session-head"><span class="list-title">${escapeHtml(sx.title && !/^(morning|afternoon|evening|lunch|night)? ?run$/i.test(sx.title) ? sx.title : SESSION_LABEL[sx.category] || 'Run')}</span><span class="badge ${toneOf(sx.category)}">${escapeHtml(cap(sx.category))}</span></div>
+      <div class="session-meta num">${escapeHtml(meta)}</div>
+      ${acts}
+      ${sx.report ? `<div class="session-report"><b>Hawky</b>${escapeHtml(sx.report)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // What the team schedule had on this day, linked back to the calendar.
+  const evs = events[tlSelected] || [];
+  $('tlEvents').innerHTML = evs.map(ev=>{ const st = eventStyle(ev); return `<div class="tl-event"><i style="background:${st.color}"></i><span>${escapeHtml(ev.title)}${ev.time ? ' · ' + escapeHtml(formatEventTimeRange(ev)) : ''}</span><button type="button" class="ghost sm-btn" data-cal="${tlSelected}" style="margin-left:auto;">Calendar</button></div>`; }).join('');
+  $('tlEvents').querySelectorAll('[data-cal]').forEach(b=> b.addEventListener('click', ()=> openCalendarDay(b.dataset.cal)));
+
+  splitRows = (day.split_reps || []).map(r=>({ m: r.m, s: r.s, rest: r.rest || '' }));
+  renderSplitBuilder();
+
   $('tlStatus').value = day.status || '';
-  $('tlPlanned').value = day.planned || '';
-  $('tlSplits').value = day.splits || '';
+  $('tlPlanned').value = day.planned || (day.plan ? day.plan.planned : '');
   $('tlSummary').value = day.summary || '';
-  $('tlCoach').value = day.coach_note || '';
+  $('tlCoachWrap').style.display = day.coach_note ? '' : 'none';
+  $('tlCoach').textContent = day.coach_note || '';
   $('tlFeel').value = day.feel ?? '';
   $('tlSleep').value = day.sleep_hours ?? '';
   $('tlStrength').checked = !!day.strength;
@@ -4362,7 +5034,8 @@ async function renderTrainingDay(){
   $('tlSaved').style.display = 'none';
   const types = new Set(day.types || []);
   $('tlTypes').innerHTML = TL_TYPES.map(t=>`<button type="button" class="chip ${types.has(t)?'on':''}" data-type="${t}" aria-pressed="${types.has(t)}">${cap(t)}</button>`).join('');
-  $('tlTypes').querySelectorAll('[data-type]').forEach(b=> b.addEventListener('click', ()=>{ b.classList.toggle('on'); b.setAttribute('aria-pressed', String(b.classList.contains('on'))); }));
+  $('tlTypes').querySelectorAll('[data-type]').forEach(b=> b.addEventListener('click', ()=>{ b.classList.toggle('on'); b.setAttribute('aria-pressed', String(b.classList.contains('on'))); tlDirty = true; }));
+  tlDirty = false;
   const lib = await loadLibrary();
   if(lib){
     $('tlLibrary').innerHTML = '<option value="">None</option>' + lib.workouts.map(w=>`<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
@@ -4370,56 +5043,114 @@ async function renderTrainingDay(){
   }
 }
 
+function addSplitSet(n, m){
+  for(let i = 0; i < n; i++) splitRows.push({ m, s: 0, rest: '' });
+  tlDirty = true;
+  renderSplitBuilder();
+  const first = $('splitBuilder').querySelector(`.split-row[data-i="${splitRows.length - n}"] input[data-k="s"]`);
+  if(first) first.focus();
+}
+
 async function saveTrainingDay(){
   if(!isRealPerson() || !tlSelected) return;
   const num = (id)=>{ const v = $(id).value.trim(); return v === '' ? null : Number(v); };
+  const bad = splitRows.find(r=> r.m > 0 && r.sText && !r.s);
+  if(bad){ alert(`Rep time "${bad.sText}" doesn't look like a time. Use 2:45 or 72.5.`); return; }
   const fields = {
-    difficulty: num('tlDifficulty'),
     types: [...$('tlTypes').querySelectorAll('.chip.on')].map(b=>b.dataset.type),
     status: $('tlStatus').value,
     planned: $('tlPlanned').value,
     library_id: $('tlLibrary').value,
-    splits: $('tlSplits').value,
+    split_reps: splitRows.filter(r=>r.m > 0 && r.s > 0).map(r=>({ m: r.m, s: r.s, rest: (r.rest || '').trim() })),
     summary: $('tlSummary').value,
-    coach_note: $('tlCoach').value,
     feel: num('tlFeel'),
     sleep_hours: num('tlSleep'),
     strength: $('tlStrength').checked,
     notes: $('tlNotes').value,
   };
-  if(!$('tlMiles').disabled){ fields.manual_miles = num('tlMiles'); fields.minutes = num('tlMinutes'); fields.runs = num('tlRuns'); }
+  if(!tlDays[tlSelected]?.locked){ fields.manual_miles = num('tlMiles'); fields.minutes = num('tlMinutes'); fields.runs = num('tlRuns'); fields.difficulty = num('tlDifficulty'); }
+  const btn = $('tlSave'); btn.disabled = true;
   const res = await apiPost('/api/log/day', { personId: activePersonId, date: tlSelected, fields });
+  btn.disabled = false;
   if(!res || res.error){ alert(res?.error || 'Couldn’t save. Check your connection.'); return; }
+  tlDirty = false;
+  fitnessData = null; library = null;
   $('tlSaved').style.display = '';
   setTimeout(()=>{ renderTrainingLog(); }, 400);
 }
 
+// --- Workouts: pick a kind, then customize ------------------------------------
 let libType = '';
+let woGroup = 'all';
+try{ woGroup = localStorage.getItem('hawksWoGroup') || 'all'; }catch(e){}
+const WO_ICON = {
+  tempo: '<svg viewBox="0 0 24 24"><path d="M3 17c3 0 4-10 9-10s6 10 9 10"/><path d="M3 21h18"/></svg>',
+  short: '<svg viewBox="0 0 24 24"><path d="M4 17V9M9 17V7M14 17V9M19 17V7"/><path d="M3 21h18"/></svg>',
+  long: '<svg viewBox="0 0 24 24"><path d="M3 15h5v-5h8v5h5"/><path d="M3 21h18"/></svg>',
+  fartlek: '<svg viewBox="0 0 24 24"><path d="M3 14l3-4 3 6 3-8 3 6 3-3 3 3"/><path d="M3 21h18"/></svg>',
+  all: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>',
+  hawky: '<svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 19l-5-3-5 3 1.4-6.2L4 9l5.8-.7z"/></svg>',
+};
+const WO_TILES = [
+  { key:'tempo', label:'Tempo', sub:'Threshold, cruise reps, progressions' },
+  { key:'short', label:'Short intervals', sub:'200-600m reps and hills' },
+  { key:'long', label:'Long intervals', sub:'800m to 2 mile reps' },
+  { key:'fartlek', label:'Fartlek', sub:'Timed surges, on/off' },
+  { key:'all', label:'All workouts', sub:'Every session in the library' },
+  { key:'hawky', label:'Ask Hawky', sub:'Build one for today' },
+];
+const PACE_SHORT = { recovery:'Recovery', easy:'Easy', steady:'Steady', tempo:'Tempo', threshold:'Threshold', cv:'CV', '10k':'10K', '5k':'5K', '3200':'3200', mile:'Mile', '800':'800', '400':'400' };
+
+function pacesHtml(zones){
+  return (zones || []).map(z=>`<div class="lib-pace"><b>${escapeHtml(z.per_mile)}</b><span>${escapeHtml(PACE_SHORT[z.key] || z.label)}${z.per_400 ? ' · ' + escapeHtml(z.per_400) + '/400' : ' /mi'}</span></div>`).join('');
+}
+
+function setWoGroup(g){
+  if(g === 'hawky'){
+    const filt = [$('libRace').value && `for the ${$('libRace').value}`, $('libLen').value && $('libLen').value !== '999' && `in under ${$('libLen').value} minutes`].filter(Boolean).join(' ');
+    const kind = woGroup !== 'all' ? (WO_TILES.find(t=>t.key === woGroup)?.label.toLowerCase() || 'a') : '';
+    openHawky(`Build me ${kind ? 'a ' + kind : 'a'} workout for tomorrow${filt ? ' ' + filt : ''}, with my rep targets.`, false);
+    return;
+  }
+  woGroup = g; libType = '';
+  try{ localStorage.setItem('hawksWoGroup', g); }catch(e){}
+  renderLibrary();
+}
+
 async function renderLibrary(){
   const lib = await loadLibrary();
   if(currentPage !== 'training' || trainingView !== 'library') return;
+  $('woTiles').innerHTML = WO_TILES.map(t=>`<button type="button" class="wo-tile ${t.key === 'hawky' ? 'hawky' : ''} ${t.key === woGroup ? 'on' : ''}" data-g="${t.key}" role="tab" aria-selected="${t.key === woGroup}">${WO_ICON[t.key]}<span><b>${t.label}</b><small>${t.sub}</small></span></button>`).join('');
+  $('woTiles').querySelectorAll('[data-g]').forEach(b=> b.addEventListener('click', ()=> setWoGroup(b.dataset.g)));
   if(!lib){ $('libList').innerHTML = '<div class="hint">Couldn’t load the library.</div>'; return; }
   const me = isRealPerson();
-  $('libFiveKRow').style.display = me ? '' : 'none';
-  if(me && document.activeElement !== $('libFiveK')) $('libFiveK').value = lib.five_k_time || '';
-  const pr5 = lib.prs?.['5K']?.time || lib.prs?.['XC 5K']?.time;
+  const f = lib.fitness;
+  const fiveK = f?.estimates?.find(e=>e.event === '5K');
   $('libHint').textContent = !me ? 'Pick your name to see your own paces.'
-    : lib.five_k_time ? `From a ${lib.five_k_time} 5K.${pr5 && pr5 !== lib.five_k_time ? ` Your 5K PR is ${pr5}.` : ''}`
-    : pr5 ? `Set your current 5K fitness. Your PR is ${pr5}.` : 'Enter your current 5K fitness to get paces.';
-  const short = { mile:'Mile', '3200':'3200', '5k':'5K', '10k':'10K', threshold:'Threshold', tempo:'Tempo', steady:'Steady', easy:'Easy', recovery:'Recovery' };
-  $('libPaces').innerHTML = (lib.paces || []).map(p=>`<div class="lib-pace"><b>${p.per_mile}</b><span>${short[p.zone] || p.label}${p.per_400 ? ' · ' + p.per_400 + '/400' : ' /mi'}</span></div>`).join('');
+    : f?.vdot ? `VO2max est. ${f.vo2max} · 5K ${fiveK.time} · ${f.confidence} confidence`
+    : 'Add PRs or connect your watch to get your own paces.';
+  $('libPaces').innerHTML = f?.zones?.length ? pacesHtml(f.zones.filter(z=>['easy','steady','threshold','5k','3200','mile'].includes(z.key)))
+    : (me ? '<button type="button" class="ghost" id="libAddPrs">Add PRs</button>' : '');
+  if($('libAddPrs')) $('libAddPrs').onclick = goToPrs;
 
-  $('libTypes').innerHTML = [['', 'All'], ...Object.entries(lib.types)].map(([v,l])=>`<button type="button" class="chip ${v===libType?'on':''}" data-ltype="${v}">${escapeHtml(l.split(' /')[0])}</button>`).join('');
+  // "Also show" type chips only make sense on All.
+  $('libMoreWrap').style.display = woGroup === 'all' ? '' : 'none';
+  $('libTypes').innerHTML = [['', 'All types'], ...Object.entries(lib.types)].map(([v,l])=>`<button type="button" class="chip ${v===libType?'on':''}" data-ltype="${v}">${escapeHtml(l.split(' /')[0])}</button>`).join('');
   $('libTypes').querySelectorAll('[data-ltype]').forEach(b=> b.addEventListener('click', ()=>{ libType = b.dataset.ltype; renderLibrary(); }));
   const fill = (id, entries)=>{ const el = $(id); if(el.options.length <= 1) el.insertAdjacentHTML('beforeend', entries.map(([v,l])=>`<option value="${v}">${escapeHtml(l)}</option>`).join('')); };
   fill('libRace', lib.races.map(r=>[r, r === 'XC' ? 'XC (5K)' : r]));
   fill('libPhase', lib.phases.map(p=>[p, cap(p)]));
 
   const race = $('libRace').value, phase = $('libPhase').value, len = Number($('libLen').value || 0), level = Number($('libLevel').value || 0);
-  const list = lib.workouts.filter(w=> (!libType || w.type === libType) && (!race || w.races.includes(race)) && (!phase || w.phase.includes(phase))
+  const list = lib.workouts.filter(w=> (woGroup === 'all' || w.group === woGroup) && (!libType || w.type === libType)
+    && (!race || w.races.includes(race)) && (!phase || w.phase.includes(phase))
     && (!level || w.level === level) && (!len || (len === 999 ? w.total_min > 65 : w.total_min <= len)));
+  const tile = WO_TILES.find(t=>t.key === woGroup);
+  $('libTitle').textContent = woGroup === 'all' ? 'All workouts' : tile.label;
+  $('libSub').textContent = f?.vdot ? 'Rep targets are worked out from your Fitness States.' : 'Add PRs or connect your watch to see your own rep targets.';
   const lvl = ['', 'Beginner', 'Intermediate', 'Advanced'];
   $('libCount').textContent = `${list.length} of ${lib.workouts.length} workouts`;
+  const tgt = (t)=>`<div class="lib-target"><b>${escapeHtml(t.text)}</b><span class="tz">${escapeHtml(t.zone)} · ${escapeHtml(t.per_mile)}/mi</span><span class="tr">${escapeHtml(t.per_rep)}</span></div>`;
   $('libList').innerHTML = list.length ? list.map(w=>`
     <details class="lib-item" data-id="${w.id}" ${libOpen === w.id ? 'open' : ''}>
       <summary>
@@ -4429,32 +5160,145 @@ async function renderLibrary(){
             <span class="badge ${toneOf(w.type)}">${escapeHtml(lib.types[w.type].split(' /')[0])}</span>
             <span class="list-meta" style="margin:0;">${w.total_min} min · ${lvl[w.level]}</span>
           </div>
+          ${w.targets?.length ? `<div class="lib-targets">${w.targets.slice(0, 2).map(tgt).join('')}${w.targets.length > 2 ? `<span class="hint">+${w.targets.length - 2} more</span>` : ''}</div>` : ''}
         </div>
       </summary>
       <dl class="lib-dl">
         <dt>Session</dt><dd>${escapeHtml(w.main)}</dd>
-        <dt>Paces</dt><dd>${escapeHtml(w.paces)}</dd>
+        ${w.targets?.length > 2 ? `<dt>Your targets</dt><dd><div class="lib-targets">${w.targets.map(tgt).join('')}</div></dd>` : ''}
+        <dt>Pace notes</dt><dd>${escapeHtml(w.paces)}</dd>
         <dt>Why</dt><dd>${escapeHtml(w.purpose)}</dd>
         <dt>Cues</dt><dd>${escapeHtml(w.cues)}</dd>
         <dt>Next time</dt><dd>${escapeHtml(w.progress)}</dd>
         <dt>For</dt><dd>${escapeHtml(w.races.length === lib.races.length ? 'All races' : w.races.join(', '))} · ${escapeHtml(w.phase.map(cap).join(', '))}</dd>
         <dt>Source</dt><dd class="hint">${escapeHtml(w.source)}</dd>
       </dl>
+      ${me ? `<div class="lib-actions"><button type="button" class="ghost sm-btn" data-hawky="${w.id}">Ask Hawky to adjust</button></div>` : ''}
     </details>`).join('') : '<div class="hint">No workouts match. Try fewer filters.</div>';
   $('libList').querySelectorAll('details').forEach(el=> el.addEventListener('toggle', ()=>{ if(el.open) libOpen = el.dataset.id; }));
+  $('libList').querySelectorAll('[data-hawky]').forEach(b=> b.addEventListener('click', ()=>{
+    const w = lib.workouts.find(x=>x.id === b.dataset.hawky);
+    openHawky(`Adjust "${w.name}" for me for tomorrow: reps, rest and my target splits.`, false);
+  }));
+}
+
+// --- Fitness States -------------------------------------------------------------
+let fitnessData = null;
+
+async function loadFitness(refresh){
+  if(!isRealPerson()) return null;
+  const personId = activePersonId;
+  if(!refresh && fitnessData && fitnessData._for === personId) return fitnessData;
+  let data = null;
+  try{
+    if(refresh){
+      const res = await apiPost('/api/fitness/refresh', { personId });
+      if(res?.fitness){
+        const r2 = await fetch('/api/fitness?personId=' + encodeURIComponent(personId), { cache:'no-store' });
+        data = r2.ok ? await r2.json() : { fitness: res.fitness, history: [] };
+      }
+    } else {
+      const res = await fetch('/api/fitness?personId=' + encodeURIComponent(personId), { cache:'no-store' });
+      if(res.ok) data = await res.json();
+    }
+  }catch(e){}
+  if(data){ data._for = personId; fitnessData = data; }
+  return data;
+}
+
+function sparkline(points){
+  if(points.length < 2) return '';
+  const vs = points.map(p=>p.v), lo = Math.min(...vs) - 0.5, hi = Math.max(...vs) + 0.5;
+  const W = 300, H = 60;
+  const xy = points.map((p,i)=>[i / (points.length - 1) * W, H - (p.v - lo) / (hi - lo) * H]);
+  return `<svg viewBox="-4 -4 ${W + 8} ${H + 8}" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${xy.map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join(' ')}"/><circle cx="${xy[xy.length-1][0]}" cy="${xy[xy.length-1][1]}" r="4" fill="var(--gold)"/></svg>`;
+}
+
+async function renderFitness(refresh){
+  if(!isRealPerson()){
+    $('fitHero').innerHTML = '';
+    $('fitTable').innerHTML = '<div class="fit-empty hint">Pick your name to see your Fitness States.</div>';
+    ['fitTrend','fitZones','fitSources','fitBadge'].forEach(id=> $(id).innerHTML = '');
+    return;
+  }
+  const data = await loadFitness(refresh);
+  if(currentPage !== 'training' || trainingView !== 'fitness') return;
+  const f = data?.fitness;
+  if(!f || !f.vdot){
+    $('fitBadge').innerHTML = '';
+    $('fitHero').innerHTML = f ? statTile(f.mpw ?? '–', 'mi / week (4 wk)') : '';
+    $('fitTable').innerHTML = `<div class="fit-empty"><div class="card-title" style="margin-bottom:6px;">No fitness data yet</div><div class="hint" style="margin-bottom:var(--sp-3);">Add your PRs (with dates) or connect your watch, and Hawks works out what you can race now.</div><div class="cluster" style="justify-content:center;"><button type="button" id="fitEmptyPrs">Add PRs</button><button type="button" class="ghost" id="fitEmptyWatch">Set up watch</button></div></div>`;
+    $('fitEmptyPrs').onclick = goToPrs;
+    $('fitEmptyWatch').onclick = ()=>{ setPage('you'); setYouView('settings'); };
+    ['fitTrend','fitZones','fitSources'].forEach(id=> $(id).innerHTML = '');
+    return;
+  }
+  const conf = { high:'tone-int-1', medium:'tone-int-2', low:'tone-cross' };
+  $('fitBadge').innerHTML = `<span class="badge ${conf[f.confidence] || ''}">${cap(f.confidence)} confidence</span>`;
+  const fiveK = f.estimates.find(e=>e.event === '5K');
+  const mpwDelta = f.mpw_prev ? Math.round((f.mpw - f.mpw_prev) * 10) / 10 : null;
+  $('fitHero').innerHTML = statTile(f.vo2max, 'VO2max (est.)') + statTile(fiveK.time, '5K now') + statTile(f.mpw, `mi/wk${mpwDelta !== null ? ` (${mpwDelta >= 0 ? '+' : ''}${mpwDelta})` : ''}`);
+  const prs = parsePrsClient(people.find(x=>x.id===activePersonId)?.prs);
+  const prFor = { '1600':'1600', '3200':'3200', '5K':'5K', '400':'400', '800':'800' };
+  $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
+    const pr = prFor[e.event] && prs[prFor[e.event]]?.time;
+    return `<div class="fit-row"><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
+  }).join('');
+  const hist = (data.history || []).filter(h=>h.vdot).map(h=>({ v: h.vdot, d: h.date }));
+  const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';
+  $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">VO2max estimate over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');
+  $('fitZones').innerHTML = pacesHtml(f.zones);
+  const kindLabel = { race:'Race', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate' };
+  $('fitSources').innerHTML = f.sources.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label)}</div><div class="list-meta">${kindLabel[x.kind] || x.kind}${x.date ? ' · ' + escapeHtml(x.date) : ''}${x.vdot ? ' · VDOT ' + x.vdot : ''} · weight ${Math.round(x.weight * 100)}%</div></div></div>`).join('')
+    + `<div class="hint" style="margin-top:var(--sp-2);">Profile: ${f.profile === 'speed' ? 'speed-leaning (your short races are relatively stronger)' : f.profile === 'endurance' ? 'endurance-leaning (your long races are relatively stronger)' : 'balanced'}.${f.cs ? ` Critical velocity ${f.cs.per_mile}/mi.` : ''}</div>`;
+}
+
+// --- Team mileage -----------------------------------------------------------------
+let teamSort = 'this_week';
+async function renderTeam(){
+  let data = null;
+  try{ const res = await fetch('/api/team', { cache:'no-store' }); if(res.ok) data = await res.json(); }catch(e){}
+  if(currentPage !== 'team') return;
+  if(!data){ $('teamLeader').innerHTML = '<div class="hint">Couldn’t load team mileage. Check your connection.</div>'; return; }
+  const logging = data.athletes.filter(a=>a.this_week > 0).length;
+  const delta = Math.round((data.this_week - data.last_week) * 10) / 10;
+  $('teamStats').innerHTML = statTile(data.this_week, 'miles this week') + statTile(data.last_week, 'last week') + statTile(`${logging}/${data.athletes.length}`, 'athletes logged');
+  $('teamHint').textContent = `Week of ${new Date(data.week_of + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}. ${delta >= 0 ? '+' : ''}${delta} mi vs last week so far. Watch runs and hand-logged days both count.`;
+  const max = Math.max(1, ...data.weeks.map(w=>w.miles));
+  $('teamBars').innerHTML = data.weeks.map((w,i)=>`<div class="team-bar ${i === data.weeks.length - 1 ? 'cur' : ''}" title="${w.athletes} athletes"><b>${Math.round(w.miles)}</b><i style="height:${Math.max(2, w.miles / max * 82)}%"></i><span>${new Date(w.week_of + 'T12:00:00').toLocaleDateString(undefined,{month:'numeric',day:'numeric'})}</span></div>`).join('');
+  paintSeg('teamSort', 'sort', teamSort);
+  const rows = [...data.athletes].sort((a,b)=> b[teamSort] - a[teamSort] || b.avg4 - a.avg4 || a.name.localeCompare(b.name));
+  const top = Math.max(1, ...rows.map(r=>r[teamSort]));
+  $('teamLeader').innerHTML = rows.map((r,i)=>`<div class="leader-row ${r.id === activePersonId ? 'me' : ''}">
+      <span class="rk">${r[teamSort] > 0 ? i + 1 : '–'}</span>
+      <span class="nm"><span class="dot" style="background:${r.color}"></span><span>${escapeHtml(r.name)}</span>${r.watch ? '<small title="Watch connected">⌚</small>' : ''}</span>
+      <span class="bar"><i style="width:${r[teamSort] / top * 100}%"></i></span>
+      <span class="mi">${r[teamSort] || '–'}</span>
+      <span class="sub">${r.days_this_week} ${r.days_this_week === 1 ? 'day' : 'days'} this week · ${r.avg4} avg · ${r.last_week} last week${r.class_year ? ' · ' + escapeHtml(r.class_year) : ''}</span>
+    </div>`).join('');
+}
+
+function openCalendarDay(date){
+  const d = new Date(date + 'T12:00:00');
+  viewYear = d.getFullYear(); viewMonth = d.getMonth(); selectedDate = date;
+  setPage('schedule'); setScheduleView('calendar');
+  renderCalendar(); renderDayDetail();
 }
 
 async function renderTraining(){
   $('tpViews').querySelectorAll('[data-tview]').forEach(b=>{ const on = b.dataset.tview === trainingView; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
+  if(!['plan','log','library','fitness'].includes(trainingView)) trainingView = 'plan';
   $('tpPlanView').style.display = trainingView === 'plan' ? '' : 'none';
   $('tpLogView').style.display = trainingView === 'log' ? '' : 'none';
   $('tpLibraryView').style.display = trainingView === 'library' ? '' : 'none';
+  $('tpFitnessView').style.display = trainingView === 'fitness' ? '' : 'none';
   const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
-  $('trTitle').textContent = { plan: p ? `${p.first_name || p.name.split(' ')[0]}’s plan` : 'Training plans', log: 'Training log', library: 'Workouts' }[trainingView];
+  $('trTitle').textContent = { plan: p ? `${p.first_name || p.name.split(' ')[0]}’s plan` : 'Training plans', log: 'Training log', library: 'Workouts', fitness: 'Fitness States' }[trainingView];
   if(trainingView === 'log') return renderTrainingLog();
   if(trainingView === 'library') return renderLibrary();
-  renderCoachRuns();
-  renderAsk();
+  if(trainingView === 'fitness') return renderFitness();
+  renderWeekCard();
+  renderHawkyCard();
   const own = isRealPerson();
   const grade = TRAINING_GRADES.includes(trainingGrade) ? trainingGrade : 'Freshman';
   const key = own ? 'p:' + activePersonId : 'g:' + grade;
@@ -4513,6 +5357,7 @@ function closeWelcome(){ $('welcomeOverlay').classList.remove('show'); }
 function chooseUser(personId){
   selectPerson(personId);
   closeWelcome();
+  autoSync();
 }
 
 function showWelcome(){
@@ -4549,7 +5394,9 @@ async function init(){
   wireUI();
   setAvailabilityVisible(showAvailability);
   renderEventTypePicker();
-  setPage('calendar');
+  let startPage = 'schedule';
+  try{ startPage = localStorage.getItem('hawksPage') || 'schedule'; }catch(e){}
+  setPage(startPage);
   await loadState();
   renderAll();
   showWelcome();
@@ -4561,7 +5408,8 @@ async function init(){
     const formOpen = $('newPersonRow').classList.contains('show')
       || $('editPersonRow').classList.contains('show')
       || $('eventFormRow').classList.contains('show')
-      || editMode;
+      || editMode
+      || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
     if(formOpen) return;
     await loadState();
     renderAll();

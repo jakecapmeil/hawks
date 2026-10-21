@@ -353,3 +353,158 @@ export function findWorkouts({ type, race, phase, level, max_min, min_min, q } =
     && (!min_min || w.total_min >= min_min)
     && (!query || `${w.name} ${w.main} ${w.purpose} ${w.source}`.toLowerCase().includes(query)));
 }
+
+// ------------------------------------------------------------------ parsing
+
+const MILE_M = 1609.344;
+const toSec = (s) => {
+  const p = String(s).split(':').map(Number);
+  return p.some((x) => !Number.isFinite(x)) ? null : p.reduce((a, x) => a * 60 + x, 0);
+};
+
+// Work reps out of a splits line: "800m 2:45 (5:32/mi, 178); 1 mi 5:40" or
+// "800 2:45, 800 2:44". Plain times with no distance ("6:47, 6:33") can't be
+// turned into paces, so they give nothing.
+export function parseReps(text) {
+  const out = [];
+  const re = /(\d+(?:\.\d+)?)\s*(m|k|km|mi|mile)?\s+(\d{1,2}:\d{2}(?:\.\d)?|\d{2,3}(?:\.\d)?\s*s)\b/gi;
+  for (const m of String(text || '').matchAll(re)) {
+    const n = Number(m[1]);
+    const unit = (m[2] || '').toLowerCase();
+    const meters = unit === 'k' || unit === 'km' ? n * 1000 : unit === 'mi' || unit === 'mile' ? n * MILE_M : n;
+    const s = m[3].includes(':') ? toSec(m[3]) : Number(m[3].replace(/s/i, ''));
+    if (meters >= 100 && meters <= 10000 && s > 10) out.push({ m: Math.round(meters), s });
+  }
+  return out;
+}
+
+// Zone a phrase refers to: "5K pace + 15 s/mi", "3200-5K pace", "threshold",
+// "goal mile pace", "half-marathon pace". Returns { keys, offset } or null.
+const ZONE_WORDS = [
+  [/half[- ]?marathon|goal half|\btempo\b/, 'tempo'],
+  [/threshold/, 'threshold'],
+  [/\bsteady\b|marathon/, 'steady'],
+  [/\b10k\b/, '10k'],
+  [/\b5k\b/, '5k'],
+  [/\b3200\b|\b2 ?mile\b|\b3k\b/, '3200'],
+  [/\bmile\b|\b1600\b|\b1500\b/, 'mile'],
+  [/\b800\b/, '800'],
+  [/\b400\b/, '400'],
+  [/\beasy\b|\bfloat\b|\bjog\b/, 'easy'],
+];
+
+export function zoneOf(text) {
+  const t = String(text || '').toLowerCase();
+  const between = t.match(/(?:between\s+)?(mile|1600|3200|5k|10k)\s*(?:-|and|to)\s*(mile|1600|3200|5k|10k)\s*(?:pace|effort)/);
+  const norm = (k) => (k === '1600' ? 'mile' : k);
+  const offset = (() => {
+    const o = t.match(/([+-])\s*(\d{1,2})(?:-(\d{1,2}))?\s*(?:s|sec)/);
+    if (!o) return 0;
+    const v = o[3] ? (Number(o[2]) + Number(o[3])) / 2 : Number(o[2]);
+    return o[1] === '-' ? -v : v;
+  })();
+  if (between) return { keys: [norm(between[1]), norm(between[2])], offset };
+  const at = t.match(/(?:at|@)\s+([^,;()]+)/);
+  // The zone named first wins ("5K pace (plans 3-5). Newer runners: threshold").
+  for (const scope of [at?.[1], t]) {
+    if (!scope) continue;
+    let best = null;
+    for (const [re, key] of ZONE_WORDS) {
+      // A distance word is only a zone when "pace" or "effort" follows it.
+      const full = ['10k', '5k', '3200', 'mile', '800', '400'].includes(key) ? new RegExp(`(?:${re.source})[^,;]{0,12}(pace|effort)`) : re;
+      const m = scope.match(full);
+      if (m && (!best || m.index < best.index)) best = { index: m.index, key };
+    }
+    if (best) return { keys: [best.key], offset };
+  }
+  return null;
+}
+
+// Each work segment of a session: "6x800 at 5K pace" -> { reps: 6, m: 800 }.
+export function segmentsOf(main) {
+  const flat = String(main || '').replace(/\(([^)]*)\)/g, (_, inner) => '(' + inner.replace(/,/g, ' /') + ')');
+  const out = [];
+  for (let clause of flat.split(/[,;]|\bthen\b|\binto\b/i)) {
+    clause = clause.split(/\bwith\b|\bfull\b/i)[0].trim();
+    if (!clause || /\b(wu|cd|warm|cool|drills|walk)\b/i.test(clause) && !/\d+\s*x/i.test(clause)) continue;
+    // Ladders: "400-800-1200-800-400 ..." or "2K - 1600 - 800 - 400 at ...".
+    const ladder = clause.match(/^(\d+(?:\.\d+)?k?\s*(?:-\s*\d+(?:\.\d+)?k?\s*){2,})/i);
+    if (ladder) {
+      const rest = clause.slice(ladder[0].length);
+      for (const part of [...new Set(ladder[1].split('-').map((x) => x.trim().toLowerCase()))]) {
+        const m = part.endsWith('k') ? Number(part.slice(0, -1)) * 1000 : Number(part);
+        if (m >= 100) out.push({ text: `${part} ${rest}`.trim(), reps: 1, m });
+      }
+      continue;
+    }
+    const reps = clause.match(/(\d+)\s*x\s*\(?\s*(\d+(?:\.\d+)?)\s*(k\b|m\b|mi\b|mile|miles|min|s\b|sec)?/i);
+    const single = clause.match(/^(?:am:|pm:)?\s*(\d+(?:\.\d+)?)(?:\s*-\s*\d+(?:\.\d+)?)?\s*(k\b|m\b|mi\b|mile|miles|min)?\b/i);
+    const hit = reps ? { n: Number(reps[1]), v: Number(reps[2]), u: (reps[3] || '').toLowerCase() } : single ? { n: 1, v: Number(single[1]), u: (single[2] || '').toLowerCase() } : null;
+    if (!hit) continue;
+    let m = null, sec = null;
+    if (hit.u === 'min') sec = hit.v * 60;
+    else if (hit.u === 's' || hit.u === 'sec') sec = hit.v;
+    else if (hit.u === 'k') m = hit.v * 1000;
+    else if (hit.u.startsWith('mi')) m = hit.v * MILE_M;
+    else if (hit.v >= 100) m = hit.v;
+    else continue;
+    // "6x(1 min on / 1 min easy)": only the part before the slash is work.
+    if (m && m < 150) continue; // strides
+    out.push({ text: clause.split(' /')[0], reps: hit.n, m, sec });
+  }
+  return out;
+}
+
+// Which picker tile a workout belongs to.
+export function workoutGroup(w) {
+  if (['tempo', 'threshold', 'progression', 'steady'].includes(w.type)) return 'tempo';
+  if (w.type === 'fartlek') return 'fartlek';
+  if (['easy', 'long', 'strides'].includes(w.type)) return 'aerobic';
+  const segs = segmentsOf(w.main).filter((s) => s.reps > 1 || s.m);
+  const longest = Math.max(0, ...segs.map((s) => s.m || (s.sec ? s.sec * 4 : 0)));
+  if (w.type === 'time_trial') return 'race';
+  return longest >= 750 ? 'long' : 'short';
+}
+
+export const WORKOUT_GROUPS = {
+  tempo: 'Tempo',
+  short: 'Short intervals',
+  long: 'Long intervals',
+  fartlek: 'Fartlek',
+  aerobic: 'Easy / long',
+  race: 'Time trials',
+};
+
+// The runner's own targets for a library workout, from their Fitness States:
+// [{ text: "6 x 800m", zone: "5K pace", per_mile: "5:46", per_rep: "2:52" }].
+export function workoutTargets(w, fitness) {
+  if (!fitness?.zones?.length) return [];
+  const zoneSec = (key) => {
+    const z = fitness.zones.find((x) => x.key === key);
+    return z ? (Array.isArray(z.sec) ? (z.sec[0] + z.sec[1]) / 2 : z.sec) : null;
+  };
+  const labelOf = (key) => fitness.zones.find((x) => x.key === key)?.label || key;
+  // Hill reps are run by effort, not pace.
+  if (w.type === 'hills') return [];
+  const TYPE_ZONE = { vo2: '5k', track: 'mile', threshold: 'threshold', tempo: 'tempo', fartlek: '5k', race_specific: '5k', steady: 'steady', progression: 'threshold' };
+  const fallback = zoneOf(w.paces) || (TYPE_ZONE[w.type] ? { keys: [TYPE_ZONE[w.type]], offset: 0 } : null);
+  const out = [];
+  const pacesFor = (m) => String(w.paces).split(/[,;]/).find((c) => m && new RegExp(`\\b${m}s?\\b`).test(c));
+  for (const seg of segmentsOf(w.main)) {
+    const z = zoneOf(seg.text) || zoneOf(pacesFor(seg.m)) || (seg.reps > 1 || seg.m ? fallback : null);
+    if (!z || z.keys[0] === 'easy') continue;
+    const secs = z.keys.map(zoneSec).filter(Boolean);
+    if (!secs.length) continue;
+    const pace = secs.reduce((a, b) => a + b, 0) / secs.length + z.offset;
+    const fmt = (s) => { const r = Math.round(s * 10) / 10; const m = Math.floor(r / 60); const ss = r - m * 60; return m ? `${m}:${(s < 120 ? ss.toFixed(1) : String(Math.round(ss))).padStart(s < 120 ? 4 : 2, '0')}` : r.toFixed(1); };
+    const miles = seg.m / MILE_M;
+    const dist = seg.m ? (seg.m % 1000 === 0 && seg.m >= 1000 ? `${seg.m / 1000}K` : miles >= 0.99 && Math.abs(miles - Math.round(miles)) < 0.01 ? (Math.round(miles) === 1 ? '1 mile' : `${Math.round(miles)} mi`) : `${Math.round(seg.m)}m`) : seg.sec >= 60 ? `${seg.sec / 60} min` : `${seg.sec}s`;
+    out.push({
+      text: seg.reps > 1 ? `${seg.reps} x ${dist}` : dist,
+      zone: z.keys.map(labelOf).join(' - ').replace(/ pace - /, ' - ') + (z.offset ? ` ${z.offset > 0 ? '+' : ''}${z.offset}s/mi` : ''),
+      per_mile: fmt(pace),
+      per_rep: seg.m ? fmt((pace / MILE_M) * seg.m) : `~${Math.round((seg.sec / pace) * MILE_M / 10) * 10}m`,
+    });
+  }
+  return out;
+}

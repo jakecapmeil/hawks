@@ -1,7 +1,11 @@
 // Daily training log: one row per person per day, merged with whatever Claude
 // Coach logged from Strava that day. Same idea as the XC Coach Log in Notion:
 // planned vs actual, status, difficulty, notes, and a rolling load note.
-import { WORKOUTS, WORKOUT_TYPES, RACES, PHASES, PACE_ZONES, pacesFrom5k, findWorkouts } from './workouts.js';
+import { WORKOUTS, WORKOUT_TYPES, RACES, PHASES, PACE_ZONES, pacesFrom5k, findWorkouts, workoutTargets, parseReps } from './workouts.js';
+import { getFitness } from './fitness.js';
+
+// Marks Fitness States stale so the next read recomputes them.
+const staleFitness = (db, personId) => db.prepare('UPDATE fitness_states SET computed_at = 0 WHERE person_id = ?').bind(personId).run();
 
 export class LogError extends Error {}
 
@@ -41,13 +45,125 @@ function round1(n) {
   return Math.round(n * 100) / 100;
 }
 
+const fmtSec = (s) => {
+  if (!Number.isFinite(s)) return '';
+  const r = Math.round(s * 10) / 10;
+  const m = Math.floor(r / 60);
+  const ss = r - m * 60;
+  const whole = Math.abs(ss - Math.round(ss)) < 0.05;
+  return m ? `${m}:${(whole ? String(Math.round(ss)) : ss.toFixed(1)).padStart(whole ? 2 : 4, '0')}` : `${whole ? Math.round(ss) : ss.toFixed(1)}`;
+};
+
+// Split builder rows: [{ m: 800, s: 165.2, rest: '2:00' }].
+export function parseSplitReps(raw) {
+  try {
+    const arr = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw;
+    return Array.isArray(arr) ? arr.filter((r) => r && r.m > 0 && r.s > 0).map((r) => ({ m: Number(r.m), s: Number(r.s), rest: clip(r.rest, 12) })) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function splitsText(reps) {
+  return reps.map((r) => {
+    const pace = (r.s / r.m) * 1609.344;
+    return `${Math.round(r.m)}m ${fmtSec(r.s)} (${fmtSec(Math.round(pace))}/mi)${r.rest ? `, rest ${r.rest}` : ''}`;
+  }).join('; ');
+}
+
+// Watch laps (work reps) for the day, when nobody built splits by hand.
+function lapsOf(rs) {
+  for (const w of rs) {
+    try {
+      const laps = JSON.parse(w.laps || '[]');
+      if (Array.isArray(laps) && laps.length) return laps.map((l) => ({ m: l.m, s: l.s, hr: l.hr || null, rest: '' }));
+    } catch { /* ignore */ }
+  }
+  return [];
+}
+
+// Activities less than 75 min apart (end to start) are one session: warm-up,
+// workout and cool-down saved as separate activities read as one workout.
+// Hawky's report for a session lives on its main activity.
+const RANK = { race: 6, workout: 5, long: 4, easy: 3, shakeout: 2, recovery: 1, crosstrain: 0 };
+const toMin = (hhmm) => { const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+
+export function sessionsOf(rs) {
+  const groups = [];
+  for (const w of rs) {
+    const start = toMin(w.start_local);
+    const last = groups[groups.length - 1];
+    const sameKind = last && (w.category === 'crosstrain') === (last.items[0].category === 'crosstrain');
+    const close = last && (start === null || last.end === null || start - last.end <= 75);
+    if (last && sameKind && close) last.items.push(w);
+    else groups.push({ items: [w], end: null });
+    const g = groups[groups.length - 1];
+    g.end = start === null ? null : start + Math.round((w.elapsed_sec || w.moving_sec || 0) / 60);
+  }
+  return groups.map(({ items }, i) => {
+    const main = items.reduce((a, b) => ((RANK[b.category] ?? 0) > (RANK[a.category] ?? 0) || ((RANK[b.category] ?? 0) === (RANK[a.category] ?? 0) && (b.distance_mi || 0) > (a.distance_mi || 0)) ? b : a));
+    const miles = items.reduce((a, w) => a + (w.distance_mi || 0), 0);
+    const sec = items.reduce((a, w) => a + (w.moving_sec || 0), 0);
+    const hr = items.filter((w) => w.avg_hr && w.moving_sec);
+    return {
+      key: `${main.date}#${i}`,
+      main_id: main.strava_id,
+      start: items[0].start_local || '',
+      category: main.category,
+      title: main.name || '',
+      miles: round1(miles),
+      minutes: Math.round(sec / 60),
+      pace: miles > 0.2 ? fmtSec(Math.round(sec / miles)) : null,
+      avg_hr: hr.length ? Math.round(hr.reduce((a, w) => a + w.avg_hr * w.moving_sec, 0) / hr.reduce((a, w) => a + w.moving_sec, 0)) : null,
+      effort: items.reduce((m, w) => Math.max(m, w.effort || 0), 0) || null,
+      report: main.summary || items.find((w) => w.summary)?.summary || '',
+      activities: items.map((w) => ({ id: w.strava_id, name: w.name, category: w.category, miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null, start: w.start_local || '' })),
+    };
+  });
+}
+
+// How the whole day compared with the plan. Replaces the old per-activity
+// letter grades, which compared a warm-up on its own to the full day's miles.
+const HARD_CATS = new Set(['workout', 'race']);
+export function dayPlanTag(rs, miles, maxEffort) {
+  const planned = rs.find((w) => w.planned_type);
+  if (!planned) return null;
+  const type = planned.planned_type.toLowerCase();
+  const want = planned.planned_miles || 0;
+  const cats = new Set(rs.map((w) => w.category));
+  const ranHard = [...cats].some((c) => HARD_CATS.has(c));
+  const running = [...cats].some((c) => c !== 'crosstrain');
+  let tone = 'on';
+  let reason = '';
+  if (type === 'off' || want === 0) {
+    if (running) { tone = 'off'; reason = 'Planned rest day'; } else reason = 'Rest day';
+  } else if ((type === 'workout' || type === 'race') && !ranHard) {
+    tone = 'close'; reason = 'Workout day, ran easy';
+  } else if (type !== 'workout' && type !== 'race' && (ranHard || maxEffort >= 7)) {
+    tone = 'off'; reason = 'Too hard for an easy day';
+  }
+  if (want > 0 && running) {
+    const diff = miles - want;
+    const miss = Math.abs(diff) / want;
+    if (miss > 0.1) {
+      const d = `${diff < 0 ? 'Short' : 'Long'} by ${Math.round(Math.abs(diff) * 10) / 10} mi`;
+      reason = reason ? `${reason}, ${d.toLowerCase()}` : d;
+      // Running a bit long is less of a miss than running short.
+      if (miss > (diff < 0 ? 0.3 : 0.5)) tone = 'off'; else if (tone === 'on') tone = 'close';
+    }
+  }
+  return { tone, label: tone === 'on' ? 'On plan' : tone === 'close' ? 'Close to plan' : 'Off plan', reason: reason || `${planned.planned_type} ${want ? want + ' mi' : ''}`.trim(), planned: `${planned.planned_type}${want ? ' ' + want + ' mi' : ''}` };
+}
+
 export async function getDays(db, personId, from, to) {
   if (!isDate(from) || !isDate(to)) throw new LogError('from and to must be YYYY-MM-DD');
   if (from > to) throw new LogError('from must be on or before to');
   const [days, runs] = await Promise.all([
     db.prepare('SELECT * FROM training_days WHERE person_id = ? AND date >= ? AND date <= ?').bind(personId, from, to).all(),
     db.prepare(
-      'SELECT strava_id, date, name, category, distance_mi, moving_sec, avg_hr, effort, load, rating, library_id FROM workouts WHERE person_id = ? AND date >= ? AND date <= ? ORDER BY created_at'
+      `SELECT strava_id, date, name, category, distance_mi, moving_sec, elapsed_sec, avg_hr, effort, load, library_id, summary,
+              start_local, laps, planned_type, planned_miles
+       FROM workouts WHERE person_id = ? AND date >= ? AND date <= ? ORDER BY start_local, created_at`
     ).bind(personId, from, to).all(),
   ]);
 
@@ -65,17 +181,26 @@ export async function getDays(db, personId, from, to) {
     const types = new Set(parseTypes(e?.types));
     rs.forEach((w) => types.add(CATEGORY_TYPE[w.category] || 'easy'));
     const maxEffort = rs.reduce((m, w) => Math.max(m, w.effort || 0), 0);
+    const reps = parseSplitReps(e?.split_reps);
     return {
       date,
+      // Watch days are locked: miles, minutes, runs and difficulty come from
+      // the synced activities and can't be typed over.
+      locked: rs.length > 0,
       miles: rs.length ? round1(stravaMiles) : (e?.manual_miles ?? null),
       minutes: rs.length ? Math.round(rs.reduce((s, w) => s + (w.moving_sec || 0), 0) / 60) : (e?.minutes ?? null),
       runs: rs.length ? running.length : (e?.runs ?? null),
-      difficulty: e?.difficulty ?? (maxEffort || null),
+      difficulty: rs.length ? (maxEffort || null) : (e?.difficulty ?? null),
       types: [...types],
       status: e?.status || '',
       planned: e?.planned || '',
       library_id: e?.library_id || rs.find((w) => w.library_id)?.library_id || '',
       splits: e?.splits || '',
+      // Hand-built reps win, then the watch laps, then whatever the splits text says.
+      split_reps: reps.length ? reps : lapsOf(rs).length ? lapsOf(rs) : parseReps(e?.splits).map((r) => ({ ...r, rest: '' })),
+      day_line: e?.day_line || '',
+      plan: dayPlanTag(rs, stravaMiles, maxEffort),
+      sessions: sessionsOf(rs),
       summary: e?.summary || '',
       coach_note: e?.coach_note || '',
       load_note: e?.load_note || '',
@@ -84,7 +209,7 @@ export async function getDays(db, personId, from, to) {
       strength: !!e?.strength,
       notes: e?.notes || '',
       load: rs.reduce((s, w) => s + (w.load || 0), 0) || null,
-      strava: rs.map((w) => ({ strava_id: w.strava_id, name: w.name, category: w.category, miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null, avg_hr: w.avg_hr, effort: w.effort, rating: w.rating })),
+      strava: rs.map((w) => ({ strava_id: w.strava_id, name: w.name, category: w.category, miles: w.distance_mi, minutes: w.moving_sec ? Math.round(w.moving_sec / 60) : null, avg_hr: w.avg_hr, effort: w.effort, start: w.start_local || '' })),
     };
   });
 }
@@ -105,6 +230,12 @@ const DAY_FIELDS = {
   planned: (v) => clip(v, 500),
   library_id: (v) => { const s = clip(v, 60); if (s && !WORKOUTS.some((w) => w.id === s)) throw new LogError(`Unknown library workout "${s}"`); return s; },
   splits: (v) => clip(v, 500),
+  split_reps: (v) => {
+    const reps = parseSplitReps(v);
+    if (reps.length > 40) throw new LogError('At most 40 reps');
+    return reps.length ? JSON.stringify(reps) : '';
+  },
+  day_line: (v) => clip(v, 300),
   summary: (v) => clip(v, 4000),
   coach_note: (v) => clip(v, 4000),
   load_note: (v) => clip(v, 4000),
@@ -118,6 +249,7 @@ export async function saveDay(db, personId, date, fields) {
   if (!isDate(date)) throw new LogError('date must be YYYY-MM-DD');
   const person = await db.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first();
   if (!person) throw new LogError('Unknown person');
+  if (fields && 'split_reps' in fields && !('splits' in fields)) fields = { ...fields, splits: splitsText(parseSplitReps(fields.split_reps)) };
   const cols = [];
   const vals = [];
   for (const [k, fn] of Object.entries(DAY_FIELDS)) {
@@ -176,8 +308,9 @@ export async function fiveKFor(db, personId) {
 export async function setFiveK(db, personId, time) {
   const t = clip(time, 8);
   if (t && !pacesFrom5k(t)) throw new LogError('5K time must look like 19:25');
-  const res = await db.prepare('UPDATE people SET five_k_time = ? WHERE id = ?').bind(t, personId).run();
+  const res = await db.prepare('UPDATE people SET five_k_time = ?, five_k_set_at = ? WHERE id = ?').bind(t, t ? Date.now() : null, personId).run();
   if (!res.meta.changes) throw new LogError('Unknown person');
+  await staleFitness(db, personId);
   return { five_k_time: t, paces: pacesFrom5k(t) };
 }
 
@@ -212,6 +345,7 @@ export async function setPrs(db, personId, prs) {
   }
   const res = await db.prepare('UPDATE people SET prs = ? WHERE id = ?').bind(JSON.stringify(current), personId).run();
   if (!res.meta.changes) throw new LogError('Unknown person');
+  await staleFitness(db, personId);
   return { prs: current };
 }
 
@@ -230,8 +364,13 @@ export function searchLibrary(args) {
 export async function getLibraryWorkout(db, personId, id) {
   const w = WORKOUTS.find((x) => x.id === id);
   if (!w) throw new LogError(`Unknown library workout "${id}"`);
-  const fiveK = personId ? await fiveKFor(db, personId) : '';
-  return { ...w, your_paces: fiveK ? { five_k_time: fiveK, paces: pacesFrom5k(fiveK) } : 'Set a 5K time (set_5k_time) to get personal paces.' };
+  const fitness = personId ? await getFitness(db, personId, new Date().toISOString().slice(0, 10)) : null;
+  if (!fitness?.vdot) return { ...w, your_targets: 'No Fitness States yet: add PRs (set_prs) or sync the watch to get personal paces.' };
+  return {
+    ...w,
+    your_targets: workoutTargets(w, fitness),
+    your_paces: Object.fromEntries(fitness.zones.map((z) => [z.label, z.per_mile])),
+  };
 }
 
 // ------------------------------------------------------------------ MCP tools
@@ -245,7 +384,9 @@ const DAY_PROPS = {
   status: { type: 'string', enum: [...DAY_STATUSES, ''] },
   planned: { type: 'string', description: 'The planned session, as prescribed' },
   library_id: { type: 'string', description: 'Workout library id, when the session was a library workout (lets you track progress on it)' },
-  splits: { type: 'string', description: 'Rep splits, e.g. "6:47, 6:33, 6:24, 5:57"' },
+  splits: { type: 'string', description: 'Rep splits as text, e.g. "800m 2:45; 800m 2:44". Prefer split_reps.' },
+  split_reps: { type: 'array', description: 'Rep splits, one per rep: meters, seconds and the recovery after it', items: { type: 'object', properties: { m: { type: 'number' }, s: { type: 'number' }, rest: { type: 'string', description: 'e.g. "2:00" or "200m jog"' } }, required: ['m', 's'] } },
+  day_line: { type: 'string', description: "Hawky's one-line summary of the whole day" },
   summary: { type: 'string', description: 'What actually happened: dose, pace, HR, conditions, how it felt' },
   coach_note: { type: 'string', description: 'What was changed for upcoming days and why' },
   load_note: { type: 'string', description: 'Standing read on the last 7-10 days, carried forward' },
@@ -273,7 +414,7 @@ export function logTools(withPerson) {
   return [
     {
       name: 'get_training_log',
-      description: `Daily training log${withPerson ? ' for one person' : ''} between two dates (default: last 28 days): miles, runs, difficulty, run types, status vs plan, planned session, splits, summary and coach notes per day, plus Mon-Sun weekly totals. Strava runs logged through Claude Coach are merged in automatically.`,
+      description: `Daily training log${withPerson ? ' for one person' : ''} between two dates (default: last 28 days): miles, runs, difficulty, run types, status vs plan, planned session, splits, summary and coach notes per day, plus Mon-Sun weekly totals. Runs synced from the watch or logged through Hawky are merged in automatically, grouped into sessions with a plan tag per day.`,
       inputSchema: { type: 'object', required: req, properties: { ...person, from: { type: 'string' }, to: { type: 'string' } }, additionalProperties: false },
     },
     {
@@ -288,7 +429,7 @@ export function logTools(withPerson) {
     },
     {
       name: 'get_workout',
-      description: "Full details of one library workout: structure, paces, recovery, purpose, coaching cues and how to progress it, plus the runner's own paces when their 5K time is set.",
+      description: "Full details of one library workout: structure, paces, recovery, purpose, coaching cues and how to progress it, plus the runner's own rep targets and pace zones from their Fitness States.",
       inputSchema: { type: 'object', required: [...req, 'id'], properties: { ...person, id: { type: 'string' } }, additionalProperties: false },
     },
     {
