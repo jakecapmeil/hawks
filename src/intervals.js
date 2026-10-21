@@ -318,7 +318,9 @@ function stravaNote(res) {
 // Resting HR, HRV and sleep for the last 5 weeks (Garmin sends them to
 // intervals.icu when the watch is worn overnight). One request per sync.
 async function syncWellness(env, person, key, today) {
-  const oldest = todayInTz(new Date(Date.now() - 35 * 86400000));
+  // A year the first time (to line Garmin's VO2max up with past races), then 5 weeks.
+  const have = await env.DB.prepare('SELECT COUNT(*) AS n FROM wellness WHERE person_id = ?').bind(person.id).first();
+  const oldest = todayInTz(new Date(Date.now() - (have?.n > 60 ? 35 : 365) * 86400000));
   let rows;
   try {
     rows = await icu(key, `${athletePath(person.icu_athlete)}/wellness?oldest=${oldest}&newest=${today}`, env);
@@ -330,14 +332,58 @@ async function syncWellness(env, person, key, today) {
       hrv: w.hrv > 5 && w.hrv < 300 ? w.hrv : null,
       sleep: w.sleepSecs > 3600 && w.sleepSecs < 16 * 3600 ? Math.round((w.sleepSecs / 3600) * 10) / 10 : null,
       score: w.sleepScore > 0 && w.sleepScore <= 100 ? w.sleepScore : null,
+      vo2: (w.vo2max ?? w.VO2max) > 20 && (w.vo2max ?? w.VO2max) < 95 ? (w.vo2max ?? w.VO2max) : null,
+      ctl: Number.isFinite(w.ctl) ? Math.round(w.ctl * 10) / 10 : null,
+      atl: Number.isFinite(w.atl) ? Math.round(w.atl * 10) / 10 : null,
     }))
-    .filter((w) => w.rhr || w.hrv || w.sleep);
+    .filter((w) => w.rhr || w.hrv || w.sleep || w.vo2 || w.ctl != null);
+  // Field names come from a community doc, so note what intervals.icu actually sends.
+  if (rows?.length) console.log('wellness fields', Object.keys(rows[rows.length - 1]).filter((k) => rows[rows.length - 1][k] != null).join(','));
   if (!good.length) return 0;
-  await env.DB.batch(good.map((w) => env.DB.prepare(
-    `INSERT INTO wellness (person_id, date, resting_hr, hrv, sleep_hours, sleep_score) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(person_id, date) DO UPDATE SET resting_hr = excluded.resting_hr, hrv = excluded.hrv, sleep_hours = excluded.sleep_hours, sleep_score = excluded.sleep_score`
-  ).bind(person.id, w.date, w.rhr, w.hrv, w.sleep, w.score)));
+  const stmts = good.map((w) => env.DB.prepare(
+    `INSERT INTO wellness (person_id, date, resting_hr, hrv, sleep_hours, sleep_score, vo2max, ctl, atl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(person_id, date) DO UPDATE SET resting_hr = excluded.resting_hr, hrv = excluded.hrv, sleep_hours = excluded.sleep_hours,
+       sleep_score = excluded.sleep_score, vo2max = excluded.vo2max, ctl = excluded.ctl, atl = excluded.atl`
+  ).bind(person.id, w.date, w.rhr, w.hrv, w.sleep, w.score, w.vo2, w.ctl, w.atl));
+  for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   return good.length;
+}
+
+// Best efforts inside any run over the last year (intervals.icu's pace curve:
+// fastest time for each distance, with the activity it came from). One
+// request per sync; anything unexpected in the response is skipped.
+const EFFORT_METERS = [400, 800, 1000, 1600, 1609, 3200, 5000, 8000, 10000];
+async function syncBestEfforts(env, person, key) {
+  let res;
+  try {
+    res = await icu(key, `${athletePath(person.icu_athlete)}/pace-curves?type=Run&curves=1y`, env);
+  } catch (err) {
+    console.log('pace-curves failed', err.message);
+    return 0;
+  }
+  const curve = (Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : [])[0];
+  if (!curve) { console.log('pace-curves: no list', Object.keys(res || {}).join(',')); return 0; }
+  console.log('pace-curve fields', Object.keys(curve).join(','), 'n', curve.distance?.length);
+  const dist = curve.distance || [];
+  // Time per point: secs if it grows with distance at running speeds, else values.
+  const plausible = (arr) => Array.isArray(arr) && arr.length === dist.length && dist.every((d, i) => !d || !arr[i] || (d / arr[i] > 1.5 && d / arr[i] < 9.5));
+  const times = plausible(curve.secs) ? curve.secs : plausible(curve.values) ? curve.values : null;
+  if (!times) { console.log('pace-curve: no usable times'); return 0; }
+  const acts = res?.activities || {};
+  const rows = [];
+  for (const m of EFFORT_METERS) {
+    let best = -1;
+    dist.forEach((d, i) => { if (Math.abs(d - m) / m <= 0.01 && (best < 0 || Math.abs(d - m) < Math.abs(dist[best] - m))) best = i; });
+    if (best < 0 || !times[best]) continue;
+    const aid = String(curve.activity_id?.[best] || '');
+    const date = String(acts[aid]?.start_date_local || '').slice(0, 10) || null;
+    rows.push(env.DB.prepare(
+      `INSERT INTO best_efforts (person_id, meters, sec, date, activity_id, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(person_id, meters) DO UPDATE SET sec = excluded.sec, date = excluded.date, activity_id = excluded.activity_id, updated_at = excluded.updated_at`
+    ).bind(person.id, m, times[best] * (m / dist[best]), date, aid, Date.now()));
+  }
+  if (rows.length) await env.DB.batch(rows);
+  return rows.length;
 }
 
 export async function syncPerson(env, personId, { days } = {}) {
@@ -350,9 +396,11 @@ export async function syncPerson(env, personId, { days } = {}) {
     const oldest = days ? todayInTz(new Date(Date.now() - days * 86400000)) : (lastSyncDay || todayInTz(new Date(Date.now() - FIRST_SYNC_DAYS * 86400000)));
     const res = await importRange(env, person, key, { oldest, newest: today, ai: true, lapBudget: MAX_LAP_FETCHES });
     res.wellness_days = await syncWellness(env, person, key, today);
+    res.best_efforts = await syncBestEfforts(env, person, key);
     const note = [res.ai_note, stravaNote(res)].filter(Boolean).join(' ');
     await db.prepare('UPDATE people SET icu_synced_at = ?, icu_status = ? WHERE id = ?').bind(Date.now(), note ? `ok (${note})` : 'ok', person.id).run();
-    if (res.imported) await recomputeFitness(db, person.id, today);
+    // Always: the PR search and fitness re-run on everything, not just new runs.
+    await recomputeFitness(db, person.id, today);
     return { ...res, note: note || undefined };
   } catch (err) {
     throw await fail(env, person, err);

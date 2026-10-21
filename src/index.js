@@ -1,6 +1,6 @@
 import { PLANS, CLASS_YEAR_RANK, PLAN_VARIANTS } from './plans.js';
 import { logTools, callLogTool, LogError, getLog, saveDay, setDayTrack, libraryMeta, setFiveK, fiveKFor, setPrs, getPrs } from './log.js';
-import { WORKOUTS, WORKOUT_GROUPS, workoutGroup, workoutTargets } from './workouts.js';
+import { WORKOUTS, WORKOUT_GROUPS, workoutGroup, workoutTargets, personalWorkout } from './workouts.js';
 import { todayInTz, getCoachContext, compactFitness } from './coach.js';
 import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
@@ -1710,12 +1710,15 @@ export default {
 
       if (pathname === '/api/library' && request.method === 'GET') {
         const personId = str(reqUrl.searchParams.get('personId'), 100);
-        const person = personId ? await env.DB.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first() : null;
+        const person = personId ? await env.DB.prepare('SELECT id, class_year, plan_rank FROM people WHERE id = ?').bind(personId).first() : null;
         const fitness = person ? await getFitness(env.DB, personId, todayInTz()) : null;
+        // Each workout written for this runner: their plan level's variant,
+        // the session in words and goal splits from their Fitness States.
+        const rank = person ? (PLANS[person.plan_rank] ? Number(person.plan_rank) : CLASS_YEAR_RANK[person.class_year] ?? null) : null;
         return json({
           ...libraryMeta(),
           groups: WORKOUT_GROUPS,
-          workouts: WORKOUTS.map((w) => ({ ...w, group: workoutGroup(w), targets: workoutTargets(w, fitness) })),
+          workouts: WORKOUTS.map((w) => ({ ...w, group: workoutGroup(w), personal: personalWorkout(w, fitness?.vdot ? fitness : null, rank) })),
           fitness,
           five_k_time: person ? await fiveKFor(env.DB, personId) : '',
           prs: person ? await getPrs(env.DB, personId) : {},

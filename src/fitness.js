@@ -108,18 +108,24 @@ function addDays(dateKey, n) {
 
 async function loadInputs(db, personId, today) {
   const since = addDays(today, -365);
-  const [person, workouts, days, maxRow] = await Promise.all([
+  const [person, workouts, days, maxRow, meets, efforts, well] = await Promise.all([
     db.prepare('SELECT id, prs, five_k_time, five_k_set_at FROM people WHERE id = ?').bind(personId).first(),
     db.prepare(
-      `SELECT date, name, category, distance_mi, moving_sec, avg_hr, max_hr, elev_gain_ft, laps, surface
+      `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, load
        FROM workouts WHERE person_id = ? AND date >= ? ORDER BY date`
     ).bind(personId, since).all(),
     db.prepare(
       'SELECT date, manual_miles, splits, split_reps, surface FROM training_days WHERE person_id = ? AND date >= ?'
     ).bind(personId, since).all(),
     db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(personId).first(),
+    db.prepare("SELECT DISTINCT date FROM events WHERE type = 'meet' AND date >= ?").bind(since).all(),
+    db.prepare('SELECT meters, sec, date, activity_id FROM best_efforts WHERE person_id = ?').bind(personId).all(),
+    db.prepare('SELECT date, vo2max, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
   ]);
-  return { person, workouts: workouts.results, days: days.results, maxHr: maxRow?.m || null };
+  return {
+    person, workouts: workouts.results, days: days.results, maxHr: maxRow?.m || null,
+    meets: new Set(meets.results.map((r) => r.date)), efforts: efforts.results, wellness: well.results,
+  };
 }
 
 function parsePrs(raw) {
@@ -163,7 +169,16 @@ function rawReps(w, dayRow) {
 
 // ------------------------------------------------------------------ compute
 
-export function computeFitness({ person, workouts, days, maxHr }, today) {
+// Race distances a whole run can count as, by GPS distance (3%).
+const RACE_METERS = [1600, MILE, 3200, 2 * MILE, 4000, 5000, 3 * MILE, 6000, 8000, 10000];
+function raceDistance(m) {
+  for (const d of RACE_METERS) if (Math.abs(m - d) / d <= 0.03) return d;
+  return null;
+}
+// PR events a race distance updates, and the time scaled to that event.
+const PR_FOR = { 1600: '1600', [MILE]: '1600', 3200: '3200', [2 * MILE]: '3200', 5000: '5K' };
+
+export function computeFitness({ person, workouts, days, maxHr, meets = new Set(), efforts = [], wellness = [] }, today) {
   const sources = [];
   const prs = parsePrs(person?.prs);
 
@@ -190,12 +205,30 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
   }
 
   const hrMax = maxHr && maxHr >= 175 ? maxHr : null;
+  // The PR search: every run, whatever it was labelled, that covered a race
+  // distance at race effort (a meet, a race label, or 86%+ of max HR).
+  const prCandidates = [];
   for (const w of workouts) {
-    if (w.category !== 'race' || !w.distance_mi || !w.moving_sec || w.distance_mi < 0.9) continue;
-    // A "race" at easy heart rate was mislabelled (a jog, or a meet day warm-up).
-    if (hrMax && w.avg_hr && w.avg_hr / hrMax < 0.85) continue;
-    const m = snapDistance(w.distance_mi * MILE);
-    sources.push({ kind: 'race', max: true, m, s: w.moving_sec, age: ageDays(w.date, today), date: w.date, quality: 1, label: `${w.name || 'Race'} ${fmtTime(w.moving_sec)} (${w.date})` });
+    if (!w.distance_mi || !w.moving_sec || w.category === 'crosstrain') continue;
+    const m = raceDistance((w.raw_distance_mi ?? w.distance_mi) * MILE);
+    if (!m) continue;
+    const hrPct = hrMax && w.avg_hr ? w.avg_hr / hrMax : null;
+    const raceDay = w.category === 'race' || meets.has(w.date);
+    if (!(hrPct != null ? hrPct >= 0.86 || (raceDay && hrPct >= 0.8) : raceDay)) continue;
+    // Races are timed gun to finish: elapsed time, unless the watch was left running.
+    const t = w.elapsed_sec && w.elapsed_sec <= w.moving_sec * 1.05 ? w.elapsed_sec : w.moving_sec;
+    const label = `${raceDay ? 'Race' : 'Hard run'} ${m === MILE ? 'mile' : m === 2 * MILE ? '2 mi' : m === 3 * MILE ? '3 mi' : `${m >= 1000 && m % 1000 === 0 ? m / 1000 + 'K' : m + 'm'}`} in ${fmtTime(t)} (${w.date})`;
+    sources.push({ kind: 'race', max: true, m, s: t, age: ageDays(w.date, today), date: w.date, quality: raceDay ? 1 : 0.9, label });
+    if (PR_FOR[m]) prCandidates.push({ event: PR_FOR[m], sec: t * (m === MILE ? 1600 / MILE : m === 2 * MILE ? 3200 / (2 * MILE) : 1), date: w.date, name: w.name || '' });
+  }
+
+  // Fastest stretches inside any run (intervals.icu's pace curve). Real
+  // efforts, but often a split from a longer run, so a little less weight.
+  for (const e of efforts) {
+    if (!e.sec || !e.meters) continue;
+    const age = e.date ? ageDays(e.date, today) : 120;
+    if (age > 365) continue;
+    sources.push({ kind: 'best', max: true, m: e.meters, s: e.sec, age, date: e.date, quality: e.meters >= 1500 ? 0.7 : 0.6, label: `Fastest ${e.meters === 1609 ? 'mile' : e.meters >= 1000 && e.meters % 1000 === 0 ? e.meters / 1000 + 'K' : e.meters + 'm'} in a run: ${fmtTime(e.sec, { tenths: e.meters <= 800 })}${e.date ? ` (${e.date})` : ''}` });
   }
 
   // 2. Training: rep sessions.
@@ -242,10 +275,35 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
     }
   }
   if (hrEst.length >= 4) {
-    const top = hrEst.map((x) => x.est).sort((a, b) => b - a).slice(0, Math.ceil(hrEst.length / 2));
-    const med = top[Math.floor(top.length / 2)];
+    // The median of every steady run, not just the best ones: a hot day or a
+    // strap glitch shouldn't move it.
+    const all = hrEst.map((x) => x.est).sort((a, b) => a - b);
+    const med = all[Math.floor(all.length / 2)];
     const newest = hrEst.reduce((a, b) => (a.date > b.date ? a : b));
     sources.push({ kind: 'hr', max: false, vdot: med, age: newest.age, date: newest.date, quality: 0.35, label: `Heart rate on ${hrEst.length} steady runs (last 8 weeks)` });
+  }
+
+  // Garmin's VO2max (heart rate vs speed on steady runs, Firstbeat) tends to
+  // run high against race results, and by a different amount for each
+  // runner. Scale it by this runner's own ratio, from races run within two
+  // weeks of a Garmin reading; it then tracks fitness between races.
+  const garmin = wellness.filter((r) => r.vo2max);
+  const latestG = garmin[garmin.length - 1];
+  let garminRatio = null;
+  if (latestG) {
+    const gap = (a, b) => Math.abs(Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / DAY;
+    const ratios = sources.filter((x) => x.date && x.m >= 1500 && (x.kind === 'race' || x.kind === 'pr')).map((x) => {
+      const near = garmin.reduce((b, r) => (gap(r.date, x.date) < gap(b.date, x.date) ? r : b), garmin[0]);
+      return gap(near.date, x.date) <= 14 ? vdotOf(x.m, x.s) / near.vo2max : null;
+    }).filter(Boolean).sort((a, b) => a - b);
+    garminRatio = ratios.length ? ratios[Math.floor(ratios.length / 2)] : null;
+    const age = ageDays(latestG.date, today);
+    if (age <= 45) {
+      sources.push({
+        kind: 'garmin', max: false, vdot: latestG.vo2max * (garminRatio || 0.9), age, date: latestG.date, quality: garminRatio ? 0.6 : 0.25,
+        label: `Garmin VO2max ${round1(latestG.vo2max)}${garminRatio ? `, scaled to your races (x${garminRatio.toFixed(2)})` : ' (not yet matched to a race)'}`,
+      });
+    }
   }
 
   for (const s of sources) {
@@ -256,11 +314,25 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
     if (s.vdot) s.eff = s.vdot * (1 - clamp((s.age - 28) * 0.0004, 0, 0.06));
   }
 
+  // A recent race outranks older results and the self-entered 5K: older
+  // sources fade fast once there's something newer to go on.
+  const newestRace = Math.min(...sources.filter((x) => x.kind === 'race' || x.kind === 'pr' && x.date).map((x) => x.age), Infinity);
+  for (const x of sources) {
+    if (!x.max) continue;
+    if (x.kind === 'manual' && newestRace <= 75) x.weight = 0;
+    else if (x.age > newestRace + 45) x.weight *= 0.35;
+  }
+
   const wmean = (list) => {
     const w = list.reduce((a, s) => a + s.weight, 0);
     return w > 0 ? { v: list.reduce((a, s) => a + s.eff * s.weight, 0) / w, w, age: list.reduce((a, s) => a + s.age * s.weight, 0) / w } : null;
   };
-  const maxSrc = sources.filter((s) => s.max && s.eff);
+  // Races show what you can do; a much slower "race" was a hilly course, a
+  // bad day or a tempo effort. Drop results more than 3 VDOT points under
+  // the best recent race (last 120 days).
+  const recentBest = Math.max(...sources.filter((x) => x.max && x.eff && x.age <= 120 && x.quality >= 0.9).map((x) => x.eff), 0);
+  for (const x of sources) if (x.max && x.eff && recentBest && x.eff < recentBest - 3) x.weight = 0;
+  const maxSrc = sources.filter((s) => s.max && s.eff && s.weight > 0);
   const M = wmean(maxSrc);
   // Rep sets far below race fitness were easy running the watch split into
   // "intervals", not a real session.
@@ -294,7 +366,8 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
 
   if (!vdot) {
     return {
-      as_of: today, basis, vdot: null, vo2max: null, confidence: 'none', mpw, mpw_prev: mpwPrev,
+      as_of: today, basis, vdot: null, vo2max: latestG ? round1(latestG.vo2max) : null, vo2max_source: latestG ? 'Garmin' : null,
+      confidence: 'none', mpw, mpw_prev: mpwPrev, fitness_score: fitnessScore(workouts, wellness, today), pr_candidates: prCandidates,
       longest_28d: round1(cur.longest), estimates: [], zones: [], cs: null, speed_index: null,
       sources: [], note: 'Add a PR or connect your watch so Hawks can estimate your fitness.',
     };
@@ -321,7 +394,7 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
 
   // 3b. Critical speed from recent efforts of 2-20 minutes.
   // Max efforts only: rep sets are submaximal and flatten the curve.
-  const csPts = sources.filter((s) => s.max && s.kind !== 'manual' && s.m && s.s && s.age <= 180 && s.s >= 120 && s.s <= 1200);
+  const csPts = sources.filter((s) => s.max && s.weight > 0 && s.kind !== 'manual' && s.m && s.s && s.age <= 180 && s.s >= 120 && s.s <= 1200);
   let cs = null;
   if (csPts.length >= 2 && Math.max(...csPts.map((p) => p.m)) / Math.min(...csPts.map((p) => p.m)) >= 1.5) {
     const n = csPts.length;
@@ -350,7 +423,7 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
     // is; the model is pulled toward it (strongly for 400/800, where the
     // aerobic models are weakest).
     for (const s of sources) {
-      if (!s.max || s.kind === 'manual' || Math.abs(s.m - e.m) / e.m > 0.02) continue;
+      if (!s.max || s.kind === 'manual' || s.weight === 0 || Math.abs(s.m - e.m) / e.m > 0.02) continue;
       const w = recency(s.age, 90) * (e.m < 1500 ? 1.5 : 1) * s.quality;
       t = (t + w * s.s * (e.m / s.m)) / (1 + w);
     }
@@ -385,11 +458,20 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
 
   const real = maxSrc.filter((s) => s.kind !== 'manual');
   const overall = real.some((s) => s.age <= 90) ? 'high' : maxSrc.some((s) => s.age <= 365) ? 'medium' : 'low';
+  // VO2max: Garmin's own number when the watch sends it; else the same kind
+  // of heart-rate estimate Garmin makes; else race fitness.
+  const hrV = sources.find((x) => x.kind === 'hr');
+  const vo2 = latestG && ageDays(latestG.date, today) <= 45 ? { v: latestG.vo2max, src: 'Garmin' }
+    : hrV ? { v: hrV.vdot, src: 'heart rate on steady runs' } : { v: vdot, src: 'your races' };
   return {
     as_of: today,
     basis,
     vdot: round1(vdot),
-    vo2max: round1(vdot),
+    vo2max: round1(vo2.v),
+    vo2max_source: vo2.src,
+    garmin_ratio: garminRatio ? Math.round(garminRatio * 100) / 100 : null,
+    fitness_score: fitnessScore(workouts, wellness, today),
+    pr_candidates: prCandidates,
     confidence: overall,
     mpw, mpw_prev: mpwPrev, longest_28d: round1(cur.longest),
     estimates: EVENTS.map((e) => {
@@ -411,6 +493,41 @@ export function computeFitness({ person, workouts, days, maxHr }, today) {
   };
 }
 
+// Fitness score, like Strava's Fitness & Freshness (Banister's model):
+// fitness is the 42-day weighted average of daily training load, fatigue the
+// 7-day one, and form is fitness minus fatigue. intervals.icu's own numbers
+// are used when the sync brings them (they count every activity); otherwise
+// Hawks works them out from its load (minutes x effort).
+function fitnessScore(workouts, wellness, today) {
+  const icu = wellness.filter((r) => r.ctl != null);
+  const lastIcu = icu[icu.length - 1];
+  const series = [];
+  let fitness, fatigue, source;
+  if (lastIcu && ageDays(lastIcu.date, today) <= 3) {
+    fitness = lastIcu.ctl; fatigue = lastIcu.atl; source = 'intervals.icu';
+    icu.filter((r) => r.date >= addDays(today, -55)).forEach((r) => series.push({ date: r.date, fitness: r.ctl }));
+  } else {
+    const load = new Map();
+    workouts.forEach((w) => load.set(w.date, (load.get(w.date) || 0) + (w.load || 0)));
+    if (!load.size) return null;
+    let ctl = 0, atl = 0;
+    for (let i = 364; i >= 0; i--) {
+      const d = addDays(today, -i);
+      const L = load.get(d) || 0;
+      ctl += (L - ctl) / 42;
+      atl += (L - atl) / 7;
+      if (i <= 55) series.push({ date: d, fitness: round1(ctl) });
+    }
+    fitness = ctl; fatigue = atl; source = 'Hawks';
+  }
+  const ago = series.find((p) => p.date >= addDays(today, -28));
+  return {
+    fitness: Math.round(fitness), fatigue: Math.round(fatigue), form: Math.round(fitness - fatigue), source,
+    change_4wk: ago ? Math.round(fitness - ago.fitness) : null,
+    trend: series.filter((_, i) => i % 7 === series.length % 7 || i === series.length - 1).map((p) => ({ date: p.date, fitness: Math.round(p.fitness) })),
+  };
+}
+
 // 400 and 800 from the mile: distance runners hold pace better over short
 // races than a single Riegel exponent says, so the exponents are steeper.
 function shortFromMile(mileSec, meters) {
@@ -421,10 +538,31 @@ function shortFromMile(mileSec, meters) {
 
 // ------------------------------------------------------------------ storage
 
+// The PR search runs every time fitness is recomputed (every sync, PR edit
+// and log change): any race-effort run faster than the PR on file replaces it.
+function prsToUpdate(currentRaw, candidates) {
+  const cur = parsePrs(currentRaw);
+  const out = {};
+  for (const c of candidates) {
+    const have = parseTime((out[c.event] || cur[c.event])?.time);
+    if (have && have <= c.sec + 0.5) continue;
+    out[c.event] = { time: fmtTime(c.sec, { tenths: c.sec < 180 }), date: c.date, meet: `Found by Hawks${c.name && !/running$|^run$/i.test(c.name) ? `: ${c.name}` : ''}`, auto: true };
+  }
+  return out;
+}
+
 export async function recomputeFitness(db, personId, today) {
   const inputs = await loadInputs(db, personId, today);
   if (!inputs.person) return null;
+  const found = prsToUpdate(inputs.person.prs, computeFitness(inputs, today).pr_candidates || []);
+  if (Object.keys(found).length) {
+    const prs = { ...parsePrs(inputs.person.prs), ...found };
+    await db.prepare('UPDATE people SET prs = ? WHERE id = ?').bind(JSON.stringify(prs), personId).run();
+    inputs.person.prs = JSON.stringify(prs);
+  }
   const data = computeFitness(inputs, today);
+  data.new_prs = Object.entries(found).map(([event, v]) => ({ event, ...v }));
+  delete data.pr_candidates;
   const fiveK = data.estimates.find((e) => e.event === '5K');
   // Trend: the 5K estimate four weeks ago, from history.
   const old = await db.prepare(

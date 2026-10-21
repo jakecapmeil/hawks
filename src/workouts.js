@@ -534,3 +534,123 @@ export function looksLikeTrack({ name = '', type = '', elevFtPerMile = 0, laps =
   const onMarks = laps.filter((l) => l.m >= 150 && Math.abs(l.m - snap100(l.m)) <= Math.max(12, l.m * 0.035));
   return onMarks.length / laps.length >= 0.8;
 }
+
+// ------------------------------------------------------------------ personal
+
+// "3x8 min (plans 1-2), 3x9 min (plan 3-4) or 3x10 min (plans 5-6)" -> the
+// variant for this runner's plan level (1-6), so each workout reads as
+// written for them.
+export function resolveVariants(text, rank) {
+  const s = String(text || '');
+  const alts = [...s.matchAll(/([^,;()]+?)\s*\(plans?\s*(\d)(?:\s*-\s*(\d))?\)/gi)];
+  if (alts.length < 2 || !rank) return s.replace(/\s*\(plans?\s*\d(?:\s*-\s*\d)?\)/gi, '');
+  const inRange = (m) => rank >= Number(m[2]) && rank <= Number(m[3] || m[2]);
+  const pick = alts.find(inRange) || (rank < Number(alts[0][2]) ? alts[0] : alts[alts.length - 1]);
+  const core = (m) => m[1].replace(/^\s*(or|and)\s+/i, '').trim();
+  const first = core(alts[0]).match(/^(.*?)(\d+\s*x.*)$/i);
+  const prefix = first ? first[1] : '';
+  const start = alts[0].index + (alts[0][0].length - alts[0][0].trimStart().length);
+  const last = alts[alts.length - 1];
+  const chosen = pick === alts[0] && first ? first[2] : core(pick);
+  return s.slice(0, start) + prefix + chosen + s.slice(last.index + last[0].length);
+}
+
+// "5K pace (plans 3-5). Newer runners: threshold." -> the zone for this level.
+function resolvePaces(text, rank) {
+  const s = String(text || '');
+  const m = s.match(/\(plans?\s*(\d)(?:\s*-\s*(\d))?\)/i);
+  const newer = s.match(/newer runners?:\s*([^.;]+)/i);
+  if (m && newer && rank && rank < Number(m[1])) return newer[1];
+  return s.replace(/\s*\(plans?\s*\d(?:\s*-\s*\d)?\)/gi, '').replace(/newer runners?:[^.;]*[.;]?/i, '');
+}
+
+const ZONE_NAME = { tempo: 'tempo (half-marathon) effort', threshold: 'threshold effort', steady: 'steady effort', '10k': '10K pace', '5k': '5K pace', '3200': '3200 pace', mile: 'mile pace', '800': '800 pace', '400': '400 pace', cv: 'critical velocity' };
+
+function fmtGoal(sec) {
+  const r = Math.round(sec * 10) / 10;
+  const m = Math.floor(r / 60);
+  const ss = r - m * 60;
+  if (!m) return `${ss.toFixed(1)}s`;
+  return `${m}:${(sec < 150 ? ss.toFixed(1).padStart(4, '0') : String(Math.round(ss)).padStart(2, '0'))}`;
+}
+
+// A library workout written out for one runner: the session in words, each
+// set as a table of goal splits (from their Fitness States), recovery, and
+// the warm-up / cool-down. Paces themselves live on the Fitness page.
+export function personalWorkout(w, fitness, rank) {
+  const main = resolveVariants(w.main, rank);
+  const paces = resolvePaces(w.paces, rank);
+  const zoneSec = (key) => {
+    const z = fitness?.zones?.find((x) => x.key === key);
+    return z ? (Array.isArray(z.sec) ? (z.sec[0] + z.sec[1]) / 2 : z.sec) : null;
+  };
+  const TYPE_ZONE = { vo2: '5k', track: 'mile', threshold: 'threshold', tempo: 'tempo', fartlek: '5k', race_specific: '5k', steady: 'steady', progression: 'threshold' };
+  const fallback = (w.type === 'time_trial' ? null : zoneOf(paces)) || (TYPE_ZONE[w.type] ? { keys: [TYPE_ZONE[w.type]], offset: 0 } : null);
+  const flat = main.replace(/\(([^)]*)\)/g, (_, inner) => '(' + inner.replace(/,/g, ' /') + ')');
+  const clauses = flat.split(/[,;]|\bthen\b/i).map((c) => c.trim()).filter(Boolean);
+  const wu = clauses.find((c) => /\b(wu|warm)/i.test(c) && !/\d+\s*x/i.test(c));
+  const cd = clauses.find((c) => /\b(cd|cool)/i.test(c) && !/\d+\s*x/i.test(c)) || (/\bcd\b/i.test(main) ? 'cool-down' : null);
+  const tidy = (c) => c && c.replace(/\b(wu|cd)\b/gi, '').replace(/\s+/g, ' ').replace(/^\+\s*/, '').trim();
+
+  const sections = [];
+  if (w.type !== 'hills') {
+    for (const clause of clauses) {
+      if (clause === wu || clause === cd) continue;
+      let body = clause.split(/\bwith\b/i)[0];
+      let rest = (clause.match(/\bwith\s+([^,;]+)/i) || [])[1]?.trim() || '';
+      // "Long run with 3x8 min at ...": here "with" introduces the reps.
+      if (!segmentsOf(body).length && /\bwith\s+\d+\s*x/i.test(clause)) { body = clause.split(/\bwith\b/i)[1]; rest = ''; }
+      // Ladders ("400-800-1200-800-400 at ...", "2K - 1600 - 800 - 400") list every rep in order.
+      const ladder = body.match(/^\s*(\d+(?:\.\d+)?k?\s*(?:-\s*\d+(?:\.\d+)?k?\s*){2,})/i);
+      if (ladder) {
+        const reps = ladder[1].split('-').map((x) => x.trim().toLowerCase()).map((x) => (x.endsWith('k') ? Number(x.slice(0, -1)) * 1000 : Number(x))).filter((m) => m >= 100);
+        const zFor = (m) => zoneOf(body.slice(ladder[0].length)) || zoneOf(String(paces).split(/[,;]/).find((c) => new RegExp(`\\b${m}s?\\b`).test(c))) || fallback;
+        const rows = reps.map((m, i) => {
+          const z = zFor(m);
+          const secs = z ? z.keys.map(zoneSec).filter(Boolean) : [];
+          const pace = secs.length ? secs.reduce((a, b) => a + b, 0) / secs.length + z.offset : null;
+          return { n: i + 1, what: m % 1000 === 0 && m >= 1000 ? `${m / 1000}K` : `${m}m`, goal: pace ? fmtGoal((pace / MILE_M) * m) : '' };
+        });
+        const z0 = zFor(reps[0]);
+        sections.push({ label: reps.map((m) => (m % 1000 === 0 && m >= 1000 ? `${m / 1000}K` : m)).join('-'), zone: z0 ? z0.keys.map((k) => ZONE_NAME[k] || k).join(' to ') : '', rest, kind: 'distance', rows });
+        continue;
+      }
+      const seg = segmentsOf(body)[0] || (() => {
+        // "8x2:30/1" and "8x3/1": time reps written as on/off minutes.
+        const t = body.match(/(\d+)\s*x\s*(\d+)(?::(\d{2}))?\s*\/\s*(\d+)/);
+        return t ? { text: body, reps: Number(t[1]), m: null, sec: Number(t[2]) * 60 + Number(t[3] || 0), off: Number(t[4]) * 60 } : null;
+      })();
+      if (!seg) continue;
+      // Only the work part sets the pace: "6x(1 min on / 1 min easy)" is a 5K-effort set.
+      const work = body.split(/\s\/\s|\//)[0];
+      // Time trials: the goal is the runner's own race estimate for that distance.
+      const ttKey = w.type === 'time_trial' && seg.m ? (seg.m <= 1700 ? 'mile' : seg.m <= 3300 ? '3200' : seg.m <= 5100 ? '5k' : null) : null;
+      const z = zoneOf(work) || (ttKey ? { keys: [ttKey], offset: 0 } : null) || (seg.reps > 1 || seg.m ? fallback : null);
+      if (!z || z.keys[0] === 'easy') continue;
+      const secs = z.keys.map(zoneSec).filter(Boolean);
+      const pace = secs.length ? secs.reduce((a, b) => a + b, 0) / secs.length + z.offset : null;
+      const zone = z.keys.map((k) => ZONE_NAME[k] || k).join(' to ').replace(/ pace to /, '-') + (z.offset ? ` ${z.offset > 0 ? '+' : ''}${z.offset}s/mi` : '');
+      const miles = seg.m ? seg.m / MILE_M : null;
+      const dist = seg.m ? (seg.m % 1000 === 0 && seg.m >= 1000 ? `${seg.m / 1000}K` : miles >= 0.99 && Math.abs(miles - Math.round(miles)) < 0.01 ? (Math.round(miles) === 1 ? '1 mile' : `${Math.round(miles)} mi`) : `${Math.round(seg.m)}m`) : seg.sec >= 60 ? `${Math.round((seg.sec / 60) * 10) / 10} min` : `${seg.sec}s`;
+      const n = Math.min(seg.reps, 20);
+      const covered = pace && !seg.m ? (seg.sec / pace) * MILE_M : 0;
+      const goal = pace ? (seg.m ? fmtGoal((pace / MILE_M) * seg.m) : covered > 1600 ? `~${Math.round((covered / MILE_M) * 10) / 10} mi` : `~${Math.round(covered / 10) * 10}m`) : '';
+      sections.push({
+        label: seg.reps > 1 ? `${seg.reps} x ${dist}` : dist,
+        zone,
+        rest: rest || (seg.off ? `${seg.off / 60} min easy` : ''),
+        kind: seg.m ? 'distance' : 'time',
+        rows: Array.from({ length: n }, (_, i) => ({ n: i + 1, what: dist, goal })),
+      });
+    }
+  }
+
+  const parts = [];
+  if (!sections.length) parts.push(`${main.charAt(0).toUpperCase()}${main.slice(1)}.`);
+  else {
+    if (wu && tidy(wu)) parts.push(`Warm up: ${tidy(wu)} easy.`);
+    parts.push(`Main set: ${sections.map((x) => `${x.label} at ${x.zone}${x.rest ? `, ${x.rest} between` : ''}`).join('; then ')}.`);
+    if (cd) parts.push(tidy(cd) && cd !== 'cool-down' ? `Cool down: ${tidy(cd)} easy.` : 'Cool down easy.');
+  }
+  return { session: parts.join(' '), main, sections };
+}

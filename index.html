@@ -414,6 +414,10 @@
     padding:10px 0;border-bottom:1px solid var(--line);
   }
   .travel-row:last-child{border-bottom:none;}
+  .places-group{margin:var(--sp-3) 0 2px;}
+  .places-group:first-child{margin-top:0;}
+  .place-links{margin-top:6px;gap:6px;}
+  .place-links .link-btn{height:30px;font-size:var(--fs-caption);}
   .travel-row-main{flex:1;min-width:0;}
   .travel-row-title{font-family:var(--font-ui);font-weight:600;font-size:var(--fs-subhead);}
   .travel-row-sub{font-family:var(--font-ui);font-size:var(--fs-footnote);color:var(--ink-soft);}
@@ -1405,12 +1409,25 @@
   .lib-target b{font-variant-numeric:tabular-nums;}
   .lib-target .tz{color:var(--ink-soft);}
   .lib-target .tr{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums;color:var(--workout);}
-  .lib-actions{display:flex;gap:var(--sp-2);flex-wrap:wrap;padding-bottom:var(--sp-4);}
+  .lib-actions{display:flex;gap:var(--sp-2);flex-wrap:wrap;padding-top:var(--sp-2);}
+  .lib-body{display:flex;flex-direction:column;gap:var(--sp-3);padding:0 0 var(--sp-4);}
+  .lib-session{margin:0;font-size:var(--fs-subhead);line-height:1.5;}
+  .goal-set{border:1px solid var(--line);border-radius:var(--r-control);padding:var(--sp-3);display:flex;flex-direction:column;gap:6px;}
+  .goal-set-head{display:flex;flex-direction:column;gap:2px;margin-bottom:2px;}
+  .goal-set-head b{font-size:var(--fs-subhead);}
+  .goal-set-head span{font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .split-row.goal-row{grid-template-columns:22px minmax(0,1fr) minmax(0,1fr);font-size:var(--fs-subhead);font-variant-numeric:tabular-nums;}
+  .split-row.goal-row.head{font-size:var(--fs-caption2);}
+  .goal-row .goal{text-align:right;font-weight:800;color:var(--workout);}
+  .lib-why{display:grid;grid-template-columns:104px 1fr;gap:var(--sp-3);font-size:var(--fs-footnote);line-height:1.5;}
+  .lib-why b{color:var(--ink-soft);font-weight:600;}
 
   /* ---- Fitness ------------------------------------------------------------ */
   .stack-cards{display:flex;flex-direction:column;gap:var(--sp-4);}
   .stack-cards > .card{margin-bottom:0;}
   .fit-hero{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-2);margin-bottom:var(--sp-4);}
+  .new-prs{background:var(--int-1-bg);color:var(--int-1-ink);border-radius:var(--r-control);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-subhead);margin-bottom:var(--sp-3);}
+  .stat .sub{display:block;font-size:var(--fs-caption2);color:var(--ink-soft);margin-top:2px;font-weight:600;}
   .fit-hero .stat b{font-size:var(--fs-title2);}
   .fit-table{display:flex;flex-direction:column;}
   .fit-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) 22px;gap:var(--sp-2);align-items:center;padding:var(--sp-2) 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums;}
@@ -1649,6 +1666,7 @@
       <div class="seg" id="schViews" role="tablist" aria-label="Schedule view">
         <button type="button" class="seg-btn active" role="tab" data-sview="calendar">Calendar</button>
         <button type="button" class="seg-btn" role="tab" data-sview="meets">Meets</button>
+        <button type="button" class="seg-btn" role="tab" data-sview="places">Places</button>
       </div>
     </div>
     <div id="schCalView">
@@ -1748,6 +1766,17 @@
         <button id="copyBtn">Copy</button>
       </div>
     </div>
+    </div>
+    <div id="schPlacesView" style="display:none;">
+      <div class="card" id="travelCard">
+        <div class="section-head">
+          <div>
+            <div class="card-title">Places</div>
+            <div class="hint" id="travelHint">Where the team practices and races, with transit time from your home address (weekday for practices, weekend for meets).</div>
+          </div>
+        </div>
+        <div id="travelList"></div>
+      </div>
     </div>
     <div id="schMeetsView" style="display:none;">
       <div class="card">
@@ -1952,16 +1981,6 @@
       <div class="split split-lib">
         <div class="split-side">
           <section class="card">
-            <div class="section-head">
-              <div>
-                <div class="card-title">Your paces</div>
-                <div class="hint" id="libHint">From your Fitness States.</div>
-              </div>
-              <button type="button" class="ghost sm-btn" id="libToFitness">Fitness</button>
-            </div>
-            <div class="lib-paces" id="libPaces"></div>
-          </section>
-          <section class="card">
             <div class="card-title">Customize</div>
             <div class="stack">
               <div class="field" id="libMoreWrap"><span>Also show</span><div class="cluster" id="libTypes"></div></div>
@@ -1979,7 +1998,7 @@
           <div class="section-head">
             <div>
               <div class="card-title" id="libTitle">Workouts</div>
-              <div class="hint" id="libSub">Targets are worked out from your Fitness States.</div>
+              <div class="hint" id="libSub">Written for you: your level, your goal splits.</div>
             </div>
           </div>
           <div class="lib-count" id="libCount"></div>
@@ -1990,14 +2009,25 @@
 
     <div id="tpFitnessView" class="split split-fit" style="display:none;">
       <div class="stack-cards">
+        <section class="card" id="fitScoreCard">
+          <div class="section-head">
+            <div>
+              <div class="card-title">Fitness score</div>
+              <div class="hint" id="fitScoreHint">Your training load over the last 6 weeks, like Strava's Fitness &amp; Freshness.</div>
+            </div>
+          </div>
+          <div class="stat-grid stat-grid-3" id="fitScore"></div>
+          <div class="fit-trend" id="fitScoreTrend"></div>
+        </section>
         <section class="card">
           <div class="section-head">
             <div>
-              <div class="card-title">Fitness States</div>
-              <div class="hint" id="fitHint">What you could race right now, from your races, PRs and training.</div>
+              <div class="card-title">Race fitness</div>
+              <div class="hint" id="fitHint">What you could race right now, from every run, your races, PRs and Garmin.</div>
             </div>
             <span id="fitBadge"></span>
           </div>
+          <div class="new-prs" id="fitNewPrs" style="display:none;"></div>
           <div class="fit-hero" id="fitHero"></div>
           <div class="fit-table" id="fitTable"></div>
           <div class="fit-trend" id="fitTrend"></div>
@@ -2021,11 +2051,14 @@
           <details class="fit-how">
             <summary><span class="card-title" style="margin:0;">How it works</span></summary>
             <div class="stack" style="margin-top:var(--sp-3);">
-              <p><b>Races come first.</b> Every race and PR is turned into a fitness score (VDOT, from Jack Daniels' running formula), weighted by how recent it is. A PR from a year ago counts much less than last week's meet.</p>
+              <p><b>Every run is searched for races.</b> Any run that covered a race distance (1600 to 10K) at race effort counts, whatever it was labelled, and if it beats a PR on file Hawks updates the PR. The fastest stretches inside your runs (from your watch, through intervals.icu) count too.</p>
+              <p><b>Recent races come first.</b> Each one becomes a VDOT (Jack Daniels' running formula), weighted by how recent it is. A new race outranks older results and a 5K you typed in, and a much slower race (hilly course, bad day) doesn't drag you down.</p>
+              <p><b>Garmin's VO2max is matched to your races.</b> Garmin estimates VO2max from heart rate vs speed, which usually reads higher than race results. Hawks finds your personal ratio from races run near a Garmin reading, so the number can track your fitness between races.</p>
               <p><b>Training fills the gaps.</b> Rep sessions from your watch or split builder, and your heart rate on steady runs, only move the number when your last race is old: if you've gotten fitter since, or lost some fitness.</p>
               <p><b>Each distance gets its own estimate.</b> From 1600 to 5K, a critical-speed curve fitted to your recent races sharpens the numbers (it's accurate to about 1-2% there). 400 and 800 lean on your recent PRs, since speed isn't something aerobic models capture. Your own speed-vs-endurance profile shifts every distance.</p>
               <p><b>Mileage matters for long races.</b> 10K and half marathon estimates slow down when your last 4 weeks are low on miles.</p>
-              <p><b>VO2max is an estimate</b> (the same number as VDOT), not a lab test.</p>
+              <p><b>VO2max</b> is Garmin's when your watch sends it, otherwise Hawks' estimate from your heart rate on steady runs (the same idea Garmin uses). Race fitness (VDOT) is what your race times say. Neither is a lab test.</p>
+              <p><b>Fitness score</b> is your training load (minutes x effort) averaged over 42 days; fatigue is the same over 7 days, and form is fitness minus fatigue. It goes up with steady training and doesn't depend on racing.</p>
             </div>
           </details>
         </section>
@@ -2130,11 +2163,6 @@
             <span class="hint" id="prSaved" style="display:none;">Saved</span>
           </div>
         </div>
-      </div>
-      <div class="card" id="travelCard">
-        <div class="card-title">Getting there</div>
-        <div class="hint" id="travelHint">Approximate transit time from your home address — weekday for practices, weekend for meets. Tap a place to open directions.</div>
-        <div id="travelList"></div>
       </div>
     </div>
     <div id="youBodyView" class="you-grid" style="display:none;">
@@ -2404,7 +2432,7 @@ let currentPage = 'schedule';
 const PAGES = ['schedule','training','team','you'];
 let scheduleView = 'calendar';
 let youView = 'profile';
-try{ scheduleView = localStorage.getItem('hawksScheduleView') === 'meets' ? 'meets' : 'calendar'; }catch(e){}
+try{ const v = localStorage.getItem('hawksScheduleView'); scheduleView = ['meets','places'].includes(v) ? v : 'calendar'; }catch(e){}
 const LAST_USER_KEY = 'hawksLastUser';
 let trainingGrade = null;
 let trainingWeek = null;
@@ -3698,11 +3726,13 @@ function renderSchedule(){
   paintSeg('schViews', 'sview', scheduleView);
   $('schCalView').style.display = scheduleView === 'calendar' ? '' : 'none';
   $('schMeetsView').style.display = scheduleView === 'meets' ? '' : 'none';
+  $('schPlacesView').style.display = scheduleView === 'places' ? '' : 'none';
   if(scheduleView === 'meets') renderMeets();
+  if(scheduleView === 'places') renderTravelList(isRealPerson() ? people.find(x=>x.id===activePersonId) : null);
 }
 
 function setScheduleView(v){
-  scheduleView = v === 'meets' ? 'meets' : 'calendar';
+  scheduleView = ['meets','places'].includes(v) ? v : 'calendar';
   try{ localStorage.setItem('hawksScheduleView', scheduleView); }catch(e){}
   renderSchedule();
 }
@@ -3917,24 +3947,31 @@ function mapsSearchLink(query){
 }
 
 function renderTravelList(p){
-  const home = (p.home_address || '').trim();
+  const home = (p?.home_address || '').trim();
   if(!locations.length){
     $('travelList').innerHTML = '<div class="admin-empty">No locations set up yet.</div>';
     return;
   }
+  $('travelHint').textContent = home ? 'Transit time from your home address: weekday for practices, weekend for meets.' : p ? 'Add your home address on the You tab to see how long each trip takes.' : 'Pick your name to see how long each trip takes from home.';
   const sorted = [...locations].sort((a,b)=> a.kind === b.kind ? a.name.localeCompare(b.name) : (a.kind === 'meet' ? 1 : -1));
+  let lastKind = null;
   $('travelList').innerHTML = sorted.map(loc=>{
     const daypart = loc.kind === 'meet' ? 'weekend_meet' : 'weekday_practice';
-    const est = travelEstimates.find(t=> t.person_id===p.id && t.location_id===loc.id && t.daypart===daypart);
-    const timeLabel = home ? (est ? `~${est.minutes} min` : '—') : 'Add home address';
-    const href = home ? mapsLink(home, loc.address) : '';
-    return `
+    const est = p ? travelEstimates.find(t=> t.person_id===p.id && t.location_id===loc.id && t.daypart===daypart) : null;
+    const timeLabel = home ? (est ? `~${est.minutes} min` : '—') : '';
+    const head = loc.kind !== lastKind ? `<div class="eyebrow places-group">${loc.kind === 'meet' ? 'Meet venues' : 'Practice'}</div>` : '';
+    lastKind = loc.kind;
+    return `${head}
       <div class="travel-row">
-        <a class="travel-row-main" ${href ? `href="${escapeHtml(href)}" target="_blank" rel="noopener"` : 'href="#" onclick="return false;"'}>
+        <div class="travel-row-main">
           <div class="travel-row-title">${escapeHtml(loc.name)}</div>
-          <div class="travel-row-sub">${DAYPART_LABEL[daypart]}${est && est.note ? ' · ' + escapeHtml(est.note) : ''}</div>
-        </a>
-        <div class="travel-row-time">${escapeHtml(timeLabel)}</div>
+          <div class="travel-row-sub">${escapeHtml(loc.address || '')}${est && est.note ? ' · ' + escapeHtml(est.note) : ''}</div>
+          <div class="cluster place-links">
+            <a class="link-btn" href="${escapeHtml(mapsSearchLink(loc.address || loc.name))}" target="_blank" rel="noopener">Google Maps</a>
+            ${home ? `<a class="link-btn" href="${escapeHtml(mapsLink(home, loc.address || loc.name))}" target="_blank" rel="noopener">Directions from home</a>` : ''}
+          </div>
+        </div>
+        ${timeLabel ? `<div class="travel-row-time">${escapeHtml(timeLabel)}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -3943,7 +3980,6 @@ function renderPersonal(){
   const p = isRealPerson() ? people.find(x=>x.id===activePersonId) : null;
   $('personalHint').style.display = p ? 'none' : 'block';
   $('personalForm').classList.toggle('show', !!p);
-  $('travelCard').style.display = p ? '' : 'none';
   $('calendarFeedCard').style.display = p ? '' : 'none';
   $('coachCard').style.display = p ? '' : 'none';
   $('setupCard').style.display = p ? '' : 'none';
@@ -3962,8 +3998,6 @@ function renderPersonal(){
   $('personalOutFri').value = p.out_fri ?? '';
   $('personalNotes').value = p.personal_notes || '';
   $('personalSaveHint').style.display = 'none';
-
-  renderTravelList(p);
 
   $('calendarFeedUrl').value = `${location.origin}/api/calendar/${p.id}.ics`;
   renderCoachSetup(p);
@@ -5020,7 +5054,6 @@ function wireUI(){
     addSplitSet(n, m);
   });
   $('splitAddOne').addEventListener('click', ()=> addSplitSet(1, splitRows.length ? splitRows[splitRows.length - 1].m : (parseInt($('splitAddM').value, 10) || 400)));
-  $('libToFitness').addEventListener('click', ()=> setTrainingView('fitness'));
   $('libReset').addEventListener('click', ()=>{ ['libRace','libPhase','libLen','libLevel'].forEach(id=> $(id).value = ''); libType = ''; renderLibrary(); });
   $('fitRefresh').addEventListener('click', ()=> renderFitness(true));
   $('fitAddPrs').addEventListener('click', goToPrs);
@@ -5465,13 +5498,6 @@ async function renderLibrary(){
   if(!lib){ $('libList').innerHTML = '<div class="hint">Couldn’t load the library.</div>'; return; }
   const me = isRealPerson();
   const f = lib.fitness;
-  const fiveK = f?.estimates?.find(e=>e.event === '5K');
-  $('libHint').textContent = !me ? 'Pick your name to see your own paces.'
-    : f?.vdot ? `VO2max est. ${f.vo2max} · 5K ${fiveK.time} · ${f.confidence} confidence`
-    : 'Add PRs or connect your watch to get your own paces.';
-  $('libPaces').innerHTML = f?.zones?.length ? pacesHtml(f.zones.filter(z=>['easy','steady','threshold','5k','3200','mile'].includes(z.key)))
-    : (me ? '<button type="button" class="ghost" id="libAddPrs">Add PRs</button>' : '');
-  if($('libAddPrs')) $('libAddPrs').onclick = goToPrs;
 
   // "Also show" type chips only make sense on All.
   $('libMoreWrap').style.display = woGroup === 'all' ? '' : 'none';
@@ -5487,38 +5513,43 @@ async function renderLibrary(){
     && (!level || w.level === level) && (!len || (len === 999 ? w.total_min > 65 : w.total_min <= len)));
   const tile = WO_TILES.find(t=>t.key === woGroup);
   $('libTitle').textContent = woGroup === 'all' ? 'All workouts' : tile.label;
-  $('libSub').textContent = f?.vdot ? 'Rep targets are worked out from your Fitness States.' : 'Add PRs or connect your watch to see your own rep targets.';
+  $('libSub').textContent = f?.vdot ? 'Written for you: your level, and goal splits from your fitness. Tap one to open it.' : me ? 'Add PRs or connect your watch to get your own goal splits.' : 'Pick your name to get workouts written for you.';
   const lvl = ['', 'Beginner', 'Intermediate', 'Advanced'];
   $('libCount').textContent = `${list.length} of ${lib.workouts.length} workouts`;
-  const tgt = (t)=>`<div class="lib-target"><b>${escapeHtml(t.text)}</b><span class="tz">${escapeHtml(t.zone)} · ${escapeHtml(t.per_mile)}/mi</span><span class="tr">${escapeHtml(t.per_rep)}</span></div>`;
-  $('libList').innerHTML = list.length ? list.map(w=>`
-    <details class="lib-item" data-id="${w.id}" ${libOpen === w.id ? 'open' : ''}>
+  // One table per set, laid out like session splits: rep, distance (or time), goal.
+  const setTable = (x)=> `<div class="goal-set">
+      <div class="goal-set-head"><b>${escapeHtml(x.label)}</b><span>${escapeHtml(x.zone)}${x.rest ? ` · ${escapeHtml(x.rest)} between` : ''}</span></div>
+      ${x.rows[0]?.goal ? `<div class="split-row head goal-row"><span class="n">#</span><span>${x.kind === 'time' ? 'Time' : 'Distance'}</span><span style="text-align:right">${x.kind === 'time' ? 'Goal distance' : 'Goal split'}</span></div>
+      ${x.rows.map(r=>`<div class="split-row goal-row"><span class="n">${r.n}</span><span>${escapeHtml(r.what)}</span><span class="goal">${escapeHtml(r.goal)}</span></div>`).join('')}` : ''}
+    </div>`;
+  const firstGoal = (pw)=>{ const x = pw?.sections?.[0]; return x && x.rows[0]?.goal ? `${x.label} · ${x.rows[0].goal}${x.kind === 'time' ? '' : ' each'}` : ''; };
+  $('libList').innerHTML = list.length ? list.map(w=>{
+    const pw = w.personal;
+    return `<details class="lib-item" data-id="${w.id}" ${libOpen === w.id ? 'open' : ''}>
       <summary>
         <div class="list-main">
           <div class="list-title">${escapeHtml(w.name)}</div>
           <div class="cluster" style="gap:6px;margin-top:4px;">
             <span class="badge ${toneOf(w.type)}">${escapeHtml(lib.types[w.type].split(' /')[0])}</span>
-            <span class="list-meta" style="margin:0;">${w.total_min} min · ${lvl[w.level]}</span>
+            <span class="list-meta" style="margin:0;">${w.total_min} min${firstGoal(pw) ? ` · ${escapeHtml(firstGoal(pw))}` : ''}</span>
           </div>
-          ${w.targets?.length ? `<div class="lib-targets">${w.targets.slice(0, 2).map(tgt).join('')}${w.targets.length > 2 ? `<span class="hint">+${w.targets.length - 2} more</span>` : ''}</div>` : ''}
         </div>
       </summary>
-      <dl class="lib-dl">
-        <dt>Session</dt><dd>${escapeHtml(w.main)}</dd>
-        ${w.targets?.length > 2 ? `<dt>Your targets</dt><dd><div class="lib-targets">${w.targets.map(tgt).join('')}</div></dd>` : ''}
-        <dt>Pace notes</dt><dd>${escapeHtml(w.paces)}</dd>
-        <dt>Why</dt><dd>${escapeHtml(w.purpose)}</dd>
-        <dt>Cues</dt><dd>${escapeHtml(w.cues)}</dd>
-        <dt>Next time</dt><dd>${escapeHtml(w.progress)}</dd>
-        <dt>For</dt><dd>${escapeHtml(w.races.length === lib.races.length ? 'All races' : w.races.join(', '))} · ${escapeHtml(w.phase.map(cap).join(', '))}</dd>
-        <dt>Source</dt><dd class="hint">${escapeHtml(w.source)}</dd>
-      </dl>
-      ${me ? `<div class="lib-actions"><button type="button" class="ghost sm-btn" data-hawky="${w.id}">Ask Hawky to adjust</button></div>` : ''}
-    </details>`).join('') : '<div class="hint">No workouts match. Try fewer filters.</div>';
+      <div class="lib-body">
+        <p class="lib-session">${escapeHtml(pw?.session || w.main)}</p>
+        ${(pw?.sections || []).map(setTable).join('')}
+        <div class="lib-why"><b>Why</b><span>${escapeHtml(w.purpose)}</span></div>
+        <div class="lib-why"><b>How to run it</b><span>${escapeHtml(w.cues)}</span></div>
+        <div class="lib-why"><b>Next time</b><span>${escapeHtml(w.progress)}</span></div>
+        <div class="lib-why"><b>Good for</b><span>${escapeHtml(w.races.length === lib.races.length ? 'All races' : w.races.join(', '))} · ${escapeHtml(w.phase.map(cap).join(', '))}</span></div>
+        ${me ? `<div class="lib-actions"><button type="button" class="ghost sm-btn" data-hawky="${w.id}">Ask Hawky to fit it into my week</button></div>` : ''}
+      </div>
+    </details>`;
+  }).join('') : '<div class="hint">No workouts match. Try fewer filters.</div>';
   $('libList').querySelectorAll('details').forEach(el=> el.addEventListener('toggle', ()=>{ if(el.open) libOpen = el.dataset.id; }));
   $('libList').querySelectorAll('[data-hawky]').forEach(b=> b.addEventListener('click', ()=>{
     const w = lib.workouts.find(x=>x.id === b.dataset.hawky);
-    openHawky(`Adjust "${w.name}" for me for tomorrow: reps, rest and my target splits.`, false);
+    openHawky(`Can I fit "${w.name}" into my week? Which day works best?`, false);
   }));
 }
 
@@ -5564,6 +5595,14 @@ async function renderFitness(refresh){
   const data = await loadFitness(refresh);
   if(currentPage !== 'training' || trainingView !== 'fitness') return;
   const f = data?.fitness;
+  const tileSub = (v, l, sub)=> `<div class="stat"><b>${escapeHtml(String(v))}</b><span>${escapeHtml(l)}</span>${sub ? `<i class="sub">${escapeHtml(sub)}</i>` : ''}</div>`;
+  const fs = f?.fitness_score;
+  $('fitScoreCard').style.display = fs ? '' : 'none';
+  if(fs){
+    const delta = fs.change_4wk != null ? `${fs.change_4wk >= 0 ? '+' : ''}${fs.change_4wk} in 4 wk` : '';
+    $('fitScore').innerHTML = tileSub(fs.fitness, 'fitness', delta) + tileSub(fs.fatigue, 'fatigue', 'last 7 days') + tileSub(`${fs.form > 0 ? '+' : ''}${fs.form}`, 'form', fs.form < -20 ? 'very tired' : fs.form < -5 ? 'building' : fs.form <= 10 ? 'balanced' : 'fresh');
+    $('fitScoreTrend').innerHTML = fs.trend?.length >= 2 ? `${sparkline(fs.trend.map(p=>({ v: p.fitness })))}<div class="hint">Fitness over the last 8 weeks${fs.source === 'intervals.icu' ? ' (from intervals.icu, which counts every activity)' : ''}. Form under -20 for long is a sign to back off.</div>` : '';
+  }
   if(!f || !f.vdot){
     $('fitBadge').innerHTML = '';
     $('fitHero').innerHTML = f ? statTile(f.mpw ?? '–', 'mi / week (4 wk)') : '';
@@ -5576,8 +5615,9 @@ async function renderFitness(refresh){
   const conf = { high:'tone-int-1', medium:'tone-int-2', low:'tone-cross' };
   $('fitBadge').innerHTML = `<span class="badge ${conf[f.confidence] || ''}">${cap(f.confidence)} confidence</span>`;
   const fiveK = f.estimates.find(e=>e.event === '5K');
-  const mpwDelta = f.mpw_prev ? Math.round((f.mpw - f.mpw_prev) * 10) / 10 : null;
-  $('fitHero').innerHTML = statTile(f.vo2max, 'VO2max (est.)') + statTile(fiveK.time, '5K now') + statTile(f.mpw, `mi/wk${mpwDelta !== null ? ` (${mpwDelta >= 0 ? '+' : ''}${mpwDelta})` : ''}`);
+  $('fitHero').innerHTML = tileSub(f.vo2max, 'VO2max', f.vo2max_source === 'Garmin' ? 'from Garmin' : 'estimate') + tileSub(f.vdot, 'race fitness', 'VDOT') + tileSub(fiveK.time, '5K now', '');
+  $('fitNewPrs').style.display = f.new_prs?.length ? '' : 'none';
+  $('fitNewPrs').innerHTML = (f.new_prs || []).map(p=>`New PR found: <b>${escapeHtml(p.event)} ${escapeHtml(p.time)}</b> on ${escapeHtml(p.date)}`).join('<br>');
   const prs = parsePrsClient(people.find(x=>x.id===activePersonId)?.prs);
   const prFor = { '1600':'1600', '3200':'3200', '5K':'5K', '400':'400', '800':'800' };
   $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
@@ -5586,9 +5626,9 @@ async function renderFitness(refresh){
   }).join('');
   const hist = (data.history || []).filter(h=>h.vdot).map(h=>({ v: h.vdot, d: h.date }));
   const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';
-  $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">VO2max estimate over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');
+  $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">Race fitness over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');
   $('fitZones').innerHTML = pacesHtml(f.zones);
-  const kindLabel = { race:'Race', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate' };
+  const kindLabel = { race:'Race effort', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate', best:'Best effort', garmin:'Garmin' };
   $('fitSources').innerHTML = f.sources.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label)}</div><div class="list-meta">${kindLabel[x.kind] || x.kind}${x.date ? ' · ' + escapeHtml(x.date) : ''}${x.vdot ? ' · VDOT ' + x.vdot : ''} · weight ${Math.round(x.weight * 100)}%</div></div></div>`).join('')
     + `<div class="hint" style="margin-top:var(--sp-2);">Profile: ${f.profile === 'speed' ? 'speed-leaning (your short races are relatively stronger)' : f.profile === 'endurance' ? 'endurance-leaning (your long races are relatively stronger)' : 'balanced'}.${f.cs ? ` Critical velocity ${f.cs.per_mile}/mi.` : ''}</div>`;
 }

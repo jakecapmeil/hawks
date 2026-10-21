@@ -281,7 +281,10 @@ export async function personForToken(db, token) {
 export function compactFitness(f) {
   if (!f || !f.vdot) return { note: f?.note || 'No fitness data yet', weekly_miles_last_4_weeks: f?.mpw ?? null };
   return {
-    vo2max_estimate: f.vo2max,
+    vo2max: f.vo2max,
+    vo2max_source: f.vo2max_source,
+    race_fitness_vdot: f.vdot,
+    fitness_score: f.fitness_score ? { fitness: f.fitness_score.fitness, fatigue: f.fitness_score.fatigue, form: f.fitness_score.form, change_4wk: f.fitness_score.change_4wk } : null,
     confidence: f.confidence,
     based_on: f.sources.map((s) => s.label),
     race_estimates: Object.fromEntries(f.estimates.map((e) => [e.label, e.time])),
