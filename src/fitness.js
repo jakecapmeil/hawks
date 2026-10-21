@@ -119,7 +119,10 @@ async function loadInputs(db, personId, today) {
     ).bind(personId, since).all(),
     db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(personId).first(),
     db.prepare("SELECT DISTINCT date FROM events WHERE type = 'meet' AND date >= ?").bind(since).all(),
-    db.prepare('SELECT meters, sec, date, activity_id FROM best_efforts WHERE person_id = ?').bind(personId).all(),
+    db.prepare(
+      `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps FROM best_efforts b
+       LEFT JOIN workouts w ON w.person_id = b.person_id AND w.strava_id = 'intervals:' || b.activity_id WHERE b.person_id = ?`
+    ).bind(personId).all(),
     db.prepare('SELECT date, vo2max, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
     db.prepare('SELECT cs, d_prime, r2, updated_at FROM pace_models WHERE person_id = ?').bind(personId).first(),
   ]);
@@ -227,6 +230,10 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
   // efforts, but often a split from a longer run, so a little less weight.
   for (const e of efforts) {
     if (!e.sec || !e.meters) continue;
+    // In an interval session the watch's moving time skips the rests, so a
+    // "5K" stitched from reps isn't a 5K. Long best efforts count only from
+    // continuous runs.
+    if (e.meters >= 1500 && (e.category === 'workout' || e.laps)) continue;
     const age = e.date ? ageDays(e.date, today) : 120;
     if (age > 365) continue;
     sources.push({ kind: 'best', max: true, m: e.meters, s: e.sec, age, date: e.date, quality: e.meters >= 1500 ? 0.7 : 0.6, label: `Fastest ${e.meters === 1609 ? 'mile' : e.meters >= 1000 && e.meters % 1000 === 0 ? e.meters / 1000 + 'K' : e.meters + 'm'} in a run: ${fmtTime(e.sec, { tenths: e.meters <= 800 })}${e.date ? ` (${e.date})` : ''}` });
