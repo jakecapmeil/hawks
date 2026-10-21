@@ -310,8 +310,8 @@ export async function getCoachContext(db, person) {
 // from the runner's own Claude reading COROS or Strava. If a run from another
 // source matches on date and distance (1.5%, or 0.02 mi on short jogs), reuse
 // its row so the newer write updates it in place. Moving time only has to be
-// within 25%: Strava and Garmin count pauses differently, so it often differs
-// by 10-20% for the very same run.
+// within 25% (or elapsed time within 5%): Strava and Garmin count pauses
+// differently, so moving time often differs by 10-20% for the very same run.
 async function mergeDuplicates(db, personId, clean) {
   const dates = [...new Set(clean.map((w) => w.date))];
   if (!dates.length) return;
@@ -321,10 +321,13 @@ async function mergeDuplicates(db, personId, clean) {
   const srcOf = (id) => (id.includes(':') ? id.split(':')[0] : 'strava');
   const sameDistance = (a, b) => a && b && Math.abs(a - b) <= Math.max(0.02, 0.015 * Math.max(a, b));
   const sameTime = (a, b) => !a || !b || Math.abs(a - b) / Math.max(a, b) <= 0.25;
+  // Some Strava runs were logged with elapsed time as moving time.
+  const sameElapsed = (a, b) => a && b && Math.abs(a - b) <= Math.max(5, 0.05 * Math.max(a, b));
   for (const w of clean) {
     if (rows.some((r) => r.strava_id === w.strava_id)) continue;
     const twin = rows.find((r) => r.date === w.date && srcOf(r.strava_id) !== srcOf(w.strava_id)
-      && sameDistance(r.gps_mi, w.raw_distance_mi ?? w.distance_mi) && sameTime(r.moving_sec, w.moving_sec)
+      && sameDistance(r.gps_mi, w.raw_distance_mi ?? w.distance_mi)
+      && (sameTime(r.moving_sec, w.moving_sec) || sameElapsed(r.elapsed_sec, w.elapsed_sec) || sameElapsed(r.moving_sec, w.elapsed_sec))
       && !clean.some((o) => o !== w && o.strava_id === r.strava_id));
     if (twin) w.strava_id = twin.strava_id;
   }
