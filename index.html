@@ -1388,6 +1388,7 @@
   .act-laps tr.run td:first-child{font-weight:600;}
   .act-laps tr.sub td{color:var(--ink-soft);}
   .act-laps tr.sub td:first-child{padding-left:14px;}
+  .fit-row .tm .rng{display:block;font-size:var(--fs-caption);font-weight:500;color:var(--ink-soft);}
   .session-table{margin-top:var(--sp-2);overflow-x:auto;}
   .session-table .act-laps{margin-top:0;font-size:var(--fs-subhead);}
   .session-table .act-laps th,.session-table .act-laps td{padding:6px 8px;}
@@ -1544,6 +1545,12 @@
     body{padding:calc(28px + env(safe-area-inset-top)) 28px 56px;}
     .wrap{max-width:760px;}
     .wo-tiles{grid-template-columns:repeat(3,minmax(0,1fr));}
+  }
+  /* The top bar is tight below 1280px: drop the tab icons so labels never overlap. */
+  @media (min-width:1024px) and (max-width:1279px){
+    .page-tab svg{display:none;}
+    .page-tab{padding:0 var(--sp-3);white-space:nowrap;}
+    body .wrap{grid-template-columns:auto minmax(150px,200px) minmax(300px,1fr) auto;column-gap:var(--sp-3);}
   }
   @media (min-width:1024px){
     /* One top bar: wordmark, who you are, sections, sync and contacts. */
@@ -2059,7 +2066,7 @@
           <div class="section-head">
             <div>
               <div class="card-title">Race fitness</div>
-              <div class="hint" id="fitHint">What you could race right now, from your races and PRs (HawksPredict). Hover a row for its 80% range.</div>
+              <div class="hint" id="fitHint">What you could race right now, from your races and PRs (HawksPredict). The small line under each time is its 80% range.</div>
             </div>
             <span id="fitBadge"></span>
           </div>
@@ -4543,7 +4550,7 @@ async function renderWeekCard(){
     [w.load || 0, 'load'],
   ].map(([v,l])=>statTile(v,l)).join('');
   $('weekStats').className = 'stat-grid stat-grid-3';
-  $('weekHint').textContent = w.week_type ? `${w.week_type} week.` : '';
+  $('weekHint').textContent = w.week_type ? `${/week$/i.test(w.week_type) ? w.week_type : w.week_type + ' week'}.` : '';
 }
 
 function openLogDay(date, sessionKey){
@@ -5766,7 +5773,7 @@ async function renderFitness(refresh){
   $('fitNewPrs').innerHTML = (f.new_prs || []).map(p=>`New PR found: <b>${escapeHtml(p.event)} ${escapeHtml(p.time)}</b> on ${escapeHtml(p.date)}`).join('<br>');
   $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
     const pr = e.pr?.time;
-    return `<div class="fit-row"${e.range ? ` title="80% range ${escapeHtml(e.range)}"` : ''}><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
+    return `<div class="fit-row"${e.range ? ` title="80% range ${escapeHtml(e.range)}"` : ''}><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}${e.range ? `<small class="rng">${escapeHtml(e.range)}</small>` : ''}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
   }).join('')
     // The same fitness on the home course (hills, gravel and grass: about 5.5% slower).
     + (f.course_estimates || []).map(c=>{
@@ -5881,7 +5888,7 @@ function renderToday(h){
 function renderOwnWeek(h){
   const w = h.week;
   $('tpTitle').textContent = 'Your week';
-  $('tpHint').textContent = `${w.week_type || 'This'} week from your coach's plan${h.changes.length ? ', with Hawky\'s changes' : ''}. Tap a day to open it in your log.`;
+  $('tpHint').textContent = `${w.week_type ? (/week$/i.test(w.week_type) ? w.week_type : w.week_type + ' week') : 'This week'} from your coach's plan${h.changes.length ? ', with Hawky\'s changes' : ''}. Tap a day to open it in your log.`;
   $('tpGrades').style.display = 'none';
   $('tpWeeks').innerHTML = ''; $('tpWeeks').style.display = 'none';
   const today = todayKey();
@@ -5917,7 +5924,7 @@ function healthHtml(h){
     </div>
     <div class="stat-grid" style="margin-top:var(--sp-3);">${tiles}</div>
     <div class="health-row"><span class="hint">Load</span><b>${h.load.ratio != null ? `${h.load.ratio}x your normal` : 'Not enough data yet'}</b></div>
-    <div class="health-row"><span class="hint">Miles</span><b>${h.miles.last_7} this week · ${h.miles.weekly_avg_4wk} avg</b></div>
+    <div class="health-row"><span class="hint">Miles</span><b>${h.miles.last_7} in 7 days · ${h.miles.weekly_avg_4wk} avg a week</b></div>
     <div class="health-row"><span class="hint">Status</span><b>${escapeHtml(cap(h.status.health))}</b></div>
     <div class="cluster health-body" style="gap:4px;">${body}</div>
     ${h.missing.length ? `<div class="hint" style="margin-top:var(--sp-2);">Not seeing: ${escapeHtml(h.missing.join(', '))}.${h.missing.some(m=>m.startsWith('watch')) ? ' Wear your watch overnight so Garmin sends resting HR, HRV and sleep.' : ''}</div>` : ''}`;
@@ -6010,13 +6017,19 @@ async function renderTraining(){
 
 async function renderHawkyTab(){
   const st = isRealPerson() ? (icuState[activePersonId] || await fetchIcuStatus(activePersonId)) : null;
-  $('hawkyOff').style.display = isRealPerson() && st && !st.ai ? '' : 'none';
+  const off = isRealPerson() && st && !st.ai;
+  $('hawkyOff').style.display = off ? '' : 'none';
+  // With Hawky off there is nothing to chat with: hide the prompts and the box,
+  // but the plan changes, health and level still show.
+  ['hawkySuggest', 'askStatus'].forEach(id=> $(id).style.display = off ? 'none' : '');
+  document.querySelector('.hawky-compose').style.display = off ? 'none' : '';
   if(!isRealPerson()){
     $('hawkyThread').innerHTML = '<div class="hint">Pick your name to talk to Hawky.</div>';
     ['hawkyChanges','hawkyHealth','hawkyLevel'].forEach(id=> $(id).innerHTML = '');
     return;
   }
-  await startHawkyChat();
+  if(off){ hawkyChat = { personId: null, turns: [] }; $('hawkyThread').innerHTML = ''; }
+  else await startHawkyChat();
   renderPlanSide();
 }
 
