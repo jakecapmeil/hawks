@@ -1389,7 +1389,9 @@
   .act-laps tr.sub td{color:var(--ink-soft);}
   .act-laps tr.sub td:first-child{padding-left:14px;}
   .fit-row .tm .rng{display:block;font-size:var(--fs-caption);font-weight:500;color:var(--ink-soft);}
+  .day-splits{margin:var(--sp-3) 0;}
   .session-table{margin-top:var(--sp-2);overflow-x:auto;}
+  .session-table[hidden]{display:none;}
   .session-table .act-laps{margin-top:0;font-size:var(--fs-subhead);}
   .session-table .act-laps th,.session-table .act-laps td{padding:6px 8px;}
   .session-report b{color:var(--gold);font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;}
@@ -1403,6 +1405,7 @@
     background:none;border:none;color:var(--ink);text-align:left;white-space:normal;font-weight:500;
   }
   .split-toggle:active{transform:none;opacity:1;}
+  .split-toggle svg{margin-left:auto;}
   .split-toggle .eyebrow{flex-shrink:0;}
   .split-toggle .eyebrow span{margin-left:6px;color:var(--ink-soft);font-weight:600;}
   .split-toggle .hint{flex:1;min-width:0;text-align:right;}
@@ -1976,6 +1979,7 @@
             <label class="field"><span>Runs</span><input type="number" step="1" min="0" max="10" id="tlRuns" inputmode="numeric"></label>
             <label class="field"><span>Difficulty 1-10</span><input type="number" step="1" min="1" max="10" id="tlDifficulty" inputmode="numeric"></label>
           </div>
+          <div id="tlDaySplits"></div>
           <div class="sessions" id="tlSessions"></div>
           <div class="tl-events" id="tlEvents"></div>
           <!-- The split builder moves into whichever session is open. -->
@@ -5281,7 +5285,7 @@ async function renderTrainingLog(){
   }
   $('tlGrid').innerHTML = html;
   $('tlGrid').querySelectorAll('[data-date]').forEach(b=> b.addEventListener('click', ()=>{
-    tlSelected = b.dataset.date; tlOpenSession = null; tlOpenActivity = null; renderTrainingLog();
+    tlSelected = b.dataset.date; tlOpenSession = null; tlOpenActivity = null; daySplitsOpen = null; renderTrainingLog();
   }));
   renderTrainingDay();
 }
@@ -5382,27 +5386,16 @@ function activityHtml(a){
   const dur = (sec)=> sec ? clock(sec) : null;
   const pace = (sec)=> sec ? clock(Math.round(sec)) + '/mi' : null;
   const heat = a.temp_f != null ? `${Math.round(a.temp_f)}°F` : null;
+  // Only the essentials, in an even grid.
   const stats = [
     stat(a.miles != null ? `${Math.round(a.miles * 100) / 100} mi` : null, 'distance'),
-    stat(dur(a.moving_sec), a.elapsed_sec && a.moving_sec && a.elapsed_sec - a.moving_sec > 30 ? `moving (${dur(a.elapsed_sec)} total)` : 'time'),
+    stat(dur(a.moving_sec), 'time'),
     stat(a.pace && `${a.pace}/mi`, 'pace'),
-    stat(a.pace_adjusted && `${a.pace_adjusted}/mi`, 'flat & cool pace'),
-    stat(pace(m.gap_sec_mi), 'grade-adjusted'),
-    stat(pace(m.max_pace_sec_mi), 'fastest'),
     stat(a.avg_hr && `${a.avg_hr}${a.max_hr ? ' / ' + a.max_hr : ''}`, a.max_hr ? 'avg / max HR' : 'avg HR'),
-    stat(a.effort, a.hr_effort != null && a.effort !== a.hr_effort ? `difficulty (HR ${a.hr_effort} + conditions)` : 'difficulty'),
-    stat(a.load, 'load'),
-    stat(heat, a.dew_point_f != null ? `dew point ${Math.round(a.dew_point_f)}°F` : 'temperature'),
-    stat(a.track ? null : a.elev_ft != null ? `${a.elev_ft} ft` : null, a.elev_per_mi != null ? `climb (${a.elev_per_mi} ft/mi)` : 'climb'),
-    stat(m.elev_loss_ft != null && !a.track ? `${m.elev_loss_ft} ft` : null, 'descent'),
+    stat(a.effort, 'difficulty'),
+    stat(heat, 'temperature'),
+    stat(a.track ? null : a.elev_ft != null ? `${a.elev_ft} ft` : null, 'climb'),
     stat(a.cadence && `${a.cadence} spm`, 'cadence'),
-    stat(m.stride_m && `${m.stride_m.toFixed(2)} m`, 'stride'),
-    stat(m.decoupling != null ? `${m.decoupling.toFixed(1)}%` : null, 'HR drift (decoupling)'),
-    stat(m.ef != null ? m.ef.toFixed(2) : null, 'efficiency factor'),
-    stat(m.icu_load, 'intervals.icu load'),
-    stat(m.trimp != null ? Math.round(m.trimp) : null, 'TRIMP'),
-    stat(m.calories, 'calories'),
-    stat(m.rpe, 'RPE'),
   ].join('');
   const notes = [
     a.course === 'vc' ? 'Van Cortlandt course: about 5.5% slower than flat (hills, gravel and grass).' : a.course === 'xc' ? 'Cross-country course: about 2.5% slower than flat, plus its hills.' : '',
@@ -5422,14 +5415,15 @@ function activityHtml(a){
   </div>`;
 }
 
-// One session's splits, laid out as a table: each run of the session in
-// order (warm up, workout, cool down) with the workout's reps under it, then
-// the session total.
+// Day splits: every run of the day in order (warm up, workout, cool down) with
+// the workout's reps under it, then the day total. Folds away; long days
+// (more than 8 rows) start folded.
 const lapsOfAct = (a)=> (a.laps || []).filter(l=>l.m > 0 && l.s > 0);
-const sessionRowCount = (sx)=> (sx.activities?.length > 1 || sx.activities?.some(a=>lapsOfAct(a).length > 1) ? (sx.activities || []).reduce((n,a)=> n + 1 + (lapsOfAct(a).length > 1 ? lapsOfAct(a).length : 0), 0) : 0);
-function sessionSplitsHtml(sx){
-  const acts = sx.activities || [];
-  if(!sessionRowCount(sx)) return '';
+let daySplitsOpen = null;
+function daySplitsHtml(sessions){
+  const acts = sessions.flatMap(sx=> sx.activities || []);
+  if(acts.length < 2 && !acts.some(a=> lapsOfAct(a).length > 1)) return '';
+  const nRows = acts.reduce((n,a)=> n + 1 + (lapsOfAct(a).length > 1 ? lapsOfAct(a).length : 0), 0);
   const sec = (v)=> v ? clock(Math.round(v)) : '';
   const rows = acts.map(a=>{
     const name = ROLE_LABEL[a.role] || SESSION_LABEL[a.category] || 'Run';
@@ -5442,7 +5436,8 @@ function sessionSplitsHtml(sx){
   const mi = acts.reduce((t,a)=> t + (a.miles || 0), 0);
   const secs = acts.reduce((t,a)=> t + (a.moving_sec || 0), 0);
   const foot = acts.length > 1 ? `<tfoot><tr><td>Total</td><td>${Math.round(mi * 100) / 100} mi</td><td>${sec(secs)}</td><td>${mi > 0.2 ? clock(Math.round(secs / mi)) : ''}</td><td></td></tr></tfoot>` : '';
-  return `<div class="session-table"><table class="act-laps"><thead><tr><th>Run</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div>`;
+  const open = daySplitsOpen ?? nRows <= SPLITS_AUTO_HIDE;
+  return `<div class="day-splits"><button type="button" class="split-toggle" id="daySplitsToggle" aria-expanded="${open}" aria-controls="daySplitsBody"><span class="eyebrow">Day splits<span>${nRows} rows</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><div id="daySplitsBody" class="session-table" ${open ? '' : 'hidden'}><table class="act-laps"><thead><tr><th>Run</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div></div>`;
 }
 
 async function renderTrainingDay(){
@@ -5475,24 +5470,25 @@ async function renderTrainingDay(){
   tlSessions = (day.sessions || []).length ? day.sessions
     : (day.miles || (day.split_reps || []).length ? [{ key: 'day', manual: true, title: 'Your run', category: (day.types || []).find(t=>t!=='strides') || 'easy', miles: day.miles, minutes: day.minutes, splits: day.split_reps || [], activities: [] }] : []);
   if(tlOpenSession && !tlSessions.some(x=>x.key === tlOpenSession)) tlOpenSession = null;
-  // A day with one session shows it, unless its splits run long (click to open).
-  // '' means it was closed by hand.
-  if(tlOpenSession === null && tlSessions.length === 1 && sessionRowCount(tlSessions[0]) <= SPLITS_AUTO_HIDE) tlOpenSession = tlSessions[0].key;
+  // A day with one session shows it. '' means it was closed by hand.
+  if(tlOpenSession === null && tlSessions.length === 1) tlOpenSession = tlSessions[0].key;
   // The split builder may sit inside the session being replaced: move it out
   // first, or the redraw deletes it (and opening another session fails).
   if($('tlSessions').contains($('splitPanel'))) $('tlSessions').after($('splitPanel'));
+  $('tlDaySplits').innerHTML = daySplitsHtml(tlSessions);
+  const dsBtn = $('daySplitsToggle');
+  if(dsBtn) dsBtn.addEventListener('click', ()=>{ const open = dsBtn.getAttribute('aria-expanded') !== 'true'; daySplitsOpen = open; dsBtn.setAttribute('aria-expanded', String(open)); $('daySplitsBody').hidden = !open; });
   $('tlSessions').innerHTML = tlSessions.map(sx=>{
     const meta = [sx.start && sx.start, sx.track && 'Track', sx.miles != null && `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `difficulty ${sx.effort}`, sx.temp_f != null && `${Math.round(sx.temp_f)}°F`, sx.elev_ft && !sx.track && `${sx.elev_ft} ft up`].filter(Boolean).join(' · ');
     const acts = sx.activities.length ? `<div class="acts">${sx.activities.map(activityHtml).join('')}</div>` : '';
     const open = sx.key === tlOpenSession;
-    const reps = sx.splits?.length || (sessionRowCount(sx) ? sx.activities.reduce((n,a)=> n + (lapsOfAct(a).length > 1 ? lapsOfAct(a).length : 0), 0) : 0);
+    const reps = 0;
     return `<div class="session ${open ? 'open' : ''}" data-key="${escapeHtml(sx.key)}">
       <button type="button" class="session-btn" aria-expanded="${open}">
         <span class="session-head"><span class="list-title">${escapeHtml(sx.title && !/^(morning|afternoon|evening|lunch|night)? ?run$|^new york running$/i.test(sx.title) ? sx.title : SESSION_LABEL[sx.category] || 'Run')}</span><span class="session-reps">${reps ? `${reps} splits` : ''}</span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>
         <span class="session-meta num">${escapeHtml(meta)}</span>
       </button>
       <div class="session-body">
-        ${sessionSplitsHtml(sx)}
         ${acts}
         ${sx.report ? `<div class="session-report"><b>Hawky</b>${escapeHtml(sx.report)}</div>` : ''}
         <div class="session-splits"></div>
@@ -5524,7 +5520,7 @@ async function renderTrainingDay(){
   // The split builder sits inside the open session.
   const openSx = tlSessions.find(x=>x.key === tlOpenSession);
   const slot = openSx && $('tlSessions').querySelector(`.session[data-key="${CSS.escape(openSx.key)}"] .session-splits`);
-  if(slot){ slot.appendChild($('splitPanel')); $('splitPanel').style.display = openSx.manual || !sessionRowCount(openSx) ? '' : 'none'; }
+  if(slot){ slot.appendChild($('splitPanel')); $('splitPanel').style.display = openSx.manual ? '' : 'none'; }
   else { $('tlSessions').after($('splitPanel')); $('splitPanel').style.display = tlSessions.length ? 'none' : ''; }
   tlSplitTarget = openSx && !openSx.manual ? openSx.main_id : null;
   splitRows = ((openSx ? openSx.splits : day.split_reps) || []).map(r=>({ m: r.m, s: r.s, hr: r.hr || null, rest: r.rest || '' }));
