@@ -2058,7 +2058,7 @@
           <div class="section-head">
             <div>
               <div class="card-title">Race predictor</div>
-              <div class="hint" id="predHint">What HawksPredict expects from your PRs, with an 80% range.</div>
+              <div class="hint" id="predHint">What HawksPredict expects from your races and PRs, with an 80% range.</div>
             </div>
             <span id="predBadge"></span>
           </div>
@@ -2069,7 +2069,7 @@
           <div class="section-head">
             <div>
               <div class="card-title">Race fitness</div>
-              <div class="hint" id="fitHint">What you could race right now, from every run, your races, PRs and Garmin.</div>
+              <div class="hint" id="fitHint">What you could race right now, from your races and PRs (HawksPredict). Hover a row for its 80% range.</div>
             </div>
             <span id="fitBadge"></span>
           </div>
@@ -2099,10 +2099,10 @@
             <div class="stack" style="margin-top:var(--sp-3);">
               <p><b>Every run is searched for races.</b> Any run that covered a race distance (1600 to 10K) at race effort counts, whatever it was labelled, and if it beats a PR on file Hawks updates the PR. The fastest stretches inside your runs (from your watch, through intervals.icu) count too.</p>
               <p><b>Course and weather are taken out.</b> Every race and hard run is credited back to a flat course on a cool day. Van Cortlandt runs about 5.5% slow (about a minute on an 18-minute 5K), other cross-country courses about 2.5% plus their hills, and heat by temperature plus dew point (about 1% at 120, 3% at 140, 6% at 160). Heart rate on steady runs is read the same way. Your PRs stay the real times, and a cross-country race counts toward your XC PR, never your track one.</p>
-              <p><b>Recent races come first.</b> Each one becomes a VDOT (Jack Daniels' running formula), weighted by how recent it is. A new race outranks older results and a 5K you typed in, and a much slower race (hilly course, bad day) doesn't drag you down.</p>
+              <p><b>HawksPredict reads your results.</b> Your races and PRs from the last two years (a 5K you typed in only counts when nothing newer exists) go into HawksPredict-Lite, a small model trained on collegiate race results. It predicts a time for every event from 400 to the half marathon, with an 80% range, and learns your own speed-vs-endurance shape from the distances you have run. Race fitness (VDOT) is read off its 1600, 3200 and 5K times and sets your training zones.</p>
+              <p><b>It uses your best results.</b> It looks at your fastest result at each distance from the last two years, so someone coming back from a layoff or injury will read faster than they are today; add a recent race or edit the PR date when that is you.</p>
               <p><b>Garmin's VO2max is matched to your races.</b> Garmin estimates VO2max from heart rate vs speed, which usually reads higher than race results. Hawks finds your personal ratio from races run near a Garmin reading, so the number can track your fitness between races.</p>
-              <p><b>Training fills the gaps.</b> Rep sessions from your watch or split builder, and your heart rate on steady runs, only move the number when your last race is old: if you've gotten fitter since, or lost some fitness.</p>
-              <p><b>Each distance gets its own estimate.</b> From 1600 to 5K, a critical-speed curve sharpens the numbers (accurate to about 1-2% there); when your watch syncs, intervals.icu fits it to every run you've done. 400 and 800 lean on your recent PRs, since speed isn't something aerobic models capture. Your own speed-vs-endurance profile shifts every distance.</p>
+              <p><b>Runs without a race.</b> If you have no race or PR at all, Hawks falls back to a training estimate from rep sessions and heart rate on steady runs, and says so.</p>
               <p><b>Mileage matters for long races.</b> 10K and half marathon estimates slow down when your last 4 weeks are low on miles.</p>
               <p><b>VO2max</b> is Garmin's when your watch sends it, otherwise Hawks' estimate from your heart rate on steady runs (the same idea Garmin uses). Race fitness (VDOT) is what your race times say. Neither is a lab test.</p>
               <p><b>Fitness score</b> is your training load (minutes x effort) averaged over 42 days; fatigue is the same over 7 days, and form is fitness minus fatigue. It goes up with steady training and doesn't depend on racing.</p>
@@ -5772,7 +5772,7 @@ async function renderFitness(refresh){
   $('fitNewPrs').innerHTML = (f.new_prs || []).map(p=>`New PR found: <b>${escapeHtml(p.event)} ${escapeHtml(p.time)}</b> on ${escapeHtml(p.date)}`).join('<br>');
   $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
     const pr = e.pr?.time;
-    return `<div class="fit-row"><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
+    return `<div class="fit-row"${e.range ? ` title="80% range ${escapeHtml(e.range)}"` : ''}><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
   }).join('')
     // The same fitness on the home course (hills, gravel and grass: about 5.5% slower).
     + (f.course_estimates || []).map(c=>{
@@ -5798,11 +5798,11 @@ async function renderPredictor(){
   card.style.display = '';
   $('predBadge').innerHTML = `<span class="badge">${escapeHtml(d.model.name.replace('HawksPredict-', ''))} ${escapeHtml(d.model.version)}</span>`;
   if(!d.predictions?.length){ $('predTable').innerHTML = `<div class="hint">${escapeHtml(d.reason || 'No prediction yet.')}</div>`; $('predNote').textContent = ''; return; }
-  $('predTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Predicted</span><span>80% range · Fitness States</span><span></span></div>` + d.predictions.map(p=>{
-    return `<div class="fit-row"><span class="ev">${escapeHtml(p.label)}</span><span class="tm">${escapeHtml(p.raw.time)}</span><span class="pc">${escapeHtml(p.raw.lo_time)}–${escapeHtml(p.raw.hi_time)}${p.site ? ' · ' + escapeHtml(p.site.time) : ''}</span><span></span></div>`;
+  $('predTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Predicted</span><span>80% range · PR</span><span></span></div>` + d.predictions.map(p=>{
+    return `<div class="fit-row"><span class="ev">${escapeHtml(p.label)}</span><span class="tm">${escapeHtml(p.raw.time)}</span><span class="pc">${escapeHtml(p.raw.lo_time)}–${escapeHtml(p.raw.hi_time)}${p.pr ? ' · ' + escapeHtml(p.pr) : ''}</span><span></span></div>`;
   }).join('');
   const hrLine = d.hr ? ` Heart-rate fitness is ${d.hr.delta_pct >= 0 ? 'up' : 'down'} ${Math.abs(d.hr.delta_pct)}% since ${escapeHtml(d.hr.since)} (${d.hr.runs_now} steady runs now): an experimental adjustment would move these times ${Math.abs(d.hr.applied_pct)}% ${d.hr.applied_pct >= 0 ? 'faster' : 'slower'} (${d.predictions.filter(p=>p.adjusted).map(p=>escapeHtml(p.label) + ' ' + escapeHtml(p.adjusted.time)).join(', ')}). The table shows the unadjusted model; both are saved to check which is closer.` : '';
-  $('predNote').innerHTML = `Uses only your PRs, so it can differ from Fitness States, which also reads your runs, heart rate and courses.${hrLine}${d.next_meet ? ` Predictions for ${escapeHtml(d.next_meet.title)} (${escapeHtml(d.next_meet.date)}) are saved to be scored after the race.` : ''}`;
+  $('predNote').innerHTML = `The same HawksPredict numbers as Fitness States, with the Van Cortlandt rows added.${hrLine}${d.next_meet ? ` Predictions for ${escapeHtml(d.next_meet.title)} (${escapeHtml(d.next_meet.date)}) are saved to be scored after the race.` : ''}`;
 }
 
 // --- Team mileage -----------------------------------------------------------------

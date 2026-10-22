@@ -22,6 +22,14 @@ Update: **HawksPredict-Research v1.1** adds Cameron, VDOT, critical-speed and lo
 - **Mega-dataset and publishing:** `PUBLISHING.md`. Short answer: publish a benchmark (loaders, frozen splits, baselines, noise floor), not a merged file.
 - **Data cleanup:** provenance and checksums in `DATASETS.md`; the Power of 10 files can be deleted (commands in the chat).
 
+## Update 2026-10-22: Lite now drives Fitness States
+`computeFitness` (`src/fitness.js`) no longer blends VDOT, critical speed and speed-index. Race-quality efforts (races, PRs, a typed 5K only when nothing newer exists; last 730 days; credited back to a flat cool course)
+go into HawksPredict-Lite, which gives every event from 400 m to the half with an 80% range. VDOT (aerobic zones) is read off its 1600/3200/5K times. Workout paces, Hawky and the coach all read this.
+- **Check:** the old website column rerun with the new code scores 4.02% on the frozen subset, identical to Lite (paired -0.08 to +0.08), versus 4.85% before; the runners with only 400/800 PRs now get estimates too.
+- **Kept from the old method:** the mileage slowdown on 10K/half, the Van Cortlandt x1.055 course rows, Garmin VO2max matching, and a training-only estimate for runners with no race or PR at all (labelled as such).
+- **Trade-off:** Lite takes the fastest result per distance in two years, with no recency fade, so someone back from injury or a layoff reads faster than they are. Heart rate is not applied (unvalidated; card and log only).
+- **Trend:** the "5K down Xs" line skips comparisons across the cutover (2026-10-22); the history sparkline mixes the two methods before it.
+
 ## Headline numbers (frozen test set)
 Test = 2,594 races by 674 runners who were never in training, all from the last season (2025-08 onward), scored once.
 Error = mean absolute percent error of predicted finish time. CI = athlete-clustered bootstrap.

@@ -1,27 +1,25 @@
-// Race predictor card: HawksPredict-Lite on the runner's PRs, plus an
-// exploratory heart-rate fitness adjustment, logged for the next meet.
+// Race predictor card: the same HawksPredict-Lite numbers Fitness States use,
+// with their 80% ranges, plus an experimental heart-rate adjustment, and the
+// next meet's predictions logged so real results can score them.
 // Behind env.HAWKS_PREDICT === '1'.
-import { predictRace, PACE_MODEL_INFO } from './pacemodel.js';
 import { getPrs } from './log.js';
-import { PR_METERS, parseTime, fmtTime, getFitness } from './fitness.js';
-import { heatCost, hillCost } from './conditions.js';
+import { getFitness, fmtTime } from './fitness.js';
+import { heatCost, hillCost, VC_FACTOR } from './conditions.js';
 
 const DAY = 86400000;
 const MILE = 1609.344;
-const TARGETS = [
-  { key: '800', label: '800m', m: 800, surf: 'track' },
-  { key: '1600', label: '1600m', m: 1600, surf: 'track' },
-  { key: '3200', label: '3200m', m: 3200, surf: 'track' },
-  { key: '5K', label: '5K', m: 5000, surf: 'track' },
-  { key: 'XC 5K', label: 'XC 5K', m: 5000, surf: 'xc' },
-  { key: 'VC 2.5 mi', label: '2.5 mi at Van Cortlandt', m: 2.5 * MILE, surf: 'xc' },
+// The estimate rows the card shows, plus the two Van Cortlandt rows.
+const ROWS = [
+  { key: '800', label: '800m' },
+  { key: '1600', label: '1600m' },
+  { key: '3200', label: '3200m' },
+  { key: '5K', label: '5K' },
 ];
-const XC_EVENTS = new Set(['XC 5K', 'VC 2.5 mi']);
 // The heart-rate layer is exploratory: half the fitness change, never more than 3%.
 const HR_SHRINK = 0.5;
 const HR_CAP = 0.03;
+const MODEL_TAG = 'HawksPredict-Lite v1 fitness-states';
 
-const ageDays = (date, today) => Math.round((Date.parse(today + 'T12:00:00Z') - Date.parse(date + 'T12:00:00Z')) / DAY);
 const addDays = (date, n) => new Date(Date.parse(date + 'T12:00:00Z') + n * DAY).toISOString().slice(0, 10);
 const vo2At = (v) => -4.6 + 0.182258 * v + 0.000104 * v * v;
 
@@ -32,8 +30,6 @@ function hashOf(s) {
 }
 
 // Median heart-rate fitness (VDOT-like) of steady runs in the 56 days before asOf.
-// Same recipe as Fitness States: Swain %HRmax -> %VO2max, read at the pace the
-// run was worth on flat ground in cool weather.
 function hrFitness(workouts, hrMax, asOf) {
   const from = addDays(asOf, -56);
   const est = [];
@@ -57,21 +53,13 @@ function hrFitness(workouts, hrMax, asOf) {
 export async function racePredictions(env, personId, today) {
   if (env.HAWKS_PREDICT !== '1') return { enabled: false };
   const db = env.DB;
-  const prs = await getPrs(db, personId);
-  const inputs = [];
-  for (const [event, v] of Object.entries(prs)) {
-    const sec = parseTime(v?.time);
-    const m = PR_METERS[event];
-    if (!sec || !m) continue;
-    if (v.date && ageDays(v.date, today) > 730) continue; // Lite was trained on the previous two years
-    inputs.push({ event, m, sec, surf: XC_EVENTS.has(event) ? 'xc' : 'track', date: v.date || null });
-  }
-  const model = { name: PACE_MODEL_INFO.name, version: PACE_MODEL_INFO.version };
-  if (!inputs.length) return { enabled: true, model, predictions: [], reason: 'Add a PR (or two) and HawksPredict can predict your other events.' };
+  const fitness = await getFitness(db, personId, today);
+  const model = { name: 'HawksPredict-Lite', version: 'v1' };
+  if (!fitness?.model) return { enabled: true, model, predictions: [], reason: 'Add a race or PR (or two) and HawksPredict can predict your other events.' };
 
-  // Exploratory heart-rate layer: fitness now vs. fitness when the newest PR was set.
+  // Exploratory heart-rate layer: fitness now vs. fitness when the newest result was set.
   let hr = null;
-  const newest = inputs.filter((i) => i.date).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  const newest = (fitness.lite_inputs || []).filter((i) => i.date).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
   const maxRow = await db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(personId).first();
   const hrMax = maxRow?.m >= 175 ? maxRow.m : null;
   if (hrMax && newest) {
@@ -88,38 +76,38 @@ export async function racePredictions(env, personId, today) {
     }
   }
 
-  let fitness = null;
-  try { fitness = await getFitness(db, personId, today); } catch { /* the card still works without it */ }
-  const siteBy = new Map((fitness?.estimates || []).map((e) => [e.event, e]));
-  const vc = (fitness?.course_estimates || []).find((c) => c.key === 'vc2.5');
-  if (vc) siteBy.set('VC 2.5 mi', vc);
-
-  const predictions = [];
-  for (const t of TARGETS) {
-    // The roster has no sex field and the model takes one: average the two runs, keep the wider range.
-    const a = predictRace(inputs, { m: t.m, surf: t.surf, male: 0 });
-    const b = predictRace(inputs, { m: t.m, surf: t.surf, male: 1 });
-    if (!a || !b) continue;
-    const r = { sec: Math.sqrt(a.sec * b.sec), lo: Math.min(a.lo, b.lo), hi: Math.max(a.hi, b.hi), buckets: a.buckets };
-    const site = siteBy.get(t.key);
-    predictions.push({
-      event: t.key, label: t.label, buckets: r.buckets,
-      raw: { sec: r.sec, lo: r.lo, hi: r.hi, time: fmtTime(r.sec), lo_time: fmtTime(r.lo), hi_time: fmtTime(r.hi) },
-      adjusted: hr ? { sec: r.sec * hr.factor, lo: r.lo * hr.factor, hi: r.hi * hr.factor, time: fmtTime(r.sec * hr.factor), lo_time: fmtTime(r.lo * hr.factor), hi_time: fmtTime(r.hi * hr.factor) } : null,
-      site: site ? { time: site.time, sec: site.sec } : null,
-      pr: prs[t.key]?.time || null,
-    });
+  const prs = await getPrs(db, personId);
+  const rows = [];
+  for (const r of ROWS) {
+    const e = fitness.estimates.find((x) => x.event === r.key);
+    if (e?.lo) rows.push({ key: r.key, label: r.label, sec: e.sec, lo: e.lo, hi: e.hi, pr: prs[r.key]?.time || null });
   }
+  // Van Cortlandt: the same fitness on the home course (x1.055, 2.5 mi by Riegel from the 5K).
+  const five = fitness.estimates.find((x) => x.event === '5K');
+  if (five?.lo) {
+    for (const [key, label, m] of [['VC 2.5 mi', '2.5 mi at Van Cortlandt', 2.5 * MILE], ['VC 5K', '5K at Van Cortlandt', 5000]]) {
+      const k = VC_FACTOR * Math.pow(m / 5000, 1.06);
+      rows.push({ key, label, sec: five.sec * k, lo: five.lo * k, hi: five.hi * k, pr: prs[key === 'VC 5K' ? 'XC 5K' : key]?.time || null });
+    }
+  }
+  const predictions = rows.map((p) => {
+    const f = (x) => fmtTime(x);
+    const adj = hr ? { sec: p.sec * hr.factor, lo: p.lo * hr.factor, hi: p.hi * hr.factor } : null;
+    return {
+      event: p.key, label: p.label, pr: p.pr,
+      raw: { sec: p.sec, lo: p.lo, hi: p.hi, time: f(p.sec), lo_time: f(p.lo), hi_time: f(p.hi) },
+      adjusted: adj && { ...adj, time: f(adj.sec), lo_time: f(adj.lo), hi_time: f(adj.hi) },
+    };
+  });
 
   // Lock the first prediction for the next meet (within two weeks).
   const meet = await db.prepare("SELECT date, title FROM events WHERE type = 'meet' AND date >= ? AND date <= ? ORDER BY date LIMIT 1").bind(today, addDays(today, 14)).first();
   if (meet && predictions.length) {
-    const hash = hashOf(inputs.map((i) => `${i.event}=${i.sec}`).sort().join('|'));
-    const modelTag = `${model.name} ${model.version}`;
+    const hash = hashOf((fitness.lite_inputs || []).map((i) => `${i.m}=${i.sec}`).sort().join('|'));
     await db.batch(predictions.map((p) => db.prepare(
       `INSERT OR IGNORE INTO prediction_log (person_id, event, race_date, model, inputs_hash, raw_sec, raw_lo, raw_hi, adj_sec, adj_lo, adj_hi, hr_delta, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(personId, p.event, meet.date, modelTag, hash, p.raw.sec, p.raw.lo, p.raw.hi, p.adjusted?.sec ?? null, p.adjusted?.lo ?? null, p.adjusted?.hi ?? null, hr?.delta_pct ?? null, Date.now())));
+    ).bind(personId, p.event, meet.date, MODEL_TAG, hash, p.raw.sec, p.raw.lo, p.raw.hi, p.adjusted?.sec ?? null, p.adjusted?.lo ?? null, p.adjusted?.hi ?? null, hr?.delta_pct ?? null, Date.now())));
   }
   return { enabled: true, model, predictions, hr: hr && { ...hr, factor: undefined }, next_meet: meet ? { date: meet.date, title: meet.title } : null };
 }

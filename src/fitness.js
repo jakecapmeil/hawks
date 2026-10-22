@@ -2,23 +2,21 @@
 // (400 through half marathon), a VO2max estimate and recent mileage. Every
 // pace in Hawks (workout library, Hawky, the plan) comes from here.
 //
-// How it's worked out, best evidence first:
-//   1. Max efforts: race results from the watch, PRs (with their dates) and a
-//      self-entered "current 5K". Each is turned into a VDOT (Daniels &
-//      Gilbert's oxygen-cost and time-to-exhaustion curves), weighted by
-//      quality and by how recent it is.
-//   2. Training: rep sessions (laps from the watch or the split builder) and
-//      heart rate on steady runs (%HRmax -> %VO2max, Swain 1994). These are
-//      submaximal, so they only move the number when the races are old:
-//      fitter than your last race, or detrained since.
-//   3. Per-distance shape. Critical speed (d = CS*t + D') fitted to recent
-//      efforts of 2-20 min is accurate to ~1-2% from 1500 m to 10K, so it is
-//      blended in there. It is poor for 800 m and below, so 400/800 come from
-//      the 1600 estimate with short-distance exponents, pulled toward recent
-//      400/800 PRs. A personal speed/endurance index (the athlete's own Riegel
-//      exponent vs Daniels') shifts every distance.
+// How it's worked out:
+//   1. Race-quality efforts: race results from the watch, PRs (with their
+//      dates) and a self-entered "current 5K" (only when nothing newer
+//      exists), from the last two years. HawksPredict-Lite (pacemodel.js, a
+//      small tree model trained on collegiate results) turns them into a time
+//      and an 80% range for every event from 400 m to the half marathon. It
+//      knows each runner's own speed/endurance shape from their results.
+//   2. Race fitness (VDOT) is read off that model's 1600, 3200 and 5K times;
+//      it sets the aerobic training zones. Race paces come straight from the
+//      model.
+//   3. Only when a runner has no race result at all does the old training-based
+//      estimate run (rep sessions, heart rate on steady runs, Garmin VO2max),
+//      labelled as a training estimate.
 //   4. Mileage: 10K and half estimates are slowed for low weekly mileage,
-//      since VDOT alone over-predicts long races for low-volume runners.
+//      since a race result alone over-predicts long races for low-volume runners.
 //
 // Every race and hard run is first credited back to a flat course in good
 // weather (conditions.js): Van Cortlandt runs ~5.5% slow, other XC courses
@@ -26,9 +24,12 @@
 // steady runs is read the same way. PRs stay the raw times.
 import { parseReps, snap100 } from './workouts.js';
 import { conditionsOf, heatCost, hillCost, VC_FACTOR, XC_FACTOR, VC_RE } from './conditions.js';
+import { predictRaceAny, PACE_MODEL_INFO } from './pacemodel.js';
 
 const DAY = 86400000;
 const MILE = 1609.344;
+// Fitness States switched from the VDOT blend to HawksPredict-Lite on this date.
+const LITE_SINCE = '2026-10-22';
 
 export const EVENTS = [
   { key: '400', label: '400m', m: 400 },
@@ -398,6 +399,32 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
   for (const x of [...maxSrc, ...subSrc]) x.used = true;
   for (const x of sources) if (x.kind === 'pr' && !x.eff) x.used = true; // 400/800 PRs shape the short estimates
 
+  // HawksPredict-Lite: race-quality efforts (races, PRs, and a self-entered 5K
+  // only when nothing newer exists) from the last two years, every one already
+  // credited back to a flat, cool course. Splits from runs, rep sets, heart
+  // rate and Garmin are not race evidence and stay out. Needs at least one.
+  const liteIn = sources.filter((s) => s.max && s.m && s.s && s.age <= 730
+    && (s.kind === 'race' || s.kind === 'pr' || (s.kind === 'manual' && newestRace > 75)));
+  let lite = null;
+  if (liteIn.length) {
+    const results = liteIn.map((s) => ({ m: s.m, sec: s.s, surf: 'track' }));
+    let by = {};
+    for (const e of EVENTS) {
+      by[e.key] = predictRaceAny(results, { m: e.m, surf: 'track' });
+      if (!by[e.key]) { by = null; break; }
+    }
+    if (by) {
+      // Race fitness (VDOT) for the aerobic zones: the model's own 1600, 3200 and 5K read.
+      const v = ['1600', '3200', '5K'].map((k) => vdotOf(EVENTS.find((e) => e.key === k).m, by[k].sec));
+      lite = { by, vdot: v.reduce((a, b) => a + b, 0) / v.length };
+      // The results that set the estimate count fully; the rest are context.
+      const at5k = (s) => s.s * Math.pow(5000 / s.m, 1.06);
+      const best = Math.min(...liteIn.map(at5k));
+      for (const x of sources) x.used = false;
+      for (const x of liteIn) { x.used = true; x.weight = at5k(x) <= best * 1.015 ? 1 : 0.1; }
+    }
+  }
+
   // Mileage.
   const cur = milesBetween(workouts, days, addDays(today, -27), today);
   const prev = milesBetween(workouts, days, addDays(today, -55), addDays(today, -28));
@@ -406,7 +433,10 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
 
   let vdot = null;
   let basis = 'none';
-  if (M) {
+  if (lite) {
+    vdot = lite.vdot;
+    basis = 'hawkspredict';
+  } else if (M) {
     vdot = M.v;
     basis = 'races';
     if (S) {
@@ -479,12 +509,12 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
   const est = {};
   const mileT = timeFor(vdot, 1600) * Math.pow(1600 / 5000, speedIndex);
   for (const e of EVENTS) {
-    let t = e.m >= 1500 ? timeFor(vdot, e.m) * Math.pow(e.m / 5000, speedIndex) : shortFromMile(mileT, e.m);
-    if (cs && e.m >= 1500 && e.m <= 5000) t = 0.7 * t + 0.3 * ((e.m - cs.dPrime) / cs.speed);
+    let t = lite ? lite.by[e.key].sec : e.m >= 1500 ? timeFor(vdot, e.m) * Math.pow(e.m / 5000, speedIndex) : shortFromMile(mileT, e.m);
+    if (!lite && cs && e.m >= 1500 && e.m <= 5000) t = 0.7 * t + 0.3 * ((e.m - cs.dPrime) / cs.speed);
     // A recent race or PR at this exact distance is the best evidence there
     // is; the model is pulled toward it (strongly for 400/800, where the
     // aerobic models are weakest).
-    for (const s of sources) {
+    for (const s of lite ? [] : sources) {
       if (!s.max || s.kind === 'manual' || s.weight === 0 || Math.abs(s.m - e.m) / e.m > 0.02) continue;
       const w = recency(s.age, 90) * (e.m < 1500 ? 1.5 : 1) * s.quality;
       t = (t + w * s.s * (e.m / s.m)) / (1 + w);
@@ -492,7 +522,8 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const raw = t;
     if (e.key === '10K') t *= 1 + clamp((25 - mpw) * 0.0015, 0, 0.05);
     if (e.key === 'half') t *= 1 + clamp((35 - mpw) * 0.003, 0, 0.09);
-    est[e.key] = { ...e, sec: t, raw };
+    const scale = t / raw;
+    est[e.key] = { ...e, sec: t, raw, lo: lite ? lite.by[e.key].lo * scale : null, hi: lite ? lite.by[e.key].hi * scale : null };
   }
 
   // The same fitness on the team's home course: what to expect at Van
@@ -542,6 +573,8 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     garmin_ratio: garminRatio ? Math.round(garminRatio * 100) / 100 : null,
     fitness_score: fitnessScore(workouts, wellness, today),
     pr_candidates: prCandidates,
+    model: lite ? `${PACE_MODEL_INFO.name} ${PACE_MODEL_INFO.version}` : null,
+    lite_inputs: lite ? liteIn.map((s) => ({ kind: s.kind, m: s.m, sec: Math.round(s.s * 10) / 10, date: s.date })) : [],
     confidence: overall,
     mpw, mpw_prev: mpwPrev, longest_28d: round1(cur.longest),
     estimates: EVENTS.map((e) => {
@@ -550,6 +583,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
         event: e.key, label: e.label, meters: e.m, sec: Math.round(x.sec * 10) / 10,
         time: fmtTime(x.sec, { tenths: e.m <= 800 }), pace_mi: fmtPace((x.sec / e.m) * MILE), confidence: confFor(e.m),
         pr: prOf(e.key),
+        ...(x.lo ? { lo: Math.round(x.lo * 10) / 10, hi: Math.round(x.hi * 10) / 10, range: `${fmtTime(x.lo, { tenths: e.m <= 800 })}-${fmtTime(x.hi, { tenths: e.m <= 800 })}` } : {}),
       };
     }),
     course_estimates: courseEstimates.map((c) => ({ ...c, pr: prOf(c.key) })),
@@ -638,9 +672,10 @@ export async function recomputeFitness(db, personId, today) {
   const fiveK = data.estimates.find((e) => e.event === '5K');
   // Trend: the 5K estimate four weeks ago, from history.
   const old = await db.prepare(
-    'SELECT five_k_sec, vdot FROM fitness_history WHERE person_id = ? AND date <= ? ORDER BY date DESC LIMIT 1'
+    'SELECT date, five_k_sec, vdot FROM fitness_history WHERE person_id = ? AND date <= ? ORDER BY date DESC LIMIT 1'
   ).bind(personId, addDays(today, -28)).first();
-  if (old && fiveK) {
+  // History before the switch to HawksPredict-Lite came from the old method: no trend across the cutover.
+  if (old && fiveK && old.date >= LITE_SINCE) {
     data.trend = { five_k_sec_change: Math.round(fiveK.sec - old.five_k_sec), vdot_change: round1(data.vdot - old.vdot), since: addDays(today, -28) };
   }
   await db.batch([

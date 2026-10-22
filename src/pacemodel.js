@@ -119,3 +119,11 @@ export function predictRace(results, target) {
 }
 
 export const PACE_MODEL_INFO = { name: MODEL.name, version: MODEL.version, params: MODEL.params, trainedOn: MODEL.trained_on };
+
+// The roster has no sex field: average the male and female predictions and keep the wider range.
+export function predictRaceAny(results, target) {
+  const a = predictRace(results, { ...target, male: 0 });
+  const b = predictRace(results, { ...target, male: 1 });
+  if (!a || !b) return null;
+  return { sec: Math.sqrt(a.sec * b.sec), lo: Math.min(a.lo, b.lo), hi: Math.max(a.hi, b.hi), buckets: a.buckets };
+}
