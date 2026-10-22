@@ -1,3 +1,6 @@
 node_modules/
 .wrangler/
 .dev.vars
+
+# locked race forecasts name students: keep local
+research/hawkspredict/forecast_*

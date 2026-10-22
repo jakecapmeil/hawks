@@ -4,6 +4,7 @@ import { WORKOUTS, WORKOUT_GROUPS, workoutGroup, workoutTargets, personalWorkout
 import { todayInTz, getCoachContext, compactFitness } from './coach.js';
 import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
+import { racePredictions } from './racepredict.js';
 import { BODY_PARTS } from './body.js';
 import { hawkyState, applyPlanChange, resetPlanDay, changeLevel, healthSummary, PlanError } from './hawky.js';
 import { aiEnabled, askCoach, AiError } from './gemini.js';
@@ -1730,6 +1731,13 @@ export default {
         const person = await env.DB.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first();
         if (!person) return json({ error: 'Unknown person' }, 404);
         return json({ fitness: await getFitness(env.DB, personId, todayInTz()), history: await fitnessHistory(env.DB, personId) });
+      }
+
+      if (pathname === '/api/predict' && request.method === 'GET') {
+        const personId = str(reqUrl.searchParams.get('personId'), 100);
+        const person = await env.DB.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first();
+        if (!person) return json({ error: 'Unknown person' }, 404);
+        try { return json(await racePredictions(env, personId, todayInTz())); } catch (e) { return json({ enabled: false, error: String(e?.message || e) }); }
       }
 
       if (pathname === '/api/hawky' && request.method === 'GET') {
