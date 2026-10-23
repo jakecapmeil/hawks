@@ -6,6 +6,7 @@ import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
 import { pushPlan, planWorkouts } from './planpush.js';
 import { heatCalc, taperCalc, CalcError } from './calculators.js';
+import { cohortReport } from './cohorts.js';
 import { racePredictions } from './racepredict.js';
 import { BODY_PARTS } from './body.js';
 import { hawkyState, applyPlanChange, resetPlanDay, changeLevel, healthSummary, PlanError } from './hawky.js';
@@ -1675,6 +1676,14 @@ export default {
         const q = Object.fromEntries([...reqUrl.searchParams.entries()].map(([k, v]) => [k, str(v, 40)]));
         try { return json(pathname === '/api/calc/heat' ? heatCalc(q) : taperCalc(q)); }
         catch (err) { if (err instanceof CalcError) return json({ error: err.message }, 400); throw err; }
+      }
+
+      if (pathname === '/api/cohort' && request.method === 'GET') {
+        const personId = str(reqUrl.searchParams.get('personId'), 100);
+        const person = await env.DB.prepare('SELECT id FROM people WHERE id = ?').bind(personId).first();
+        if (!person) return json({ error: 'Unknown person' }, 404);
+        const rep = await cohortReport(env.DB, personId, str(reqUrl.searchParams.get('goal'), 12));
+        return json(rep, rep.error ? 400 : 200);
       }
 
       if (pathname === '/api/plan/export' && request.method === 'GET') {

@@ -2129,6 +2129,17 @@
               <div id="calcTaperOut" class="stack"></div>
             </div>
           </details>
+          <details style="margin-top:var(--sp-3);">
+            <summary><b>Runners like you</b>: your marathon training next to real marathoners</summary>
+            <div class="stack" style="margin-top:var(--sp-3);">
+              <div class="hint">Compares your last 16 weeks of watch runs with 14,000 real marathon runners. Add a goal time to see what runners at that time trained.</div>
+              <div class="cluster">
+                <label class="field"><span>Goal marathon time (optional)</span><input type="text" id="calcCohortGoal" placeholder="3:30:00" maxlength="8" inputmode="numeric"></label>
+                <button type="button" id="calcCohortBtn">Compare</button>
+              </div>
+              <div id="calcCohortOut" class="stack"></div>
+            </div>
+          </details>
         </section>
         <section class="card">
           <div class="card-title">Training paces</div>
@@ -5193,6 +5204,24 @@ function wireUI(){
     const out = $('calcHeatOut'); out.textContent = '…';
     const d = await calc('/api/calc/heat', { race: $('calcHeatRace').value, time: $('calcHeatTime').value, temp_f: $('calcHeatTemp').value, dew_f: $('calcHeatDew').value, climb_ft_per_mile: $('calcHeatClimb').value });
     out.innerHTML = d.error ? escapeHtml(d.error) : `<b>${escapeHtml(d.expected_time)}</b> expected (${escapeHtml(d.pace_mi)}/mi), ${d.cost_sec >= 0 ? '+' : ''}${d.cost_sec} s vs ${escapeHtml(d.cool_day_time)}. Heat ${d.heat_pct}%${d.hill_pct ? `, hills ${d.hill_pct}%` : ''} (temperature + dew point ${d.temp_plus_dew}). ${escapeHtml(d.note || '')}`;
+  });
+  $('calcCohortBtn').addEventListener('click', async ()=>{
+    const out = $('calcCohortOut'); out.textContent = '…';
+    const d = await calc('/api/cohort', { personId: activePersonId, goal: $('calcCohortGoal').value });
+    if(d.error){ out.textContent = d.error; return; }
+    const y = d.you;
+    let h = `<div class="hint">You: ${y.weekly_miles} mi a week on average (${y.last6_miles} in the last 6 weeks), longest run ${y.longest_mi} mi, ${y.days_wk} running days a week, ${escapeHtml(y.pace_text)}/mi typical pace. Training-based marathon estimate ${escapeHtml(d.predicted.time)} (${escapeHtml(d.predicted.range)}).</div>`;
+    if(d.like) h += `<div class="hint"><b>Runners with training like yours</b> (${d.like.weekly_miles[0]}-${d.like.weekly_miles[1]} mi a week, ${escapeHtml(d.like.pace[0])}-${escapeHtml(d.like.pace[1])}/mi, ${d.like.n} runners) finished: fastest tenth ${escapeHtml(d.like.finish[0])}, middle half ${escapeHtml(d.like.finish[1])} to ${escapeHtml(d.like.finish[3])}, typical ${escapeHtml(d.like.finish[2])}, slowest tenth ${escapeHtml(d.like.finish[4])}. Only weekly miles and pace are matched here; your estimate above also counts your long runs and the rest of your training.</div>`;
+    if(d.goal_error) h += `<div class="hint">${escapeHtml(d.goal_error)}</div>`;
+    if(d.goal){
+      h += `<div class="hint"><b>Runners who finished ${escapeHtml(d.goal.band)}</b> (${d.goal.finishers} of them) trained like this. Middle half in brackets.</div>` + d.goal.rows.map(r=>{
+        const mine = r.you_text || r.you, typ = r.typical_text || r.typical, mh = r.middle_half_text || r.middle_half;
+        const note = r.label.startsWith('Typical') ? (r.you_percentile <= 40 ? 'faster than most of them' : r.you_percentile >= 60 ? 'slower than most of them' : 'about the same') : (r.you_percentile >= 60 ? 'more than most of them' : r.you_percentile <= 40 ? 'less than most of them' : 'about the same');
+        return `<div class="fit-row"><span class="ev">${escapeHtml(r.label)}</span><span class="tm">${escapeHtml(String(mine))}${r.unit ? ' ' + r.unit : ''}</span><span class="pc">typical ${escapeHtml(String(typ))} (${escapeHtml(String(mh[0]))}-${escapeHtml(String(mh[1]))})</span><span class="hint">${note}</span></div>`;
+      }).join('');
+    }
+    h += `<div class="hint">Source: ${escapeHtml(d.source)}. Adults who log runs on one running site; training done off the site is missing, and none of this applies to teenagers.</div>`;
+    out.innerHTML = h;
   });
   $('calcTaperBtn').addEventListener('click', async ()=>{
     const out = $('calcTaperOut'); out.textContent = '…';
