@@ -1262,6 +1262,7 @@
   .session.open .session-body{display:block;}
   .session.open{border-color:var(--ink-soft);}
   .session-body .session-acts{margin-top:0;}
+  .session-splits:has(#splitPanel[style*="none"]){display:none;}
   .session-splits:not(:empty){margin-top:var(--sp-3);padding-top:var(--sp-2);border-top:1px solid var(--line);}
   .tl-close{display:none;width:36px;height:36px;padding:0;border-radius:50%;}
   @media (max-width:959px){
@@ -1389,6 +1390,13 @@
   .act-laps tr.sub td{color:var(--ink-soft);}
   .act-laps tr.sub td:first-child{padding-left:14px;}
   .fit-row .tm .rng{display:block;font-size:var(--fs-caption);font-weight:500;color:var(--ink-soft);}
+  .week-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:end;height:96px;margin-top:var(--sp-3);}
+  .week-bars .wb{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:3px;font-size:var(--fs-caption2);color:var(--ink-soft);font-weight:600;}
+  .week-bars .wb i{display:block;width:100%;border-radius:4px;background:var(--track);min-height:2px;}
+  .week-bars .wb.has i{background:var(--gold);}
+  .week-bars .wb.today span{color:var(--ink);}
+  .session-summary{font-size:var(--fs-subhead);margin:0 0 var(--sp-3);line-height:1.4;}
+  .pr-feed .list-row .pr-badge{flex-shrink:0;}
   .day-splits{margin:var(--sp-3) 0;}
   .session-table{margin-top:var(--sp-2);overflow-x:auto;}
   .session-table[hidden]{display:none;}
@@ -1956,6 +1964,11 @@
         </div>
       </section>
       <div class="split-side">
+        <section class="card" id="tlWeekCard" style="display:none;">
+          <div class="section-head"><div><div class="card-title">This week</div><div class="hint" id="tlWeekHint"></div></div></div>
+          <div class="stat-grid" id="tlWeekStats"></div>
+          <div class="week-bars" id="tlWeekBars"></div>
+        </section>
         <section class="card tl-empty" id="tlEmpty">
           <div class="card-title" style="margin-bottom:var(--sp-2);">Pick a day</div>
           <div class="hint">Tap any day to see its sessions and Hawky's report. Days synced from your watch fill in on their own.</div>
@@ -2087,6 +2100,10 @@
         </section>
       </div>
       <div class="split-side">
+        <section class="card pr-feed" id="prFeedCard" style="display:none;">
+          <div class="card-title">Recent PRs</div>
+          <div class="list" id="prFeed"></div>
+        </section>
         <section class="card">
           <div class="card-title">Based on</div>
           <div class="list" id="fitSources"></div>
@@ -5228,6 +5245,39 @@ async function loadLibrary(){
   return library;
 }
 
+// Strava-style week card: this week against last, with a bar for each day.
+async function renderWeekSummary(){
+  const card = $('tlWeekCard'); if(!card) return;
+  const personId = activePersonId;
+  const mon = new Date(); mon.setHours(12,0,0,0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const prev = new Date(mon); prev.setDate(prev.getDate() - 7);
+  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+  let data = null;
+  try{ const res = await fetch(`/api/log?personId=${encodeURIComponent(personId)}&from=${dateKeyOf(prev)}&to=${dateKeyOf(sun)}`, { cache:'no-store' }); if(res.ok) data = await res.json(); }catch(e){}
+  if(!data || personId !== activePersonId || trainingView !== 'log'){ return; }
+  const byDate = {}; data.days.forEach(d=>{ byDate[d.date] = d; });
+  const sum = (from)=>{
+    let mi = 0, min = 0, runs = 0, longest = 0; const days = [];
+    for(let i = 0; i < 7; i++){
+      const d = new Date(from); d.setDate(d.getDate() + i);
+      const x = byDate[dateKeyOf(d)]; const m = x?.miles || 0;
+      mi += m; min += x?.minutes || 0; runs += x?.runs || (m ? 1 : 0); longest = Math.max(longest, m);
+      days.push({ key: dateKeyOf(d), label: 'MTWTFSS'[i], mi: m });
+    }
+    return { mi, min, runs, longest, days };
+  };
+  const now = sum(mon), was = sum(prev);
+  card.style.display = '';
+  const delta = Math.round((now.mi - was.mi) * 10) / 10;
+  $('tlWeekHint').textContent = `${new Date(mon).toLocaleDateString(undefined,{month:'short',day:'numeric'})} to ${new Date(sun).toLocaleDateString(undefined,{month:'short',day:'numeric'})}. ${delta >= 0 ? '+' : ''}${delta} mi so far. Last week was ${Math.round(was.mi * 10) / 10} mi.`;
+  const hrs = now.min >= 60 ? `${Math.floor(now.min / 60)}h ${Math.round(now.min % 60)}m` : `${Math.round(now.min)}m`;
+  const pace = now.mi > 0.2 && now.min ? clock(Math.round(now.min * 60 / now.mi)) : '–';
+  $('tlWeekStats').innerHTML = statTile(Math.round(now.mi * 10) / 10, 'miles') + statTile(hrs, 'time') + statTile(now.runs, now.runs === 1 ? 'run' : 'runs') + statTile(pace, 'avg pace /mi');
+  const top = Math.max(1, ...now.days.map(d=>d.mi));
+  const today = todayKey();
+  $('tlWeekBars').innerHTML = now.days.map(d=>`<div class="wb ${d.mi ? 'has' : ''} ${d.key === today ? 'today' : ''}" title="${Math.round(d.mi * 10) / 10} mi"><i style="height:${d.mi ? Math.max(6, d.mi / top * 70) : 2}px"></i><span>${d.label}</span></div>`).join('');
+}
+
 async function renderTrainingLog(){
   if(!isRealPerson()){
     $('tlMonth').textContent = 'Training log';
@@ -5251,6 +5301,7 @@ async function renderTrainingLog(){
   if(currentPage !== 'training' || trainingView !== 'log' || personId !== activePersonId) return;
   if(!data){ $('tlHint').textContent = 'Couldn’t load your log. Check your connection.'; return; }
   tlDays = {}; data.days.forEach(d=>{ tlDays[d.date] = d; });
+  renderWeekSummary();
 
   const month = dateKeyOf(first).slice(0,7);
   const inMonth = data.days.filter(d=> d.date.slice(0,7) === month);
@@ -5440,6 +5491,22 @@ function daySplitsHtml(sessions){
   return `<div class="day-splits"><button type="button" class="split-toggle" id="daySplitsToggle" aria-expanded="${open}" aria-controls="daySplitsBody"><span class="eyebrow">Day splits<span>${nRows} rows</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><div id="daySplitsBody" class="session-table" ${open ? '' : 'hidden'}><table class="act-laps"><thead><tr><th>Run</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div></div>`;
 }
 
+// One plain sentence for a session, with how its pace compares to the other
+// runs of the same kind in the loaded month.
+function sessionSummary(sx){
+  if(!sx.miles) return '';
+  const secOf = (p)=>{ const m = String(p || '').match(/^(\d+):(\d{2})$/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const mine = secOf(sx.pace);
+  const peers = Object.values(tlDays).flatMap(d=> d.sessions || []).filter(o=> o.key !== sx.key && o.category === sx.category && secOf(o.pace)).map(o=> secOf(o.pace));
+  let cmp = '';
+  if(mine && peers.length >= 3){
+    const avg = peers.reduce((a,b)=>a+b,0) / peers.length, diff = Math.round(avg - mine);
+    cmp = Math.abs(diff) >= 5 ? ` ${Math.abs(diff)}s/mi ${diff > 0 ? 'faster' : 'slower'} than your usual ${(SESSION_LABEL[sx.category] || 'run').toLowerCase()}.` : ` Right on your usual ${(SESSION_LABEL[sx.category] || 'run').toLowerCase()} pace.`;
+  }
+  const bits = `${sx.miles} mi in ${sx.minutes} min${sx.pace ? ` (${sx.pace}/mi)` : ''}${sx.avg_hr ? `, average ${sx.avg_hr} bpm` : ''}.`;
+  return `<div class="session-summary">${escapeHtml(bits + cmp)}</div>`;
+}
+
 async function renderTrainingDay(){
   const card = $('tlDayCard');
   $('tlEmpty').style.display = tlSelected ? 'none' : '';
@@ -5489,6 +5556,7 @@ async function renderTrainingDay(){
         <span class="session-meta num">${escapeHtml(meta)}</span>
       </button>
       <div class="session-body">
+        ${sessionSummary(sx)}
         ${acts}
         ${sx.report ? `<div class="session-report"><b>Hawky</b>${escapeHtml(sx.report)}</div>` : ''}
         <div class="session-splits"></div>
@@ -5781,6 +5849,9 @@ async function renderFitness(refresh){
   $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">Race fitness over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');
   drawSparks();
   $('fitZones').innerHTML = pacesHtml(f.zones);
+  const prs = (f.sources || []).filter(x=> x.kind === 'pr' && x.date).sort((a,b)=> b.date.localeCompare(a.date)).slice(0, 5);
+  $('prFeedCard').style.display = prs.length ? '' : 'none';
+  $('prFeed').innerHTML = prs.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label.replace(/ \(.*$/, ''))}</div><div class="list-meta">${escapeHtml(new Date(x.date + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}${x.vdot ? ' · VDOT ' + x.vdot : ''}</div></div><span class="badge tone-race pr-badge">PR</span></div>`).join('');
   const kindLabel = { race:'Race effort', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate', best:'Best effort', garmin:'Garmin' };
   $('fitSources').innerHTML = f.sources.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label)}</div><div class="list-meta">${kindLabel[x.kind] || x.kind}${x.date ? ' · ' + escapeHtml(x.date) : ''}${x.vdot ? ' · VDOT ' + x.vdot : ''} · weight ${Math.round(x.weight * 100)}%</div></div></div>`).join('')
     + `<div class="hint" style="margin-top:var(--sp-2);">Profile: ${f.profile === 'speed' ? 'speed-leaning (your short races are relatively stronger)' : f.profile === 'endurance' ? 'endurance-leaning (your long races are relatively stronger)' : 'balanced'}.${f.cs ? ` Critical speed ${f.cs.per_mile}/mi (${f.cs.source === 'intervals.icu' ? 'fitted by intervals.icu to all your runs' : 'from your races'}).` : ''}</div>`;
