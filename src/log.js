@@ -232,7 +232,7 @@ export async function getDays(db, personId, from, to) {
     db.prepare('SELECT * FROM training_days WHERE person_id = ? AND date >= ? AND date <= ?').bind(personId, from, to).all(),
     db.prepare(
       `SELECT strava_id, date, name, category, distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, avg_cadence, elev_gain_ft, effort, hr_effort, load, library_id, summary,
-              start_local, laps, planned_type, planned_miles, surface, course, temp_f, dew_point_f, metrics
+              start_local, laps, planned_type, planned_miles, surface, course, gps_vc, temp_f, dew_point_f, metrics
        FROM workouts WHERE person_id = ? AND date >= ? AND date <= ? ORDER BY start_local, created_at`
     ).bind(personId, from, to).all(),
     db.prepare(
@@ -486,7 +486,7 @@ export async function getLibraryWorkout(db, personId, id) {
   const w = WORKOUTS.find((x) => x.id === id);
   if (!w) throw new LogError(`Unknown library workout "${id}"`);
   const fitness = personId ? await getFitness(db, personId, new Date().toISOString().slice(0, 10)) : null;
-  if (!fitness?.vdot) return { ...w, your_targets: 'No Fitness States yet: add PRs (set_prs) or sync the watch to get personal paces.' };
+  if (!fitness?.vo2r) return { ...w, your_targets: 'No Fitness States yet: add PRs (set_prs) or sync the watch to get personal paces.' };
   return {
     ...w,
     your_targets: workoutTargets(w, fitness),

@@ -1262,6 +1262,7 @@
   .session.open .session-body{display:block;}
   .session.open{border-color:var(--ink-soft);}
   .session-body .session-acts{margin-top:0;}
+  .session-splits:has(#splitPanel[style*="none"]){display:none;}
   .session-splits:not(:empty){margin-top:var(--sp-3);padding-top:var(--sp-2);border-top:1px solid var(--line);}
   .tl-close{display:none;width:36px;height:36px;padding:0;border-radius:50%;}
   @media (max-width:959px){
@@ -1388,7 +1389,19 @@
   .act-laps tr.run td:first-child{font-weight:600;}
   .act-laps tr.sub td{color:var(--ink-soft);}
   .act-laps tr.sub td:first-child{padding-left:14px;}
-  .day-splits{margin-top:var(--sp-3);}
+  .fit-row .tm .rng{display:block;font-size:var(--fs-caption);font-weight:500;color:var(--ink-soft);}
+  .week-bars{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:end;height:96px;margin-top:var(--sp-3);}
+  .week-bars .wb{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:3px;font-size:var(--fs-caption2);color:var(--ink-soft);font-weight:600;}
+  .week-bars .wb i{display:block;width:100%;border-radius:4px;background:var(--track);min-height:2px;}
+  .week-bars .wb.has i{background:var(--gold);}
+  .week-bars .wb.today span{color:var(--ink);}
+  .session-summary{font-size:var(--fs-subhead);margin:0 0 var(--sp-3);line-height:1.4;}
+  .pr-feed .list-row .pr-badge{flex-shrink:0;}
+  .day-splits{margin:var(--sp-3) 0;}
+  .session-table{margin-top:var(--sp-2);overflow-x:auto;}
+  .session-table[hidden]{display:none;}
+  .session-table .act-laps{margin-top:0;font-size:var(--fs-subhead);}
+  .session-table .act-laps th,.session-table .act-laps td{padding:6px 8px;}
   .session-report b{color:var(--gold);font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.05em;margin-right:4px;}
   .tl-events{display:flex;flex-direction:column;gap:6px;margin-top:var(--sp-3);}
   .tl-event{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-footnote);color:var(--ink-soft);}
@@ -1400,6 +1413,7 @@
     background:none;border:none;color:var(--ink);text-align:left;white-space:normal;font-weight:500;
   }
   .split-toggle:active{transform:none;opacity:1;}
+  .split-toggle svg{margin-left:auto;}
   .split-toggle .eyebrow{flex-shrink:0;}
   .split-toggle .eyebrow span{margin-left:6px;color:var(--ink-soft);font-weight:600;}
   .split-toggle .hint{flex:1;min-width:0;text-align:right;}
@@ -1542,6 +1556,12 @@
     body{padding:calc(28px + env(safe-area-inset-top)) 28px 56px;}
     .wrap{max-width:760px;}
     .wo-tiles{grid-template-columns:repeat(3,minmax(0,1fr));}
+  }
+  /* The top bar is tight below 1280px: drop the tab icons so labels never overlap. */
+  @media (min-width:1024px) and (max-width:1279px){
+    .page-tab svg{display:none;}
+    .page-tab{padding:0 var(--sp-3);white-space:nowrap;}
+    body .wrap{grid-template-columns:auto minmax(150px,200px) minmax(300px,1fr) auto;column-gap:var(--sp-3);}
   }
   @media (min-width:1024px){
     /* One top bar: wordmark, who you are, sections, sync and contacts. */
@@ -1944,6 +1964,11 @@
         </div>
       </section>
       <div class="split-side">
+        <section class="card" id="tlWeekCard" style="display:none;">
+          <div class="section-head"><div><div class="card-title">This week</div><div class="hint" id="tlWeekHint"></div></div></div>
+          <div class="stat-grid" id="tlWeekStats"></div>
+          <div class="week-bars" id="tlWeekBars"></div>
+        </section>
         <section class="card tl-empty" id="tlEmpty">
           <div class="card-title" style="margin-bottom:var(--sp-2);">Pick a day</div>
           <div class="hint">Tap any day to see its sessions and Hawky's report. Days synced from your watch fill in on their own.</div>
@@ -2054,22 +2079,11 @@
           <div class="stat-grid stat-grid-3" id="fitScore"></div>
           <div class="fit-trend" id="fitScoreTrend"></div>
         </section>
-        <section class="card" id="predCard" style="display:none;">
-          <div class="section-head">
-            <div>
-              <div class="card-title">Race predictor</div>
-              <div class="hint" id="predHint">What HawksPredict expects from your races and PRs, with an 80% range.</div>
-            </div>
-            <span id="predBadge"></span>
-          </div>
-          <div class="fit-table" id="predTable"></div>
-          <div class="hint" id="predNote" style="margin-top:var(--sp-2);"></div>
-        </section>
         <section class="card">
           <div class="section-head">
             <div>
               <div class="card-title">Race fitness</div>
-              <div class="hint" id="fitHint">What you could race right now, from your races and PRs (HawksPredict). Hover a row for its 80% range.</div>
+              <div class="hint" id="fitHint">What you could race right now, from your races and PRs (HawksPredict). The small line under each time is its 80% range.</div>
             </div>
             <span id="fitBadge"></span>
           </div>
@@ -2077,6 +2091,7 @@
           <div class="fit-hero" id="fitHero"></div>
           <div class="fit-table" id="fitTable"></div>
           <div class="fit-trend" id="fitTrend"></div>
+          <div class="hint" id="predNote" style="margin-top:var(--sp-2);"></div>
         </section>
         <section class="card">
           <div class="card-title">Training paces</div>
@@ -2085,6 +2100,10 @@
         </section>
       </div>
       <div class="split-side">
+        <section class="card pr-feed" id="prFeedCard" style="display:none;">
+          <div class="card-title">Recent PRs</div>
+          <div class="list" id="prFeed"></div>
+        </section>
         <section class="card">
           <div class="card-title">Based on</div>
           <div class="list" id="fitSources"></div>
@@ -2099,12 +2118,12 @@
             <div class="stack" style="margin-top:var(--sp-3);">
               <p><b>Every run is searched for races.</b> Any run that covered a race distance (1600 to 10K) at race effort counts, whatever it was labelled, and if it beats a PR on file Hawks updates the PR. The fastest stretches inside your runs (from your watch, through intervals.icu) count too.</p>
               <p><b>Course and weather are taken out.</b> Every race and hard run is credited back to a flat course on a cool day. Van Cortlandt runs about 5.5% slow (about a minute on an 18-minute 5K), other cross-country courses about 2.5% plus their hills, and heat by temperature plus dew point (about 1% at 120, 3% at 140, 6% at 160). Heart rate on steady runs is read the same way. Your PRs stay the real times, and a cross-country race counts toward your XC PR, never your track one.</p>
-              <p><b>HawksPredict reads your results.</b> Your races and PRs from the last two years (a 5K you typed in only counts when nothing newer exists) go into HawksPredict-Lite, a small model trained on collegiate race results. It predicts a time for every event from 400 to the half marathon, with an 80% range, and learns your own speed-vs-endurance shape from the distances you have run. Race fitness (VDOT) is read off its 1600, 3200 and 5K times and sets your training zones.</p>
+              <p><b>HawksPredict reads your results.</b> Your races and PRs from the last two years (a 5K you typed in only counts when nothing newer exists) go into HawksPredict-Lite, a small model trained on collegiate race results. It predicts a time for every event from 400 to the half marathon, with an 80% range, and learns your own speed-vs-endurance shape from the distances you have run. Your race VO2max (the oxygen use your times are worth) is read off its 1600, 3200 and 5K times and sets your training zones.</p>
               <p><b>It uses your best results.</b> It looks at your fastest result at each distance from the last two years, so someone coming back from a layoff or injury will read faster than they are today; add a recent race or edit the PR date when that is you.</p>
               <p><b>Garmin's VO2max is matched to your races.</b> Garmin estimates VO2max from heart rate vs speed, which usually reads higher than race results. Hawks finds your personal ratio from races run near a Garmin reading, so the number can track your fitness between races.</p>
               <p><b>Runs without a race.</b> If you have no race or PR at all, Hawks falls back to a training estimate from rep sessions and heart rate on steady runs, and says so.</p>
               <p><b>Mileage matters for long races.</b> 10K and half marathon estimates slow down when your last 4 weeks are low on miles.</p>
-              <p><b>VO2max</b> is Garmin's when your watch sends it, otherwise Hawks' estimate from your heart rate on steady runs (the same idea Garmin uses). Race fitness (VDOT) is what your race times say. Neither is a lab test.</p>
+              <p><b>VO2max</b> is your watch's (Garmin or COROS) when it sends one. <b>Hawks VO2max</b> is what your race times are worth, and it sets your training paces. With no watch number, the headline is Hawks' heart-rate estimate from steady runs (using your resting heart rate when known). Watches tend to read high for some runners; none of these is a lab test.</p>
               <p><b>Fitness score</b> is your training load (minutes x effort) averaged over 42 days; fatigue is the same over 7 days, and form is fitness minus fatigue. It goes up with steady training and doesn't depend on racing.</p>
             </div>
           </details>
@@ -4552,7 +4571,7 @@ async function renderWeekCard(){
     [w.load || 0, 'load'],
   ].map(([v,l])=>statTile(v,l)).join('');
   $('weekStats').className = 'stat-grid stat-grid-3';
-  $('weekHint').textContent = w.week_type ? `${w.week_type} week.` : '';
+  $('weekHint').textContent = w.week_type ? `${/week$/i.test(w.week_type) ? w.week_type : w.week_type + ' week'}.` : '';
 }
 
 function openLogDay(date, sessionKey){
@@ -5226,6 +5245,39 @@ async function loadLibrary(){
   return library;
 }
 
+// Strava-style week card: this week against last, with a bar for each day.
+async function renderWeekSummary(){
+  const card = $('tlWeekCard'); if(!card) return;
+  const personId = activePersonId;
+  const mon = new Date(); mon.setHours(12,0,0,0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const prev = new Date(mon); prev.setDate(prev.getDate() - 7);
+  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+  let data = null;
+  try{ const res = await fetch(`/api/log?personId=${encodeURIComponent(personId)}&from=${dateKeyOf(prev)}&to=${dateKeyOf(sun)}`, { cache:'no-store' }); if(res.ok) data = await res.json(); }catch(e){}
+  if(!data || personId !== activePersonId || trainingView !== 'log'){ return; }
+  const byDate = {}; data.days.forEach(d=>{ byDate[d.date] = d; });
+  const sum = (from)=>{
+    let mi = 0, min = 0, runs = 0, longest = 0; const days = [];
+    for(let i = 0; i < 7; i++){
+      const d = new Date(from); d.setDate(d.getDate() + i);
+      const x = byDate[dateKeyOf(d)]; const m = x?.miles || 0;
+      mi += m; min += x?.minutes || 0; runs += x?.runs || (m ? 1 : 0); longest = Math.max(longest, m);
+      days.push({ key: dateKeyOf(d), label: 'MTWTFSS'[i], mi: m });
+    }
+    return { mi, min, runs, longest, days };
+  };
+  const now = sum(mon), was = sum(prev);
+  card.style.display = '';
+  const delta = Math.round((now.mi - was.mi) * 10) / 10;
+  $('tlWeekHint').textContent = `${new Date(mon).toLocaleDateString(undefined,{month:'short',day:'numeric'})} to ${new Date(sun).toLocaleDateString(undefined,{month:'short',day:'numeric'})}. ${delta >= 0 ? '+' : ''}${delta} mi so far. Last week was ${Math.round(was.mi * 10) / 10} mi.`;
+  const hrs = now.min >= 60 ? `${Math.floor(now.min / 60)}h ${Math.round(now.min % 60)}m` : `${Math.round(now.min)}m`;
+  const pace = now.mi > 0.2 && now.min ? clock(Math.round(now.min * 60 / now.mi)) : '–';
+  $('tlWeekStats').innerHTML = statTile(Math.round(now.mi * 10) / 10, 'miles') + statTile(hrs, 'time') + statTile(now.runs, now.runs === 1 ? 'run' : 'runs') + statTile(pace, 'avg pace /mi');
+  const top = Math.max(1, ...now.days.map(d=>d.mi));
+  const today = todayKey();
+  $('tlWeekBars').innerHTML = now.days.map(d=>`<div class="wb ${d.mi ? 'has' : ''} ${d.key === today ? 'today' : ''}" title="${Math.round(d.mi * 10) / 10} mi"><i style="height:${d.mi ? Math.max(6, d.mi / top * 70) : 2}px"></i><span>${d.label}</span></div>`).join('');
+}
+
 async function renderTrainingLog(){
   if(!isRealPerson()){
     $('tlMonth').textContent = 'Training log';
@@ -5249,6 +5301,7 @@ async function renderTrainingLog(){
   if(currentPage !== 'training' || trainingView !== 'log' || personId !== activePersonId) return;
   if(!data){ $('tlHint').textContent = 'Couldn’t load your log. Check your connection.'; return; }
   tlDays = {}; data.days.forEach(d=>{ tlDays[d.date] = d; });
+  renderWeekSummary();
 
   const month = dateKeyOf(first).slice(0,7);
   const inMonth = data.days.filter(d=> d.date.slice(0,7) === month);
@@ -5283,7 +5336,7 @@ async function renderTrainingLog(){
   }
   $('tlGrid').innerHTML = html;
   $('tlGrid').querySelectorAll('[data-date]').forEach(b=> b.addEventListener('click', ()=>{
-    tlSelected = b.dataset.date; tlOpenSession = null; tlOpenActivity = null; renderTrainingLog();
+    tlSelected = b.dataset.date; tlOpenSession = null; tlOpenActivity = null; daySplitsOpen = null; renderTrainingLog();
   }));
   renderTrainingDay();
 }
@@ -5384,27 +5437,16 @@ function activityHtml(a){
   const dur = (sec)=> sec ? clock(sec) : null;
   const pace = (sec)=> sec ? clock(Math.round(sec)) + '/mi' : null;
   const heat = a.temp_f != null ? `${Math.round(a.temp_f)}°F` : null;
+  // Only the essentials, in an even grid.
   const stats = [
     stat(a.miles != null ? `${Math.round(a.miles * 100) / 100} mi` : null, 'distance'),
-    stat(dur(a.moving_sec), a.elapsed_sec && a.moving_sec && a.elapsed_sec - a.moving_sec > 30 ? `moving (${dur(a.elapsed_sec)} total)` : 'time'),
+    stat(dur(a.moving_sec), 'time'),
     stat(a.pace && `${a.pace}/mi`, 'pace'),
-    stat(a.pace_adjusted && `${a.pace_adjusted}/mi`, 'flat & cool pace'),
-    stat(pace(m.gap_sec_mi), 'grade-adjusted'),
-    stat(pace(m.max_pace_sec_mi), 'fastest'),
     stat(a.avg_hr && `${a.avg_hr}${a.max_hr ? ' / ' + a.max_hr : ''}`, a.max_hr ? 'avg / max HR' : 'avg HR'),
-    stat(a.effort, a.hr_effort != null && a.effort !== a.hr_effort ? `difficulty (HR ${a.hr_effort} + conditions)` : 'difficulty'),
-    stat(a.load, 'load'),
-    stat(heat, a.dew_point_f != null ? `dew point ${Math.round(a.dew_point_f)}°F` : 'temperature'),
-    stat(a.track ? null : a.elev_ft != null ? `${a.elev_ft} ft` : null, a.elev_per_mi != null ? `climb (${a.elev_per_mi} ft/mi)` : 'climb'),
-    stat(m.elev_loss_ft != null && !a.track ? `${m.elev_loss_ft} ft` : null, 'descent'),
+    stat(a.effort, 'difficulty'),
+    stat(heat, 'temperature'),
+    stat(a.track ? null : a.elev_ft != null ? `${a.elev_ft} ft` : null, 'climb'),
     stat(a.cadence && `${a.cadence} spm`, 'cadence'),
-    stat(m.stride_m && `${m.stride_m.toFixed(2)} m`, 'stride'),
-    stat(m.decoupling != null ? `${m.decoupling.toFixed(1)}%` : null, 'HR drift (decoupling)'),
-    stat(m.ef != null ? m.ef.toFixed(2) : null, 'efficiency factor'),
-    stat(m.icu_load, 'intervals.icu load'),
-    stat(m.trimp != null ? Math.round(m.trimp) : null, 'TRIMP'),
-    stat(m.calories, 'calories'),
-    stat(m.rpe, 'RPE'),
   ].join('');
   const notes = [
     a.course === 'vc' ? 'Van Cortlandt course: about 5.5% slower than flat (hills, gravel and grass).' : a.course === 'xc' ? 'Cross-country course: about 2.5% slower than flat, plus its hills.' : '',
@@ -5417,32 +5459,52 @@ function activityHtml(a){
     return `<div class="act-zones" aria-label="Time in heart rate zones">${m.hr_zones.map((z,i)=> z > 0 ? `<i style="width:${z / total * 100}%;background:${ZONE_COLORS[i] || '#888'}"></i>` : '').join('')}</div>
       <div class="act-zone-key">${m.hr_zones.map((z,i)=> z >= 30 ? `<span>Z${i+1} ${Math.round(z / 60)}m</span>` : '').join('')}</div>`;
   })() : '';
-  const lapRows = (a.laps || []).filter(l=>l.m > 0 && l.s > 0);
-  const laps = lapRows.length ? `<table class="act-laps"><thead><tr><th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${lapRows.map((l,i)=>`<tr><td>${i+1}</td><td>${Math.round(l.m)}m</td><td>${clock(l.s)}</td><td>${clock(Math.round(l.s / l.m * (a.track ? 1600 : 1609.344)))}</td><td>${l.hr || ''}</td></tr>`).join('')}</tbody></table>` : '';
   const meta = [a.start && a.end && a.end !== a.start ? `${a.start}–${a.end}` : a.start, a.miles != null && `${Math.round(a.miles * 100) / 100} mi`, a.pace && `${a.pace}/mi`, a.avg_hr && `${a.avg_hr} bpm`, heat].filter(Boolean).join(' · ');
   return `<div class="act ${open ? 'open' : ''}" data-id="${escapeHtml(a.id)}">
     <button type="button" class="act-btn" aria-expanded="${open}"><span><span class="act-name">${escapeHtml(name)}</span> <span class="badge ${toneOf(a.category)}">${escapeHtml(a.role ? ROLE_LABEL[a.role] : cap(a.category))}</span><br><span class="act-meta num">${escapeHtml(meta)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
-    <div class="act-body"><div class="act-grid">${stats}</div>${notes ? `<div class="act-note">${escapeHtml(notes)}</div>` : ''}${zones}${laps}</div>
+    <div class="act-body"><div class="act-grid">${stats}</div>${notes ? `<div class="act-note">${escapeHtml(notes)}</div>` : ''}${zones}</div>
   </div>`;
 }
 
-// The whole day in order of when each recording ended: every run as a row,
-// with a workout's reps listed under it. Only for days with more than one run.
+// Day splits: every run of the day in order (warm up, workout, cool down) with
+// the workout's reps under it, then the day total. Folds away; long days
+// (more than 8 rows) start folded.
+const lapsOfAct = (a)=> (a.laps || []).filter(l=>l.m > 0 && l.s > 0);
+let daySplitsOpen = null;
 function daySplitsHtml(sessions){
   const acts = sessions.flatMap(sx=> sx.activities || []);
-  if(acts.length < 2) return '';
+  if(acts.length < 2 && !acts.some(a=> lapsOfAct(a).length > 1)) return '';
+  const nRows = acts.reduce((n,a)=> n + 1 + (lapsOfAct(a).length > 1 ? lapsOfAct(a).length : 0), 0);
   const sec = (v)=> v ? clock(Math.round(v)) : '';
   const rows = acts.map(a=>{
     const name = ROLE_LABEL[a.role] || SESSION_LABEL[a.category] || 'Run';
     const mi = (a.miles || 0);
     const pace = mi > 0.2 && a.moving_sec ? clock(Math.round(a.moving_sec / mi)) : '';
-    const reps = (a.laps || []).filter(l=>l.m > 0 && l.s > 0);
+    const reps = lapsOfAct(a);
     const sub = reps.length > 1 ? reps.map((l,i)=>`<tr class="sub"><td>${i+1}</td><td>${Math.round(l.m)}m</td><td>${clock(l.s)}</td><td>${clock(Math.round(l.s / l.m * (a.track ? 1600 : 1609.344)))}</td><td>${l.hr || ''}</td></tr>`).join('') : '';
     return `<tr class="run"><td>${escapeHtml(name)}</td><td>${mi ? Math.round(mi * 100) / 100 + ' mi' : ''}</td><td>${sec(a.moving_sec)}</td><td>${pace}</td><td>${a.avg_hr || ''}</td></tr>${sub}`;
   }).join('');
   const mi = acts.reduce((t,a)=> t + (a.miles || 0), 0);
   const secs = acts.reduce((t,a)=> t + (a.moving_sec || 0), 0);
-  return `<div class="day-splits"><div class="eyebrow">Day splits</div><table class="act-laps"><thead><tr><th>Run</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${Math.round(mi * 100) / 100} mi</td><td>${sec(secs)}</td><td>${mi > 0.2 ? clock(Math.round(secs / mi)) : ''}</td><td></td></tr></tfoot></table></div>`;
+  const foot = acts.length > 1 ? `<tfoot><tr><td>Total</td><td>${Math.round(mi * 100) / 100} mi</td><td>${sec(secs)}</td><td>${mi > 0.2 ? clock(Math.round(secs / mi)) : ''}</td><td></td></tr></tfoot>` : '';
+  const open = daySplitsOpen ?? nRows <= SPLITS_AUTO_HIDE;
+  return `<div class="day-splits"><button type="button" class="split-toggle" id="daySplitsToggle" aria-expanded="${open}" aria-controls="daySplitsBody"><span class="eyebrow">Day splits<span>${nRows} rows</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><div id="daySplitsBody" class="session-table" ${open ? '' : 'hidden'}><table class="act-laps"><thead><tr><th>Run</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th></tr></thead><tbody>${rows}</tbody>${foot}</table></div></div>`;
+}
+
+// One plain sentence for a session, with how its pace compares to the other
+// runs of the same kind in the loaded month.
+function sessionSummary(sx){
+  if(!sx.miles) return '';
+  const secOf = (p)=>{ const m = String(p || '').match(/^(\d+):(\d{2})$/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const mine = secOf(sx.pace);
+  const peers = Object.values(tlDays).flatMap(d=> d.sessions || []).filter(o=> o.key !== sx.key && o.category === sx.category && secOf(o.pace)).map(o=> secOf(o.pace));
+  let cmp = '';
+  if(mine && peers.length >= 3){
+    const avg = peers.reduce((a,b)=>a+b,0) / peers.length, diff = Math.round(avg - mine);
+    cmp = Math.abs(diff) >= 5 ? ` ${Math.abs(diff)}s/mi ${diff > 0 ? 'faster' : 'slower'} than your usual ${(SESSION_LABEL[sx.category] || 'run').toLowerCase()}.` : ` Right on your usual ${(SESSION_LABEL[sx.category] || 'run').toLowerCase()} pace.`;
+  }
+  const bits = `${sx.miles} mi in ${sx.minutes} min${sx.pace ? ` (${sx.pace}/mi)` : ''}${sx.avg_hr ? `, average ${sx.avg_hr} bpm` : ''}.`;
+  return `<div class="session-summary">${escapeHtml(bits + cmp)}</div>`;
 }
 
 async function renderTrainingDay(){
@@ -5475,23 +5537,26 @@ async function renderTrainingDay(){
   tlSessions = (day.sessions || []).length ? day.sessions
     : (day.miles || (day.split_reps || []).length ? [{ key: 'day', manual: true, title: 'Your run', category: (day.types || []).find(t=>t!=='strides') || 'easy', miles: day.miles, minutes: day.minutes, splits: day.split_reps || [], activities: [] }] : []);
   if(tlOpenSession && !tlSessions.some(x=>x.key === tlOpenSession)) tlOpenSession = null;
-  if(!tlOpenSession && tlSessions.length === 1) tlOpenSession = tlSessions[0].key;
-  if(!tlOpenSession) tlOpenSession = (tlSessions.find(x=>x.splits?.length) || tlSessions[0])?.key || null;
+  // A day with one session shows it. '' means it was closed by hand.
+  if(tlOpenSession === null && tlSessions.length === 1) tlOpenSession = tlSessions[0].key;
   // The split builder may sit inside the session being replaced: move it out
   // first, or the redraw deletes it (and opening another session fails).
   if($('tlSessions').contains($('splitPanel'))) $('tlSessions').after($('splitPanel'));
   $('tlDaySplits').innerHTML = daySplitsHtml(tlSessions);
+  const dsBtn = $('daySplitsToggle');
+  if(dsBtn) dsBtn.addEventListener('click', ()=>{ const open = dsBtn.getAttribute('aria-expanded') !== 'true'; daySplitsOpen = open; dsBtn.setAttribute('aria-expanded', String(open)); $('daySplitsBody').hidden = !open; });
   $('tlSessions').innerHTML = tlSessions.map(sx=>{
     const meta = [sx.start && sx.start, sx.track && 'Track', sx.miles != null && `${sx.miles} mi`, sx.minutes && `${sx.minutes} min`, sx.pace && `${sx.pace}/mi`, sx.avg_hr && `${sx.avg_hr} bpm`, sx.effort && `difficulty ${sx.effort}`, sx.temp_f != null && `${Math.round(sx.temp_f)}°F`, sx.elev_ft && !sx.track && `${sx.elev_ft} ft up`].filter(Boolean).join(' · ');
     const acts = sx.activities.length ? `<div class="acts">${sx.activities.map(activityHtml).join('')}</div>` : '';
     const open = sx.key === tlOpenSession;
-    const reps = sx.splits?.length;
+    const reps = 0;
     return `<div class="session ${open ? 'open' : ''}" data-key="${escapeHtml(sx.key)}">
       <button type="button" class="session-btn" aria-expanded="${open}">
         <span class="session-head"><span class="list-title">${escapeHtml(sx.title && !/^(morning|afternoon|evening|lunch|night)? ?run$|^new york running$/i.test(sx.title) ? sx.title : SESSION_LABEL[sx.category] || 'Run')}</span><span class="session-reps">${reps ? `${reps} splits` : ''}</span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>
         <span class="session-meta num">${escapeHtml(meta)}</span>
       </button>
       <div class="session-body">
+        ${sessionSummary(sx)}
         ${acts}
         ${sx.report ? `<div class="session-report"><b>Hawky</b>${escapeHtml(sx.report)}</div>` : ''}
         <div class="session-splits"></div>
@@ -5508,7 +5573,7 @@ async function renderTrainingDay(){
   $('tlSessions').querySelectorAll('.session-btn').forEach(b=> b.addEventListener('click', ()=>{
     const key = b.closest('.session').dataset.key;
     if(tlSplitDirty && key !== tlOpenSession && !confirm('Your split changes in the open session aren’t saved. Switch anyway?')) return;
-    tlOpenSession = tlOpenSession === key ? null : key;
+    tlOpenSession = tlOpenSession === key ? '' : key;
     renderTrainingDay();
   }));
 
@@ -5523,7 +5588,7 @@ async function renderTrainingDay(){
   // The split builder sits inside the open session.
   const openSx = tlSessions.find(x=>x.key === tlOpenSession);
   const slot = openSx && $('tlSessions').querySelector(`.session[data-key="${CSS.escape(openSx.key)}"] .session-splits`);
-  if(slot){ slot.appendChild($('splitPanel')); $('splitPanel').style.display = ''; }
+  if(slot){ slot.appendChild($('splitPanel')); $('splitPanel').style.display = openSx.manual ? '' : 'none'; }
   else { $('tlSessions').after($('splitPanel')); $('splitPanel').style.display = tlSessions.length ? 'none' : ''; }
   tlSplitTarget = openSx && !openSx.manual ? openSx.main_id : null;
   splitRows = ((openSx ? openSx.splits : day.split_reps) || []).map(r=>({ m: r.m, s: r.s, hr: r.hr || null, rest: r.rest || '' }));
@@ -5648,7 +5713,7 @@ async function renderLibrary(){
     && (!level || w.level === level) && (!len || (len === 999 ? w.total_min > 65 : w.total_min <= len)));
   const tile = WO_TILES.find(t=>t.key === woGroup);
   $('libTitle').textContent = woGroup === 'all' ? 'All workouts' : tile.label;
-  $('libSub').textContent = f?.vdot ? 'Written for you: your level, and goal splits from your fitness. Tap one to open it.' : me ? 'Add PRs or connect your watch to get your own goal splits.' : 'Pick your name to get workouts written for you.';
+  $('libSub').textContent = f?.vo2r ? 'Written for you: your level, and goal splits from your fitness. Tap one to open it.' : me ? 'Add PRs or connect your watch to get your own goal splits.' : 'Pick your name to get workouts written for you.';
   const lvl = ['', 'Beginner', 'Intermediate', 'Advanced'];
   $('libCount').textContent = `${list.length} of ${lib.workouts.length} workouts`;
   // One table per set, laid out like session splits: rep, distance (or time), goal.
@@ -5739,7 +5804,7 @@ async function renderFitness(refresh){
   if(!isRealPerson()){
     $('fitHero').innerHTML = '';
     $('fitTable').innerHTML = '<div class="fit-empty hint">Pick your name to see your Fitness States.</div>';
-    ['fitTrend','fitZones','fitSources','fitBadge'].forEach(id=> $(id).innerHTML = '');
+    ['fitTrend','fitZones','fitSources','fitBadge','predNote'].forEach(id=> $(id).innerHTML = '');
     return;
   }
   const data = await loadFitness(refresh);
@@ -5755,54 +5820,51 @@ async function renderFitness(refresh){
     $('fitScoreTrend').innerHTML = fs.trend?.length >= 2 ? `${sparkline(fs.trend.map(p=>({ v: p.fitness })))}<div class="hint">Fitness over the last 8 weeks${fs.source === 'intervals.icu' ? ' (from intervals.icu, which counts every activity)' : ''}. Form under -20 for long is a sign to back off.</div>` : '';
     drawSparks();
   }
-  if(!f || !f.vdot){
+  if(!f || !f.vo2r){
     $('fitBadge').innerHTML = '';
     $('fitHero').innerHTML = f ? statTile(f.mpw ?? '–', 'mi / week (4 wk)') : '';
     $('fitTable').innerHTML = `<div class="fit-empty"><div class="card-title" style="margin-bottom:6px;">No fitness data yet</div><div class="hint" style="margin-bottom:var(--sp-3);">Add your PRs (with dates) or connect your watch, and Hawks works out what you can race now.</div><div class="cluster" style="justify-content:center;"><button type="button" id="fitEmptyPrs">Add PRs</button><button type="button" class="ghost" id="fitEmptyWatch">Set up watch</button></div></div>`;
     $('fitEmptyPrs').onclick = goToPrs;
     $('fitEmptyWatch').onclick = ()=>{ setPage('you'); setYouView('settings'); };
-    ['fitTrend','fitZones','fitSources'].forEach(id=> $(id).innerHTML = '');
+    ['fitTrend','fitZones','fitSources','predNote'].forEach(id=> $(id).innerHTML = '');
     return;
   }
   const conf = { high:'tone-int-1', medium:'tone-int-2', low:'tone-cross' };
   $('fitBadge').innerHTML = `<span class="badge ${conf[f.confidence] || ''}">${cap(f.confidence)} confidence</span>`;
   const fiveK = f.estimates.find(e=>e.event === '5K');
-  $('fitHero').innerHTML = tileSub(f.vo2max, 'VO2max', f.vo2max_source === 'Garmin' ? 'from Garmin' : 'estimate') + tileSub(f.vdot, 'race fitness', 'VDOT') + tileSub(fiveK.time, '5K now', '');
+  $('fitHero').innerHTML = tileSub(f.vo2max, 'VO2max', f.vo2max_source === 'watch' ? 'from your watch' : 'Hawks estimate') + (f.vo2max_source === 'watch' ? tileSub(f.vo2r, 'Hawks VO2max', 'from your races') : '') + tileSub(fiveK.time, '5K now', '');
   $('fitNewPrs').style.display = f.new_prs?.length ? '' : 'none';
   $('fitNewPrs').innerHTML = (f.new_prs || []).map(p=>`New PR found: <b>${escapeHtml(p.event)} ${escapeHtml(p.time)}</b> on ${escapeHtml(p.date)}`).join('<br>');
   $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
     const pr = e.pr?.time;
-    return `<div class="fit-row"${e.range ? ` title="80% range ${escapeHtml(e.range)}"` : ''}><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
+    return `<div class="fit-row"${e.range ? ` title="80% range ${escapeHtml(e.range)}"` : ''}><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}${e.range ? `<small class="rng">${escapeHtml(e.range)}</small>` : ''}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
   }).join('')
     // The same fitness on the home course (hills, gravel and grass: about 5.5% slower).
     + (f.course_estimates || []).map(c=>{
       const pr = c.pr?.time;
       return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
     }).join('');
-  const hist = (data.history || []).filter(h=>h.vdot).map(h=>({ v: h.vdot, d: h.date }));
+  const hist = (data.history || []).filter(h=>h.vo2r).map(h=>({ v: h.vo2r, d: h.date }));
   const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';
   $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">Race fitness over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');
   drawSparks();
   $('fitZones').innerHTML = pacesHtml(f.zones);
-  const kindLabel = { race:'Race effort', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate', best:'Best effort', garmin:'Garmin' };
-  $('fitSources').innerHTML = f.sources.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label)}</div><div class="list-meta">${kindLabel[x.kind] || x.kind}${x.date ? ' · ' + escapeHtml(x.date) : ''}${x.vdot ? ' · VDOT ' + x.vdot : ''} · weight ${Math.round(x.weight * 100)}%</div></div></div>`).join('')
+  const prs = (f.sources || []).filter(x=> x.kind === 'pr' && x.date).sort((a,b)=> b.date.localeCompare(a.date)).slice(0, 5);
+  $('prFeedCard').style.display = prs.length ? '' : 'none';
+  $('prFeed').innerHTML = prs.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label.replace(/ \(.*$/, ''))}</div><div class="list-meta">${escapeHtml(new Date(x.date + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}${x.vo2r ? ' · race VO2max ' + x.vo2r : ''}</div></div><span class="badge tone-race pr-badge">PR</span></div>`).join('');
+  const kindLabel = { race:'Race effort', pr:'PR', manual:'You entered', reps:'Workout', hr:'Heart rate', best:'Best effort', watch:'Watch' };
+  $('fitSources').innerHTML = f.sources.map(x=>`<div class="list-row"><div class="list-main"><div class="list-title">${escapeHtml(x.label)}</div><div class="list-meta">${kindLabel[x.kind] || x.kind}${x.date ? ' · ' + escapeHtml(x.date) : ''}${x.vo2r ? ' · race VO2max ' + x.vo2r : ''} · weight ${Math.round(x.weight * 100)}%</div></div></div>`).join('')
     + `<div class="hint" style="margin-top:var(--sp-2);">Profile: ${f.profile === 'speed' ? 'speed-leaning (your short races are relatively stronger)' : f.profile === 'endurance' ? 'endurance-leaning (your long races are relatively stronger)' : 'balanced'}.${f.cs ? ` Critical speed ${f.cs.per_mile}/mi (${f.cs.source === 'intervals.icu' ? 'fitted by intervals.icu to all your runs' : 'from your races'}).` : ''}</div>`;
 }
 
-// HawksPredict race predictor (behind a flag on the server; hidden when off).
+// HawksPredict notes shown inside the Race fitness card (flagged on the server; empty when off).
 async function renderPredictor(){
-  const card = $('predCard'); if(!card) return;
+  const note = $('predNote'); if(!note) return;
   let d = null;
   try{ const res = await fetch('/api/predict?personId=' + encodeURIComponent(activePersonId), { cache:'no-store' }); if(res.ok) d = await res.json(); }catch(e){}
-  if(!d?.enabled){ card.style.display = 'none'; return; }
-  card.style.display = '';
-  $('predBadge').innerHTML = `<span class="badge">${escapeHtml(d.model.name.replace('HawksPredict-', ''))} ${escapeHtml(d.model.version)}</span>`;
-  if(!d.predictions?.length){ $('predTable').innerHTML = `<div class="hint">${escapeHtml(d.reason || 'No prediction yet.')}</div>`; $('predNote').textContent = ''; return; }
-  $('predTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Predicted</span><span>80% range · PR</span><span></span></div>` + d.predictions.map(p=>{
-    return `<div class="fit-row"><span class="ev">${escapeHtml(p.label)}</span><span class="tm">${escapeHtml(p.raw.time)}</span><span class="pc">${escapeHtml(p.raw.lo_time)}–${escapeHtml(p.raw.hi_time)}${p.pr ? ' · ' + escapeHtml(p.pr) : ''}</span><span></span></div>`;
-  }).join('');
+  if(!d?.enabled || !d.predictions?.length){ note.innerHTML = ''; return; }
   // The heart-rate-adjusted time is no longer shown (it did not help on real data); the server still logs it for scoring.
-  $('predNote').innerHTML = `The same HawksPredict numbers as Fitness States, with the Van Cortlandt rows added.${d.next_meet ? ` Predictions for ${escapeHtml(d.next_meet.title)} (${escapeHtml(d.next_meet.date)}) are saved to be scored after the race.` : ''}`;
+  note.innerHTML = `${escapeHtml(d.model.name)} ${escapeHtml(d.model.version)}.${d.next_meet ? ` Predictions for ${escapeHtml(d.next_meet.title)} (${escapeHtml(d.next_meet.date)}) are saved to be scored after the race.` : ''}`;
 }
 
 // --- Team mileage -----------------------------------------------------------------
@@ -5893,7 +5955,7 @@ function renderToday(h){
 function renderOwnWeek(h){
   const w = h.week;
   $('tpTitle').textContent = 'Your week';
-  $('tpHint').textContent = `${w.week_type || 'This'} week from your coach's plan${h.changes.length ? ', with Hawky\'s changes' : ''}. Tap a day to open it in your log.`;
+  $('tpHint').textContent = `${w.week_type ? (/week$/i.test(w.week_type) ? w.week_type : w.week_type + ' week') : 'This week'} from your coach's plan${h.changes.length ? ', with Hawky\'s changes' : ''}. Tap a day to open it in your log.`;
   $('tpGrades').style.display = 'none';
   $('tpWeeks').innerHTML = ''; $('tpWeeks').style.display = 'none';
   const today = todayKey();
@@ -5929,7 +5991,7 @@ function healthHtml(h){
     </div>
     <div class="stat-grid" style="margin-top:var(--sp-3);">${tiles}</div>
     <div class="health-row"><span class="hint">Load</span><b>${h.load.ratio != null ? `${h.load.ratio}x your normal` : 'Not enough data yet'}</b></div>
-    <div class="health-row"><span class="hint">Miles</span><b>${h.miles.last_7} this week · ${h.miles.weekly_avg_4wk} avg</b></div>
+    <div class="health-row"><span class="hint">Miles</span><b>${h.miles.last_7} in 7 days · ${h.miles.weekly_avg_4wk} avg a week</b></div>
     <div class="health-row"><span class="hint">Status</span><b>${escapeHtml(cap(h.status.health))}</b></div>
     <div class="cluster health-body" style="gap:4px;">${body}</div>
     ${h.missing.length ? `<div class="hint" style="margin-top:var(--sp-2);">Not seeing: ${escapeHtml(h.missing.join(', '))}.${h.missing.some(m=>m.startsWith('watch')) ? ' Wear your watch overnight so Garmin sends resting HR, HRV and sleep.' : ''}</div>` : ''}`;
@@ -6022,13 +6084,19 @@ async function renderTraining(){
 
 async function renderHawkyTab(){
   const st = isRealPerson() ? (icuState[activePersonId] || await fetchIcuStatus(activePersonId)) : null;
-  $('hawkyOff').style.display = isRealPerson() && st && !st.ai ? '' : 'none';
+  const off = isRealPerson() && st && !st.ai;
+  $('hawkyOff').style.display = off ? '' : 'none';
+  // With Hawky off there is nothing to chat with: hide the prompts and the box,
+  // but the plan changes, health and level still show.
+  ['hawkySuggest', 'askStatus'].forEach(id=> $(id).style.display = off ? 'none' : '');
+  document.querySelector('.hawky-compose').style.display = off ? 'none' : '';
   if(!isRealPerson()){
     $('hawkyThread').innerHTML = '<div class="hint">Pick your name to talk to Hawky.</div>';
     ['hawkyChanges','hawkyHealth','hawkyLevel'].forEach(id=> $(id).innerHTML = '');
     return;
   }
-  await startHawkyChat();
+  if(off){ hawkyChat = { personId: null, turns: [] }; $('hawkyThread').innerHTML = ''; }
+  else await startHawkyChat();
   renderPlanSide();
 }
 

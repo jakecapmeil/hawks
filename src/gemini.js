@@ -10,11 +10,25 @@
 
 export class AiError extends Error {}
 
-const DEFAULT_MODEL = 'gemini-flash-latest';
+// Free-tier quota is per model, so when one is used up (429) or down (5xx) the
+// next one answers. Best first. Override with GEMINI_MODELS (comma-separated,
+// e.g. "gemini-flash-latest,gemini-2.5-flash,gemini-2.5-flash-lite"); the
+// older GEMINI_MODEL still works as a single first choice.
+const DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+// A model that just ran out is skipped for a while instead of retried on every call.
+const COOLDOWN_MS = 60 * 1000;
+const DAILY_COOLDOWN_MS = 30 * 60 * 1000;
+const cooling = new Map();
+
+export function modelChain(env) {
+  const list = (env.GEMINI_MODELS || '').split(',').map((m) => m.trim()).filter(Boolean);
+  if (list.length) return list;
+  return env.GEMINI_MODEL ? [env.GEMINI_MODEL, ...DEFAULT_MODELS.filter((m) => m !== env.GEMINI_MODEL)] : DEFAULT_MODELS;
+}
 const AI_DAILY_CAP = 25;
 
 export function aiEnabled(env) {
-  return !!env.GEMINI_API_KEY;
+  return !!(env.GEMINI_API_KEY || env.AI);
 }
 
 async function spend(db, personId, today) {
@@ -27,27 +41,104 @@ async function spend(db, personId, today) {
 }
 
 async function generate(env, { system, prompt, schema, maxTokens = 1024 }) {
-  const model = env.GEMINI_MODEL || DEFAULT_MODEL;
+  const chain = modelChain(env);
+  const now = Date.now();
+  // Models still cooling down go last, so a call is never refused while one might work.
+  const ready = chain.filter((m) => (cooling.get(m) || 0) <= now);
+  const order = [...ready, ...chain.filter((m) => !ready.includes(m))];
+  let busy = false;
+  // Without a Gemini key the Gemini models are skipped; Workers AI still answers.
+  for (const model of env.GEMINI_API_KEY ? order : []) {
+    const res = await callModel(env, model, { system, prompt, schema, maxTokens });
+    if (res.retry) {
+      busy = busy || res.busy;
+      cooling.set(model, Date.now() + res.cooldown);
+      continue;
+    }
+    return res.value;
+  }
+  // Last resort: an open-weight model on Cloudflare Workers AI (the AI binding).
+  if (env.AI) {
+    const out = await callWorkersAi(env, { system, prompt, schema, maxTokens });
+    if (out !== undefined) return out;
+  }
+  throw new AiError(busy ? 'The AI is busy (free-tier rate limit). Try again in a minute.' : 'The AI request failed.');
+}
+
+// Workers AI's free quota is small and its JSON mode isn't guaranteed to follow
+// the schema, so the schema is also spelled out in the prompt and the answer is
+// checked for the required keys. undefined means "didn't work".
+const WORKERS_AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+function parseLoose(text) {
+  const t = String(text || '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+  try { return JSON.parse(t); } catch { /* try the outermost braces */ }
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch { /* give up */ } }
+  return undefined;
+}
+
+async function callWorkersAi(env, { system, prompt, schema, maxTokens }) {
+  const model = env.WORKERS_AI_MODEL || WORKERS_AI_MODEL;
+  try {
+    const out = await env.AI.run(model, {
+      messages: [
+        { role: 'system', content: schema ? `${system}\n\nReply with ONLY a JSON object matching this JSON Schema:\n${JSON.stringify(schema)}` : system },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: maxTokens + 512,
+      temperature: 0.4,
+      ...(schema ? { response_format: { type: 'json_schema', json_schema: schema } } : {}),
+    });
+    const r = out?.response;
+    if (!schema) return typeof r === 'string' && r.trim() ? r.trim() : undefined;
+    const obj = r && typeof r === 'object' ? r : parseLoose(r);
+    if (!obj || typeof obj !== 'object') return undefined;
+    if ((schema.required || []).some((k) => obj[k] === undefined)) return undefined;
+    return obj;
+  } catch (err) {
+    console.error('workers-ai error', model, String(err).slice(0, 300));
+    return undefined;
+  }
+}
+
+// One model. { retry: true } means try the next one in the chain.
+async function callModel(env, model, { system, prompt, schema, maxTokens }) {
   // GEMINI_API_BASE overrides the endpoint for local testing.
   const base = env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com';
-  const res = await fetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.4,
-        // Thinking models spend part of this budget reasoning before they
-        // answer, so it's set well above the visible answer length.
-        maxOutputTokens: maxTokens + 4096,
-        ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}),
-      },
-    }),
-  });
-  if (res.status === 429) throw new AiError('The AI is busy (free-tier rate limit). Try again in a minute.');
+  let res;
+  try {
+    res = await fetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.4,
+          // Thinking models spend part of this budget reasoning before they
+          // answer, so it's set well above the visible answer length.
+          maxOutputTokens: maxTokens + 4096,
+          ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}),
+        },
+      }),
+    });
+  } catch (err) {
+    console.error('gemini fetch', model, String(err));
+    return { retry: true, cooldown: COOLDOWN_MS };
+  }
+  if (res.status === 429) {
+    const body = (await res.text()).slice(0, 600);
+    // "PerDay" quotas don't come back until the reset; per-minute ones do.
+    return { retry: true, busy: true, cooldown: /PerDay/i.test(body) ? DAILY_COOLDOWN_MS : COOLDOWN_MS };
+  }
+  // A model that is retired, renamed or overloaded is skipped, not fatal.
+  if (res.status === 404 || res.status === 503 || res.status === 500 || res.status === 529) {
+    console.error('gemini unavailable', model, res.status);
+    return { retry: true, busy: res.status !== 404, cooldown: res.status === 404 ? DAILY_COOLDOWN_MS : COOLDOWN_MS };
+  }
   if (!res.ok) {
-    console.error('gemini error', res.status, (await res.text()).slice(0, 500));
+    console.error('gemini error', model, res.status, (await res.text()).slice(0, 500));
     throw new AiError('The AI request failed.');
   }
   const data = await res.json();
@@ -55,9 +146,9 @@ async function generate(env, { system, prompt, schema, maxTokens = 1024 }) {
   const text = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
   if (cand?.finishReason === 'MAX_TOKENS' && schema) throw new AiError('The AI ran out of room; try again.');
   if (!text) throw new AiError('The AI returned nothing.');
-  if (!schema) return text;
+  if (!schema) return { value: text };
   try {
-    return JSON.parse(text);
+    return { value: JSON.parse(text) };
   } catch {
     throw new AiError('The AI returned malformed JSON.');
   }
@@ -109,7 +200,7 @@ export async function reportSessions(env, db, person, sessions, { rubric, maxHr,
 Activities are already grouped into sessions (warm-up, workout and cool-down saved separately are ONE session). For each session return:
 - main_id: the main activity (the workout, race or longest run)
 - activities: every activity id with one category (warm-ups/cool-downs around a workout are "easy"). rule_category is a math-based guess; change it only when laps, HR or the name clearly say otherwise.
-- course for every activity: "vc" when it was run at Van Cortlandt Park (the team's home course: hilly, gravel and grass, the 2.5 mi high school course and the 5K), "xc" for another cross-country course, otherwise "flat". Clues: the name or the athlete's note naming the park (Van Cortlandt, VC, Vannie, the Tortoise and Hare), a calendar event that day at Van Cortlandt for a race or workout (see calendar), a race-effort run of 2.5 mi or 5K with real climbing (elev_ft well over 20 per mile) in the Bronx. A track, road or a flat easy run is "flat". When unsure, "flat".
+- course for every activity: "vc" when it was run at Van Cortlandt Park (the team's home course: hilly, gravel and grass, the 2.5 mi high school course and the 5K), "xc" for another cross-country course, otherwise "flat". Clues: the name or the athlete's note naming the park (Van Cortlandt, VC, Vannie, the Tortoise and Hare), a calendar event that day at Van Cortlandt for a race or workout (see calendar), a race-effort run of 2.5 mi or 5K with real climbing (elev_ft well over 20 per mile) in the Bronx. A track, road or a flat easy run is "flat". When unsure, "flat". gps_at_van_cortlandt, when present, is the watch's GPS start position checked against the park: true means it WAS at Van Cortlandt, false means it was NOT (never answer "vc" for false, whatever the name says).
 - report: 2-4 sentences on the whole session: what it was, the reps or pace vs what it should have been, and one thing to focus on.
 Then for each date, one "line": a single plain sentence summing up the day (e.g. "Solid 6x800 averaging 2:46 with an easy double in the evening.").
 

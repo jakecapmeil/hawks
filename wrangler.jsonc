@@ -18,6 +18,10 @@
   "triggers": {
     "crons": ["17 * * * *"]
   },
+  // Last-resort AI when the Gemini free tier is used up (src/gemini.js).
+  "ai": {
+    "binding": "AI"
+  },
   "observability": {
     "enabled": true
   }

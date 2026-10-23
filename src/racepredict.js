@@ -29,7 +29,7 @@ function hashOf(s) {
   return (h >>> 0).toString(16);
 }
 
-// Median heart-rate fitness (VDOT-like) of steady runs in the 56 days before asOf.
+// Median heart-rate fitness (race VO2max-like) of steady runs in the 56 days before asOf.
 function hrFitness(workouts, hrMax, asOf) {
   const from = addDays(asOf, -56);
   const est = [];

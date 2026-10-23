@@ -189,7 +189,7 @@ function suggestSession(plan, date, type, weekDays, fitness) {
   if (!items.length) return null;
   const weekNo = Math.floor(Date.parse(date + 'T12:00:00Z') / (7 * 86400000));
   const text = items[weekNo % items.length];
-  return { text, targets: fitness?.vdot ? workoutTargets({ main: text, paces: text, type: 'vo2' }, fitness) : [] };
+  return { text, targets: fitness?.vo2r ? workoutTargets({ main: text, paces: text, type: 'vo2' }, fitness) : [] };
 }
 
 // The rules Hawky applies by itself, only to today and tomorrow, only to make
