@@ -56,3 +56,13 @@ Everything the experiments need after deletion is in `rows4.pkl`/`results4.pkl` 
 | GoldenCheetah OpenData (OSF 6hfpz, GitHub GoldenCheetah/OpenData) | NOT CHECKED | Per-second HR, cadence, power, distance, altitude, no GPS; mostly cyclists. Run share unknown. |
 | KIRun | NOT CHECKED | 48 outdoor runners with heart rate, no race results. |
 | Hawks app data (4 athletes with synced workouts, 840 runs, 1 race) | USED for constants only | Private (minors); never leaves the local machine; no race targets, so it cannot train or score a race model. |
+| PARROTAO (arXiv 2508.21785) | NOT VERIFIED | 42,576 sessions from 113 recreational athletes (Coros, Garmin, Huawei, 2022-2025), heart rate. The arXiv page states no data release. |
+| Multi-athlete FIT study (UB thesis, hdl.handle.net/2445/230452) | NOT VERIFIED | 8,246 sessions from 102 athletes (MyAlbatross platform); thesis PDF only, no dataset link seen. |
+| Multi-sensor running dataset (Univ. of Twente) | NOT CHECKED | 12 runners, 3 sessions each, IMU + HR + GPS. Too small to matter. |
+| FitRec on Kaggle (chiragksharma/fitrec-datasets) | NOT CHECKED | Mirror of the UCSD data; Kaggle login needed; same academic-use-only terms. |
+| parkrun | NO PUBLIC DATASET FOUND | Only scrapers; check parkrun's terms before any bulk collection. |
+
+### Hawks meet days (2026-10-22, anonymised)
+Of 12 fall-2026 meet dates with synced runs, 11 athlete-days have a high-effort run (top-decile effort or heart-rate effort, or tagged race); about 7 look like real races (2.4-3.2 mi at 5.3-6.5 min/mi, one 5 mi). The app's `category` is unreliable on those days
+(races tagged easy or workout, one 4.9 min/mi run tagged easy). Spring 2026 and indoor 2026 dates (City: Feb 21 and May 24; Bronx boro May 10) have almost no synced runs because syncing started late for most athletes.
+Seven efforts from 4 athletes cannot fine-tune or score a model; they are the seed of the prediction log. Script: `scripts/hawks_meet_days.py`.
