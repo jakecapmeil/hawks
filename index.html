@@ -5801,8 +5801,8 @@ async function renderPredictor(){
   $('predTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Predicted</span><span>80% range · PR</span><span></span></div>` + d.predictions.map(p=>{
     return `<div class="fit-row"><span class="ev">${escapeHtml(p.label)}</span><span class="tm">${escapeHtml(p.raw.time)}</span><span class="pc">${escapeHtml(p.raw.lo_time)}–${escapeHtml(p.raw.hi_time)}${p.pr ? ' · ' + escapeHtml(p.pr) : ''}</span><span></span></div>`;
   }).join('');
-  const hrLine = d.hr ? ` Heart-rate fitness is ${d.hr.delta_pct >= 0 ? 'up' : 'down'} ${Math.abs(d.hr.delta_pct)}% since ${escapeHtml(d.hr.since)} (${d.hr.runs_now} steady runs now): an experimental adjustment would move these times ${Math.abs(d.hr.applied_pct)}% ${d.hr.applied_pct >= 0 ? 'faster' : 'slower'} (${d.predictions.filter(p=>p.adjusted).map(p=>escapeHtml(p.label) + ' ' + escapeHtml(p.adjusted.time)).join(', ')}). The table shows the unadjusted model; both are saved to check which is closer.` : '';
-  $('predNote').innerHTML = `The same HawksPredict numbers as Fitness States, with the Van Cortlandt rows added.${hrLine}${d.next_meet ? ` Predictions for ${escapeHtml(d.next_meet.title)} (${escapeHtml(d.next_meet.date)}) are saved to be scored after the race.` : ''}`;
+  // The heart-rate-adjusted time is no longer shown (it did not help on real data); the server still logs it for scoring.
+  $('predNote').innerHTML = `The same HawksPredict numbers as Fitness States, with the Van Cortlandt rows added.${d.next_meet ? ` Predictions for ${escapeHtml(d.next_meet.title)} (${escapeHtml(d.next_meet.date)}) are saved to be scored after the race.` : ''}`;
 }
 
 // --- Team mileage -----------------------------------------------------------------
