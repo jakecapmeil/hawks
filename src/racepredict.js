@@ -18,7 +18,7 @@ const ROWS = [
 // The heart-rate layer is exploratory: a quarter of the fitness change, never more than 3%.
 const HR_SHRINK = 0.25;
 const HR_CAP = 0.03;
-const MODEL_TAG = 'HawksPredict-Lite v1 fitness-states';
+const MODEL_TAG = 'HawksPredict-Lite v1.1 fitness-states';
 
 const addDays = (date, n) => new Date(Date.parse(date + 'T12:00:00Z') + n * DAY).toISOString().slice(0, 10);
 const vo2At = (v) => -4.6 + 0.182258 * v + 0.000104 * v * v;
@@ -54,7 +54,7 @@ export async function racePredictions(env, personId, today) {
   if (env.HAWKS_PREDICT !== '1') return { enabled: false };
   const db = env.DB;
   const fitness = await getFitness(db, personId, today);
-  const model = { name: 'HawksPredict-Lite', version: 'v1' };
+  const model = { name: 'HawksPredict-Lite', version: 'v1.1' };
   if (!fitness?.model) return { enabled: true, model, predictions: [], reason: 'Add a race or PR (or two) and HawksPredict can predict your other events.' };
 
   // Exploratory heart-rate layer: fitness now vs. fitness when the newest result was set.

@@ -421,3 +421,66 @@ Elite sprinters span a narrow range, so a free log-log slope is flattened and ga
 No non-elite 100 m/200 m data exists in anything we hold, so those rows carry extra uncertainty (4% added log-SD) and are the least trustworthy; the card says so.
 The in-between idea works: log-log interpolation of the two neighbours predicts a real 1000 m to 1.8%, a 300 m to 1.2% and a mile to 2.1%, but it is consistently 1.6-1.8% too fast, so formula-made 600 m marks add that bias back.
 Only 133 athletes have a real 600 m mark (11 with 400 and 800), so the 600 m model is trained mostly on formula-made marks and is the least tested row.
+
+## exp14: Ontario high-school finals, elite marks, and synthetic athletes (2026-10-22/23)
+Scripts: `exp14_ingest.py`, `exp14_baseline.py`, `exp14_data_step.py`, `exp14_synth.py`, `exp14_synth_sweep.py`, `exp14_lowdata_sub.py`, `exp14_sub_ont.py`, `exp14_research_final.py`, `exp15_short_v2.py`. All sweeps use the NRCD pool (athlete-grouped 5-fold) and the **Ontario holdout**: half of the 4,999 Ontario runners (seed 20261022), never trained on, 2,757 races from 1,092 runners with a 400 m-or-longer history. Ontario dates are approximated (year, day, WECSSAA before OFSAA); only their order matters. The finals are one championship weekend, so cross-event prediction there is easier than predicting a race weeks away; read Ontario numbers as "same-weekend, other-event" accuracy.
+
+### Baseline: the shipped models on real teenagers (no new training)
+| model | MAE | 95% CI | paired vs nearest-result Riegel |
+|---|---|---|---|
+| Riegel (nearest result) | 5.801% | 5.58-6.06 | |
+| HawksPredict-Lite v1 (NRCD only) | 3.454% | 3.35-3.59 | -2.55 to -2.16 |
+| HawksPredict-Research v1.1 (NRCD only) | 3.710% | 3.60-3.82 | -2.30 to -1.89 |
+Both models transfer from college club runners to high-school finalists. Lite beats Research there (Research uses dates and course features that do not exist for these races).
+
+### Which extra real data helps? (Lite: shipped size, labels only; Research: v1 feature set, fast trees)
+| training data | Lite NRCD dev | Lite Ontario holdout | Research NRCD dev | Research Ontario holdout |
+|---|---|---|---|---|
+| NRCD only | 4.170% | 3.368% | 3.642% | 3.540% |
+| + Ontario train half | 4.170% (-0.004 to +0.006) | **2.858% (-0.566 to -0.452)** | 3.636% (-0.012 to -0.000) | **2.805% (-0.808 to -0.654)** |
+| + 66k elite dated marks (weight 1) | 4.217% (+0.040 to +0.054) | 3.620% (+0.197 to +0.301) | 3.690% (+0.040 to +0.056) | 3.894% (+0.287 to +0.422) |
+| + elite (weight 0.3) | 4.182% (+0.007 to +0.018) | 3.559% | 3.648% | 3.873% |
+| + Ontario + elite (0.3) | 4.183% | 3.010% | 3.648% | 2.876% |
+Teen finals help the teen test by 0.5-0.8 points and cost nothing on college runners. Elite top-list marks hurt both: a list of best marks is a truncated, best-effort sample. They are used for HawksPredict-Short only.
+
+### Retrained models (same recipes as the shipped ones; Ontario train half added to the pool)
+| model | frozen NRCD test | Ontario holdout |
+|---|---|---|
+| Lite v1 (NRCD only, as shipped) | 4.375% | 3.454% [3.35, 3.59] |
+| Lite + Ontario train half (distilled, 150 x 15) | 4.380% [4.12, 4.69] | **2.887% [2.79, 3.01]** (paired -0.629 to -0.507) |
+| Research v1.1 (NRCD only, reproduced) | 3.562% [3.35, 3.80], 80% coverage 79.5% | 3.710% [3.60, 3.82], coverage 74.9% |
+| Research + Ontario train half | 3.558% [3.34, 3.79], coverage 79.0% | **2.688% [2.58, 2.80]**, coverage 82.2% |
+The shipped candidates (Lite v1.1, Research all-Ontario) were refit on both Ontario halves: Lite frozen test 4.386% [4.12, 4.69], Research 3.601% [3.39, 3.84]; their Ontario numbers are in-sample and are not reported. On teen-like inputs Lite v1.1 moves predicted times by 1.7% on average (about 1% faster for 400-1500 m and 1% slower for 3000 m); on college-like inputs by 0.3%.
+**The frozen NRCD test has now been scored 8 times** (Lite, Research v1, v1.1, and these retrains and reproductions). Treat its numbers as development-level, not as a clean one-shot; the Ontario holdout has been scored once per model.
+
+### HawksPredict-Short on real teenagers (exp14_short_ont.py, exp15_short_v2.py)
+Leave-one-event-out within a runner-year, sources are the runner's other Ontario events, the lines were never fitted on this data (v1):
+| target | n | v1 MAE | 80% coverage |
+|---|---|---|---|
+| 100 m | 697 | 2.10% | 96% |
+| 200 m | 1020 | 2.28% | 94% |
+| 400 m | 1087 | 2.97% | 73% |
+| 800 m | 1649 | 3.06% | 82% |
+| 1500 m | 2026 | 2.67% | 81% |
+| 3000 m | 1374 | 3.67% | 68% |
+The 100 m and 200 m rows, which had no non-elite validation, are accurate to about 2% (same-weekend marks; expect more when the PR is months old) and their ranges are wider than they need to be, which is the safe direction. Refitting the pair lines with the Ontario train half added (v1.1; pair SDs floored at v1's, no pairs v1 lacked), scored on the holdout runners: all targets 2.86% -> 2.55%, 3000 m 3.53% -> 2.59%, 80% coverage 81% -> 86%. On 20% of the World Athletics / NRCD athletes held out of both fits the change is within +-0.03 points per event.
+
+### Synthetic athletes: what happens as the amount grows?
+**Generator** (`exp14_synth.py`, fitted on training athletes only). Each synthetic athlete borrows the schedule (dates, events, surfaces, meets) of a real training athlete and gets `ln t = A + E[sex,event] + u[surface] + d*ln(dist/5000) + tau*years + c[meet] + e`: a level, a personal slope and trend, the real mean event curve, the real (shrunk) meet-day effects, and noise resampled from the real leftover residuals. Mode *own*: a real athlete's own level and slopes plus a random shift (a perturbed copy). Mode *pop*: level and slopes drawn from the fitted population (a person who exists nowhere in the data). The slope spreads are scaled to match the real residual spread (empirical-Bayes deflation alone gave about zero; the raw spread was too wide). Realism check on held-out real athletes: real rows are scored 5.64% by nearest-result Riegel and 3.70% by a real-trained Research model; own-mode rows 5.86% / 4.08%, pop-mode 6.41% / 4.77%, i.e. a little harder than reality.
+**Lite, synthetic added to every training fold, scored on held-out NRCD athletes (66,529 races, 5 folds); change vs real-only 4.170%:**
+| synthetic added | own, weight 1 | own, weight 0.25 | pop, weight 1 | pop, weight 0.25 |
+|---|---|---|---|---|
+| 0.5x real rows | +0.004 to +0.015 | | +0.021 to +0.034 | |
+| 1x | +0.013 to +0.027 | | +0.045 to +0.060 | |
+| 2x | +0.027 to +0.042 | -0.006 to +0.006 | +0.076 to +0.095 | +0.011 to +0.022 |
+| 4x | +0.042 to +0.058 | +0.002 to +0.015 | +0.112 to +0.134 | +0.034 to +0.048 |
+| 8x | +0.054 to +0.073 | +0.017 to +0.032 | +0.143 to +0.165 | +0.062 to +0.080 |
+| synthetic only, 8x (no real athletes) | +0.082 to +0.103 (4.262%) | | +0.201 to +0.227 (4.384%) | |
+More synthetic data is steadily worse. A model trained on synthetic athletes alone comes within 0.1-0.2 points of one trained on real athletes, which says the generator copies the real structure well, and also that it adds no information: it is made from the same athletes.
+**Same Lite, trained on all of NRCD plus synthetic, scored on the Ontario holdout (3.368% real-only):** a small low-weight dose helps a little (own 2x w0.25 3.266%, -0.136 to -0.065; pop 2x w0.25 3.257%, -0.146 to -0.081); weight-1 and large amounts are neutral to worse (pop 4x w1 +0.018 to +0.110); synthetic-only 3.448% / 3.426%. Real Ontario rows give -0.5. Synthetic data nudges a model toward a different population only slightly; real data from that population is what matters.
+**Research (v1 features, fast trees), same sweep on folds 0-2 only (39,918 races; the Lite sweep used all 5 folds); change vs real-only 3.627%:** own w1: 0.5x +0.005 to +0.023, 1x +0.014 to +0.035, 2x +0.037 to +0.061, 4x +0.057 to +0.083, 8x +0.069 to +0.099; own w0.25 at 2x/4x/8x is neutral (-0.013 to +0.005 / -0.012 to +0.009 / -0.004 to +0.020); pop w1 1x +0.065 to +0.091, 8x +0.214 to +0.255; synthetic only 3.793% (own) and 4.003% (pop). Same shape as Lite, steeper for pop. On the Ontario holdout (real-only 3.540%, one fit per cell) the Research results are noisy and not monotone in the amount (own 0.5x/1x -0.27/-0.28, own 8x w0.25 +0.10 to +0.20, pop 1x +0.15 to +0.25): differences of about 0.2 are within the fit-to-fit scatter of that table, so the only safe reading is that synthetic data from NRCD does not reliably move a model toward high-school runners, while real Ontario rows moved it by -0.8.
+**Low-data regime** (only 10% or 25% of the training athletes are real, generator fitted on that fraction alone, own mode): at 10% real the loss against full real data is +0.175 to +0.212; adding 4-8x synthetic recovers 0.03-0.04 of that (4.345% -> 4.310%) and 0.12 on inputs with at most two prior results. At 25% real, synthetic does nothing (x1) or hurts (x4, x8).
+**History-subsampling copies** (the same real target with 1-3 earlier results as inputs): x3 gives -0.033 to -0.015 on NRCD dev (sparse-input slice -0.05), but on the Ontario holdout NRCD copies hurt (+0.142 to +0.216 on top of NRCD + Ontario train); only copies of Ontario rows help (-0.074 to -0.022). Not adopted.
+
+### Data-quality note
+In `results4.pkl` 7,173 of 27,343 NRCD athlete ids carry both M and F labels across their rows (about half the rows). Not investigated; they may be id collisions or races entered in the other sex's event. The models use the row's own label so nothing breaks, but athlete-level analyses should not assume one sex per id.

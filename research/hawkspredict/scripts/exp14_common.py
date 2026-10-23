@@ -59,6 +59,27 @@ def rows_full(df):
 def rows_lite(df):
     return _parallel(_lite_chunk, df)
 
+def _sub_chunk(args):
+    df, copies, seed = args; rng = np.random.default_rng(seed); rows = []
+    for aid, g in df.groupby('athlete_id', sort=False):
+        if len(g) < 2: continue
+        g = g.reset_index(drop=True); dts = g.date.values; ms = g.m.values; sc = g.sec.values; sf = g.surf.values; ml = g.male.values
+        for i in range(1, len(g)):
+            age = (dts[i] - dts[:i]).astype('timedelta64[D]').astype(int); k = np.where((age >= 1) & (age <= 730))[0]
+            if not len(k): continue
+            for _ in range(copies):
+                s = min(len(k), int(rng.choice([1, 2, 3]))); kk = rng.choice(k, s, replace=False)
+                r = lite_feats(ms[kk], sc[kk], sf[kk], ms[i], sf[i], ml[i])
+                if not np.isfinite(r['base']): continue
+                r.update(athlete_id=aid, date=dts[i], target_m=ms[i], y=float(np.log(sc[i]))); rows.append(r)
+    return pd.DataFrame(rows)
+
+def sub_rows(df, copies, seed=0):
+    df = df.sort_values(['athlete_id', 'date']).reset_index(drop=True); ids = df.athlete_id.unique()
+    parts = [(df[df.athlete_id.isin(c)], copies, seed + j) for j, c in enumerate(np.array_split(ids, 32))]
+    with mp.get_context('fork').Pool(8) as p: out = p.map(_sub_chunk, parts)
+    return pd.concat([o for o in out if len(o)], ignore_index=True)
+
 # ---- Lite model from its exported JSON ----
 def lite_predict_json(art, L):
     """Residual (log seconds over `base`) from the exported Lite trees, row by row (fine for a few thousand rows)."""
