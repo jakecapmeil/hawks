@@ -574,7 +574,8 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const fromLite = [];
     for (const k of ['400', '800', '1600', '3200', '5K']) {
       const src = shortSource(est[k].m, est[k].sec);
-      if (src) fromLite.push({ ...src, extra: 0.025, name: est[k].label });
+      // Its own 80% range, as a log-SD: whatever Short derives from it can't be surer than the estimate it started from.
+      if (src) fromLite.push({ ...src, extra: Math.log(est[k].hi / est[k].lo) / (2 * Z80), name: est[k].label });
     }
     for (const e of EXTRA_EVENTS) {
       const own = shortPrs.filter((p) => p.ev === e.short).sort((a, b) => a.age - b.age)[0];
@@ -652,10 +653,15 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       // How sure the model is, as the half-width of its 80% range (+-3% of the time, say), turned into a word.
       const hw = x.lo ? (x.hi - x.lo) / 2 / x.sec : null;
       const wordFor = (h) => (h < 0.04 ? 'high' : h < 0.08 ? 'medium' : 'low');
+      // No non-elite sprint data and few real 600 m or steeple marks stand behind these rows, so they never read surer than this
+      // unless the runner has a PR at that very event.
+      const ownPr = !!prOf(e.key);
+      const capWord = (w, top) => (['low', 'medium', 'high'].indexOf(w) > ['low', 'medium', 'high'].indexOf(top) ? top : w);
+      const shortWord = (w) => (e.group === 'sprint' ? capWord(w, ownPr ? 'medium' : 'low') : capWord(w, ownPr ? 'high' : 'medium'));
       return {
         event: e.key, label: e.label, meters: e.m, sec: Math.round(x.sec * 10) / 10,
         time: fmtTime(x.sec, { tenths: e.m <= 800 }), pace_mi: fmtPace((x.sec / e.m) * MILE),
-        confidence: x.short ? wordFor(hw) : confFor(e.m),
+        confidence: x.short ? shortWord(wordFor(hw)) : confFor(e.m),
         pr: prOf(e.key),
         ...(x.lo ? { lo: Math.round(x.lo * 10) / 10, hi: Math.round(x.hi * 10) / 10, range: `${fmtTime(x.lo, { tenths: e.m <= 800 })}-${fmtTime(x.hi, { tenths: e.m <= 800 })}`, plus_minus_pct: Math.round(hw * 1000) / 10 } : {}),
         ...(x.short ? { optional: true, group: e.group, from: x.from } : {}),

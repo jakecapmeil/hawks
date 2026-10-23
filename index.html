@@ -5850,6 +5850,7 @@ function drawFitTable(){
 async function renderFitness(refresh){
   if(!isRealPerson()){
     $('fitHero').innerHTML = '';
+    fitLast = null; fitEditing = false; $('fitEdit').style.display = 'none';
     $('fitTable').innerHTML = '<div class="fit-empty hint">Pick your name to see your Fitness States.</div>';
     ['fitTrend','fitZones','fitSources','fitBadge','predNote'].forEach(id=> $(id).innerHTML = '');
     return;
@@ -5869,6 +5870,7 @@ async function renderFitness(refresh){
   }
   if(!f || !f.vo2r){
     $('fitBadge').innerHTML = '';
+    fitLast = null; fitEditing = false; $('fitEdit').style.display = 'none';
     $('fitHero').innerHTML = f ? statTile(f.mpw ?? '–', 'mi / week (4 wk)') : '';
     $('fitTable').innerHTML = `<div class="fit-empty"><div class="card-title" style="margin-bottom:6px;">No fitness data yet</div><div class="hint" style="margin-bottom:var(--sp-3);">Add your PRs (with dates) or connect your watch, and Hawks works out what you can race now.</div><div class="cluster" style="justify-content:center;"><button type="button" id="fitEmptyPrs">Add PRs</button><button type="button" class="ghost" id="fitEmptyWatch">Set up watch</button></div></div>`;
     $('fitEmptyPrs').onclick = goToPrs;
@@ -5882,7 +5884,7 @@ async function renderFitness(refresh){
   $('fitHero').innerHTML = tileSub(f.vo2max, 'VO2max', f.vo2max_source === 'watch' ? 'from your watch' : 'Hawks estimate') + (f.vo2max_source === 'watch' ? tileSub(f.vo2r, 'Hawks VO2max', 'from your races') : '') + tileSub(fiveK.time, '5K now', '');
   $('fitNewPrs').style.display = f.new_prs?.length ? '' : 'none';
   $('fitNewPrs').innerHTML = (f.new_prs || []).map(p=>`New PR found: <b>${escapeHtml(p.event)} ${escapeHtml(p.time)}</b> on ${escapeHtml(p.date)}`).join('<br>');
-  fitLast = f;
+  fitLast = f; $('fitEdit').style.display = '';
   drawFitTable();
   const hist = (data.history || []).filter(h=>h.vo2r).map(h=>({ v: h.vo2r, d: h.date }));
   const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';

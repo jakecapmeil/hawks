@@ -5,9 +5,11 @@
 // top-list personal bests and NRCD collegiate PBs; shortmodel.json holds them with each line's residual SD.
 // Several known events are combined by inverse-variance averaging; the range comes from the combined SD,
 // inflated by a cross-validated factor and widened where the training marks do not cover the athlete.
-// Mirrors research/hawkspredict/scripts/exp13_short_events.py.
+// The pair lines mirror research/hawkspredict/scripts/exp13_short_events.py. The nearest-three source cap, the sex averaging, the
+// source-uncertainty term and extra_sd are applied here and were not part of the cross-validation.
 //
-//   predictShortAny([{ ev: '800', sec: 130, extra: 0.02 }, ...], '600') -> { sec, lo, hi, sd, n }   (null with no usable pair)
+//   predictShortAny([{ ev: '800', sec: 130, extra: 0.04 }, ...], '600') -> { sec, lo, hi, sd, n }   (null with no usable pair)
+//   `extra` is the source's own log-SD (a Lite estimate's range, or a PR's age).
 
 import MODEL from './shortmodel.json' with { type: 'json' };
 
@@ -35,15 +37,19 @@ function one(sources, target, male) {
     .sort((a, b) => Math.abs(Math.log(MODEL.events[a.ev] / tm)) - Math.abs(Math.log(MODEL.events[b.ev] / tm)))
     .slice(0, 3);
   if (!near.length) return null;
+  // The pair lines' own scatter is averaged (inverse variance). A source's own uncertainty is NOT averaged away: its error is
+  // shared by every pair it feeds, so the nearest source's SD is added once, in quadrature (b = that pair's slope).
   let sw = 0;
   let sp = 0;
   for (const s of near) {
     const p = PAIRS.get(`${s.ev}>${target}`);
-    const w = 1 / (p.sd * p.sd + (s.extra || 0) ** 2);
+    const w = 1 / (p.sd * p.sd);
     sw += w;
     sp += w * (p.a + p.b * Math.log(s.sec) + p.c * male);
   }
-  const sd = Math.sqrt(1 / sw) * MODEL.infl;
+  const first = near[0];
+  const srcSd = (first.extra || 0) * Math.abs(PAIRS.get(`${first.ev}>${target}`).b);
+  const sd = Math.sqrt((Math.sqrt(1 / sw) * MODEL.infl) ** 2 + srcSd ** 2);
   return { mu: sp / sw, sd, n: near.length };
 }
 

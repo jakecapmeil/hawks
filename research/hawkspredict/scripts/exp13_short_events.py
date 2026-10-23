@@ -152,7 +152,7 @@ need = P['400'].notna() & P['800'].notna() & P['600'].isna()
 Psyn = P.copy(); Psyn.loc[need, '600'] = interp(P.loc[need, '400'].values, P.loc[need, '800'].values, 400, 800, 600) + BIAS + rng.normal(0, 0.012, int(need.sum()))
 log(f'formula-made 600 m marks added for the final fit: {int(need.sum())} (real 600 m marks: {int(P["600"].notna().sum())})')
 M = fit_pairs(Psyn, info)
-art = dict(name='HawksPredict-Short', version='v1', infl=infl, events={e: METERS[e] for e in EV}, extra_sd={'100': 0.04, '200': 0.04, '300': 0.03, '600': 0.025},   # added log-SD where the training marks do not cover the athletes it is used for (non-elite sprinters; formula-made 600s)
+art = dict(name='HawksPredict-Short', version='v1', infl=infl, events={e: METERS[e] for e in EV}, extra_sd={'100': 0.04, '200': 0.04, '300': 0.03, '600': 0.025, 'S2000': 0.03, 'S3000': 0.03},   # added log-SD where the training marks do not cover the athletes it is used for (non-elite sprinters; formula-made 600s)
            
            pairs=[dict(s=s, t=t, a=float(c[0]), b=float(c[1]), c=float(c[2]), sd=sd, n=n) for (s, t), (c, sd, n) in M.items()],
            trained_on='World Athletics all-time top lists (best mark per athlete and event; elite) and NRCD collegiate PBs (CC-BY-4.0)',
