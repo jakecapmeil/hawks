@@ -1482,6 +1482,11 @@
   .fit-row .ev{font-weight:600;font-size:var(--fs-subhead);}
   .fit-row .tm{font-weight:800;font-size:var(--fs-headline);}
   .fit-row .pc{font-size:var(--fs-footnote);color:var(--ink-soft);}
+  .fit-row .cw{display:flex;align-items:center;gap:6px;justify-self:end;font-size:var(--fs-caption);color:var(--ink-soft);}
+  .fit-row.pick{grid-template-columns:24px minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) 22px;cursor:pointer;}
+  .fit-row.pick.off .tm,.fit-row.pick.off .ev{opacity:.55;}
+  .fit-legend{display:flex;gap:var(--sp-3);flex-wrap:wrap;font-size:var(--fs-caption);color:var(--ink-soft);margin-top:var(--sp-2);}
+  .fit-legend span{display:inline-flex;align-items:center;gap:5px;}
   .conf{width:10px;height:10px;border-radius:50%;justify-self:end;}
   .conf.high{background:var(--int-1);} .conf.medium{background:var(--int-2);} .conf.low{background:var(--ink-soft);opacity:.5;}
   .fit-trend{margin-top:var(--sp-4);}
@@ -2085,7 +2090,7 @@
               <div class="card-title">Race fitness</div>
               <div class="hint" id="fitHint">What you could race right now, from your races and PRs (HawksPredict). The small line under each time is its 80% range.</div>
             </div>
-            <span id="fitBadge"></span>
+            <span style="display:flex;gap:var(--sp-2);align-items:center;"><span id="fitBadge"></span><button type="button" class="ghost" id="fitEdit" aria-pressed="false">Edit</button></span>
           </div>
           <div class="new-prs" id="fitNewPrs" style="display:none;"></div>
           <div class="fit-hero" id="fitHero"></div>
@@ -2122,6 +2127,7 @@
               <p><b>It uses your best results.</b> It looks at your fastest result at each distance from the last two years, so someone coming back from a layoff or injury will read faster than they are today; add a recent race or edit the PR date when that is you.</p>
               <p><b>Garmin's VO2max is matched to your races.</b> Garmin estimates VO2max from heart rate vs speed, which usually reads higher than race results. Hawks finds your personal ratio from races run near a Garmin reading, so the number can track your fitness between races.</p>
               <p><b>Runs without a race.</b> If you have no race or PR at all, Hawks falls back to a training estimate from rep sessions and heart rate on steady runs, and says so.</p>
+              <p><b>More events, your choice.</b> Tap Edit on Race fitness to show 100m, 200m, 600m, 1000m or the steeplechases. HawksPredict-Short estimates them from your other times (and any PR you enter at those distances), using the relationships between events in World Athletics and collegiate results. Every row shows how sure it is: the dot and the ± are the width of its 80% range. Sprints and steeples are the least certain: the model learned them mostly from elite athletes.</p>
               <p><b>Mileage matters for long races.</b> 10K and half marathon estimates slow down when your last 4 weeks are low on miles.</p>
               <p><b>VO2max</b> is your watch's (Garmin or COROS) when it sends one. <b>Hawks VO2max</b> is what your race times are worth, and it sets your training paces. With no watch number, the headline is Hawks' heart-rate estimate from steady runs (using your resting heart rate when known). Watches tend to read high for some runners; none of these is a lab test.</p>
               <p><b>Fitness score</b> is your training load (minutes x effort) averaged over 42 days; fatigue is the same over 7 days, and form is fitness minus fatigue. It goes up with steady training and doesn't depend on racing.</p>
@@ -4336,7 +4342,7 @@ function miniMarkdown(text){
     .replace(/^\s*[*-]\s+/gm, '• ');
 }
 
-const PR_EVENTS = ['400','800','1600','3200','5K','XC 5K','VC 2.5 mi'];
+const PR_EVENTS = ['100','200','400','600','800','1000','1600','3200','5K','2000 SC','3000 SC','XC 5K','VC 2.5 mi'];
 function parsePrsClient(raw){ try{ const o = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {}); return o && typeof o === 'object' ? o : {}; }catch(e){ return {}; } }
 
 function renderPrs(p){
@@ -4344,7 +4350,7 @@ function renderPrs(p){
   $('prForm').style.display = p ? '' : 'none';
   if(!p) return;
   const prs = parsePrsClient(p.prs);
-  const ph = { '400':'ss.s', '800':'m:ss', '1600':'m:ss', '3200':'mm:ss', '5K':'mm:ss', 'XC 5K':'mm:ss', 'VC 2.5 mi':'mm:ss' };
+  const ph = { '100':'ss.s', '200':'ss.s', '400':'ss.s', '600':'m:ss.s', '1000':'m:ss', '2000 SC':'m:ss', '3000 SC':'mm:ss', '800':'m:ss', '1600':'m:ss', '3200':'mm:ss', '5K':'mm:ss', 'XC 5K':'mm:ss', 'VC 2.5 mi':'mm:ss' };
   $('prGrid').innerHTML = `<div class="pr-row head"><span>Event</span><span>Time</span><span>When</span></div>` + PR_EVENTS.map(e=>`<div class="pr-row">
     <span class="pr-ev">${e}</span>
     <input type="text" data-pr="${e}" value="${escapeHtml(prs[e]?.time || '')}" placeholder="${ph[e]}" maxlength="10" inputmode="decimal" autocomplete="off" aria-label="${e} time">
@@ -5800,6 +5806,47 @@ function drawSparks(){
   document.querySelectorAll('.spark').forEach(el=>{ drawSpark(el); if(sparkObserver) sparkObserver.observe(el); });
 }
 
+// Which Race fitness rows to show (a per-device choice) and the edit mode that changes it.
+const FIT_DEFAULT = ['400','800','1600','3200','5K','10K','half'];
+let fitShown = FIT_DEFAULT.slice(), fitEditing = false, fitLast = null;
+try{ const v = JSON.parse(localStorage.getItem('hawksFitEvents') || 'null'); if(Array.isArray(v) && v.length) fitShown = v; }catch(e){}
+function saveFitShown(){ try{ localStorage.setItem('hawksFitEvents', JSON.stringify(fitShown)); }catch(e){} }
+const FIT_GROUPS = { sprint:'Sprints', middle:'Middle distance', steeple:'Steeplechase' };
+function drawFitTable(){
+  const f = fitLast; if(!f) return;
+  const rowHtml = (e, pick)=>{
+    const pr = e.pr?.time;
+    const on = fitShown.includes(e.event);
+    const flat = e.meters < 400;
+    const why = [`${cap(e.confidence)} confidence` + (e.plus_minus_pct != null ? ` (the 80% range is about ±${e.plus_minus_pct}%)` : ''), e.range ? `80% range ${e.range}` : '', e.from?.length ? `Based on: ${e.from.join(', ')}` : ''].filter(Boolean).join('. ');
+    const cells = `<span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}${e.range ? `<small class="rng">${escapeHtml(e.range)}${e.plus_minus_pct != null ? ' · ±' + e.plus_minus_pct + '%' : ''}</small>` : ''}</span><span class="pc">${flat ? '' : escapeHtml(e.pace_mi) + '/mi'}${pr ? (flat ? '' : ' · ') + 'PR ' + escapeHtml(pr) : ''}</span><span class="cw" title="${escapeHtml(why)}">${pick ? cap(e.confidence) : ''}<span class="conf ${e.confidence}"></span></span>`;
+    return pick
+      ? `<div class="fit-row pick${on ? '' : ' off'}" data-fitev="${escapeHtml(e.event)}" role="checkbox" aria-checked="${on}" tabindex="0"><span>${on ? '☑' : '☐'}</span>${cells}</div>`
+      : `<div class="fit-row" title="${escapeHtml(why)}">${cells}</div>`;
+  };
+  let html;
+  if(fitEditing){
+    const groups = [['', f.estimates.filter(e=>!e.optional)], ...Object.keys(FIT_GROUPS).map(g=>[FIT_GROUPS[g], f.estimates.filter(e=>e.group === g)])].filter(([,l])=>l.length);
+    html = `<div class="hint" style="margin-bottom:var(--sp-2);">Tap the events you want to see. Every estimate shows how sure it is: the dot and the ± are the width of its 80% range.</div>` +
+      groups.map(([name, list])=> (name ? `<div class="hint" style="margin:var(--sp-3) 0 2px;font-weight:700;">${name}</div>` : '') + list.map(e=>rowHtml(e, true)).join('')).join('');
+  }else{
+    const rows = f.estimates.filter(e=>fitShown.includes(e.event));
+    html = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + (rows.length ? rows.map(e=>rowHtml(e, false)).join('') : '<div class="hint" style="padding:var(--sp-3) 0;">No events selected. Tap Edit to choose some.</div>')
+      + (f.course_estimates || []).map(c=>{
+        const pr = c.pr?.time;
+        return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
+      }).join('')
+      + `<div class="fit-legend"><span><i class="conf high"></i>high</span><span><i class="conf medium"></i>medium</span><span><i class="conf low"></i>low confidence: how tight the 80% range is. Hover or tap a row for what it is based on.</span></div>`;
+  }
+  $('fitTable').innerHTML = html;
+  $('fitEdit').textContent = fitEditing ? 'Done' : 'Edit'; $('fitEdit').setAttribute('aria-pressed', String(fitEditing));
+  $('fitTable').querySelectorAll('[data-fitev]').forEach(el=>{
+    const toggle = ()=>{ const k = el.dataset.fitev; fitShown = fitShown.includes(k) ? fitShown.filter(x=>x !== k) : [...fitShown, k]; saveFitShown(); drawFitTable(); };
+    el.onclick = toggle; el.onkeydown = ev=>{ if(ev.key === ' ' || ev.key === 'Enter'){ ev.preventDefault(); toggle(); } };
+  });
+}
+{ const b = $('fitEdit'); if(b) b.onclick = ()=>{ fitEditing = !fitEditing; drawFitTable(); }; }
+
 async function renderFitness(refresh){
   if(!isRealPerson()){
     $('fitHero').innerHTML = '';
@@ -5835,15 +5882,8 @@ async function renderFitness(refresh){
   $('fitHero').innerHTML = tileSub(f.vo2max, 'VO2max', f.vo2max_source === 'watch' ? 'from your watch' : 'Hawks estimate') + (f.vo2max_source === 'watch' ? tileSub(f.vo2r, 'Hawks VO2max', 'from your races') : '') + tileSub(fiveK.time, '5K now', '');
   $('fitNewPrs').style.display = f.new_prs?.length ? '' : 'none';
   $('fitNewPrs').innerHTML = (f.new_prs || []).map(p=>`New PR found: <b>${escapeHtml(p.event)} ${escapeHtml(p.time)}</b> on ${escapeHtml(p.date)}`).join('<br>');
-  $('fitTable').innerHTML = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + f.estimates.map(e=>{
-    const pr = e.pr?.time;
-    return `<div class="fit-row"${e.range ? ` title="80% range ${escapeHtml(e.range)}"` : ''}><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}${e.range ? `<small class="rng">${escapeHtml(e.range)}</small>` : ''}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span class="conf ${e.confidence}" title="${cap(e.confidence)} confidence"></span></div>`;
-  }).join('')
-    // The same fitness on the home course (hills, gravel and grass: about 5.5% slower).
-    + (f.course_estimates || []).map(c=>{
-      const pr = c.pr?.time;
-      return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
-    }).join('');
+  fitLast = f;
+  drawFitTable();
   const hist = (data.history || []).filter(h=>h.vo2r).map(h=>({ v: h.vo2r, d: h.date }));
   const trend = f.trend ? `5K estimate ${f.trend.five_k_sec_change <= 0 ? 'down' : 'up'} ${Math.abs(f.trend.five_k_sec_change)}s since ${new Date(f.trend.since + 'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}.` : '';
   $('fitTrend').innerHTML = hist.length >= 2 ? `${sparkline(hist)}<div class="hint">Race fitness over time. ${escapeHtml(trend)}</div>` : (trend ? `<div class="hint">${escapeHtml(trend)}</div>` : '<div class="hint">Your trend line starts filling in from today.</div>');

@@ -360,3 +360,64 @@ heart-rate fitness measured in both 8-week windows: 88 targets from 30 runners (
 | 1.00 | 5.55% | 7.33% | +1.78 | +0.53 to +2.99 |
 Slope of log(actual/baseline) on the heart-rate fitness change: -0.21 (95% CI -0.49 to +0.08), correlation -0.16. The sign is right (fitter by heart rate -> later effort faster) but the link is weak, so any correction
 makes errors larger. This matches the simulation (quarter strength is the break-even edge). The heart-rate layer is not supported; keep raw HawksPredict-Lite as the headline.
+
+## exp13: HawksPredict-Short, events Lite was not trained on (2026-10-23)
+athletes 25523 (World Athletics 15202, NRCD 10321); athletes with marks per event:
+| event | athletes |
+|---|---|
+| 100 | 4543 |
+| 200 | 4356 |
+| 300 | 609 |
+| 400 | 4187 |
+| 600 | 133 |
+| 800 | 5919 |
+| 1000 | 755 |
+| 1500 | 5737 |
+| 1609 | 5586 |
+| 3000 | 3473 |
+| 5000 | 4723 |
+| S2000 | 501 |
+| S3000 | 2577 |
+
+### In-between formula vs real marks (log-log interpolation of the neighbours; Riegel k=1.06 from one neighbour)
+| target | neighbours | n | interpolation | Riegel from lower | Riegel from upper | mean bias of interpolation |
+|---|---|---|---|---|---|---|
+| 600 | 400, 800 | 11 | 1.83% | 7.10% | 2.10% | -1.83% |
+| 1000 | 800, 1500 | 352 | 1.82% | 3.46% | 2.13% | -1.63% |
+| 300 | 200, 400 | 195 | 1.16% | 4.12% | 2.12% | -0.61% |
+| 1609 | 1500, 3000 | 924 | 2.07% | 2.27% | 3.80% | -0.06% |
+
+### Pair models, 5-fold by athlete (28890 held-out predictions; 1-3 other events known)
+interval inflation factor from cross-validation: 0.92
+| target | n | HawksPredict-Short | nearest-event Riegel | 80% interval coverage | elite (WA) | collegiate (NRCD) |
+|---|---|---|---|---|---|---|
+| 100 | 2544 | 1.56% (free slope 1.28%) | 2.79% | 80% | 1.56% (n=2544) | - (n=0) |
+| 200 | 3128 | 1.51% (free slope 1.36%) | 3.52% | 79% | 1.51% (n=3128) | - (n=0) |
+| 300 | 442 | 1.17% (free slope 1.04%) | 2.82% | 76% | 1.17% (n=442) | - (n=0) |
+| 400 | 2141 | 3.60% (free slope 3.47%) | 10.82% | 77% | 1.50% (n=1037) | 5.56% (n=1104) |
+| 600 | 96 | 0.95% (free slope 0.95%) | 2.43% | 72% | 0.95% (n=96) | - (n=0) |
+| 800 | 4051 | 3.12% (free slope 3.12%) | 7.33% | 80% | 1.10% (n=1024) | 3.80% (n=3027) |
+| 1000 | 684 | 1.27% (free slope 1.27%) | 3.20% | 86% | 0.96% (n=570) | 2.81% (n=114) |
+| 1500 | 4578 | 2.49% (free slope 2.45%) | 4.25% | 81% | 1.25% (n=1664) | 3.19% (n=2914) |
+| 1609 | 3990 | 2.95% (free slope 2.95%) | 4.53% | 79% | 0.90% (n=738) | 3.42% (n=3252) |
+| 3000 | 2920 | 2.29% (free slope 2.26%) | 3.28% | 81% | 1.18% (n=1209) | 3.07% (n=1711) |
+| 5000 | 3099 | 2.48% (free slope 2.42%) | 3.80% | 81% | 1.34% (n=1305) | 3.31% (n=1794) |
+| S2000 | 400 | 1.89% (free slope 1.50%) | 3.35% | 77% | 1.89% (n=400) | - (n=0) |
+| S3000 | 656 | 2.07% (free slope 2.07%) | 4.93% | 77% | 2.07% (n=656) | - (n=0) |
+
+### Does training on formula-made in-between marks help? Target 600 m, tested on real 600 m marks
+real 600 m marks with a 400 and an 800 (test): 11
+| method | error |
+|---|---|
+| log-log interpolation, no training | 1.83% |
+| pair model trained on formula-made 600 marks (400 + 800 athletes) | 1.14% |
+| pair model trained on both | 1.56% |
+formula-made 600 m marks added for the final fit: 1007 (real 600 m marks: 133)
+
+exported 80 pair models, 12 KB
+
+Reading the tables: these are personal best -> personal best predictions (an athlete's other all-time marks predict the target mark), so errors are not comparable with Lite's race-to-race 4.4%; they show the shape of the relationships, not race-day accuracy.
+Elite sprinters span a narrow range, so a free log-log slope is flattened and gave a 63 s 400 m runner an 11.0 s 100 m; sprint and steeple pairs therefore use a fixed slope of 1 (a constant ratio) and cost only 0.1-0.5 points in cross-validation.
+No non-elite 100 m/200 m data exists in anything we hold, so those rows carry extra uncertainty (4% added log-SD) and are the least trustworthy; the card says so.
+The in-between idea works: log-log interpolation of the two neighbours predicts a real 1000 m to 1.8%, a 300 m to 1.2% and a mile to 2.1%, but it is consistently 1.6-1.8% too fast, so formula-made 600 m marks add that bias back.
+Only 133 athletes have a real 600 m mark (11 with 400 and 800), so the 600 m model is trained mostly on formula-made marks and is the least tested row.

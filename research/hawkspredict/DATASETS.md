@@ -69,3 +69,9 @@ Seven efforts from 4 athletes cannot fine-tune or score a model; they are the se
 
 FitRec was downloaded with the user's Kaggle token (2.0 GB zip, 6.6 GB json), reduced to a 20,722-row run table with `fitrec_summarize.py`, and the raw files deleted. The table stays local (academic use only, no redistribution).
 Also seen and not used: London Marathon 2018-23 (Zenodo 10960982) and Marathon Data 2000-2019 (Zenodo 6959864) are marathon-only and keyed by runner name, so linking repeat runners would mean identifying people by name.
+
+## Update 2026-10-23: short events
+| Dataset | Status | Notes |
+|---|---|---|
+| World Athletics all-time top lists (Kaggle mexwell/world-athletics-database, data.csv) | USED (exp13) | 461k marks, 34k athletes, 100 m to steeplechase, best mark per athlete and event used (elite only); licence not stated on Kaggle, derived coefficients only are committed. zip sha256 ec00e2a5a31c59d4ed3e99d29966afaa1af70020a505a4c259c1b40acf9dc6d3 |
+Athlete names in that file were used only to link one athlete's marks across events and are not kept anywhere.

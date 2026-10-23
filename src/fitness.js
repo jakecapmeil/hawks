@@ -25,6 +25,7 @@
 import { parseReps, snap100 } from './workouts.js';
 import { conditionsOf, heatCost, hillCost, VC_FACTOR, XC_FACTOR, VC_RE } from './conditions.js';
 import { predictRaceAny, PACE_MODEL_INFO } from './pacemodel.js';
+import { predictShortAny, shortSource, SHORT_INFO, SHORT_METERS, Z80 } from './shortmodel.js';
 
 const DAY = 86400000;
 const MILE = 1609.344;
@@ -41,12 +42,28 @@ export const EVENTS = [
   { key: 'half', label: 'Half marathon', m: 21097.5 },
 ];
 
+// Events HawksPredict-Lite was not trained on. HawksPredict-Short estimates them from the Lite
+// estimates and any PRs the runner has at these distances; they are offered in the table's edit mode.
+export const EXTRA_EVENTS = [
+  { key: '100', label: '100m', m: 100, group: 'sprint', short: '100' },
+  { key: '200', label: '200m', m: 200, group: 'sprint', short: '200' },
+  { key: '600', label: '600m', m: 600, group: 'middle', short: '600' },
+  { key: '1000', label: '1000m', m: 1000, group: 'middle', short: '1000' },
+  { key: '2000SC', label: '2000m steeple', m: 2000, group: 'steeple', short: 'S2000' },
+  { key: '3000SC', label: '3000m steeple', m: 3000, group: 'steeple', short: 'S3000' },
+];
+// PR events that only HawksPredict-Short reads (a 100 or a steeple time says nothing about the 1600-to-5K model).
+const SHORT_M = SHORT_METERS;
+const SHORT_OWN = new Set(['100', '200', '600', '1000', 'S2000', 'S3000']);
+const PR_NAMES = { 100: '100m', 200: '200m', 400: '400m', 600: '600m', 800: '800m', 1000: '1000m', 1609: 'mile', 3000: '3000m', 5000: '5K', S2000: '2000m steeple', S3000: '3000m steeple' };
+const SHORT_ONLY_PR = { '100': '100', '200': '200', '2000 SC': 'S2000', '3000 SC': 'S3000' };
+
 const VC_MILE_2_5 = 2.5 * MILE;
 // Which PR each estimate row is compared with. The table reads `pr` off the
 // estimate itself, so a new event only needs adding here, in PR_METERS and in
 // PR_EVENTS (log.js); scripts/check-pr-events.mjs fails when they disagree.
-export const PR_FOR_ESTIMATE = { '400': '400', '800': '800', '1600': '1600', '3200': '3200', '5K': '5K', vc5k: 'XC 5K', 'vc2.5': 'VC 2.5 mi' };
-export const PR_METERS = { '400': 400, '800': 800, '1600': 1600, '3200': 3200, '5K': 5000, 'XC 5K': 5000, 'VC 2.5 mi': VC_MILE_2_5 };
+export const PR_FOR_ESTIMATE = { '100': '100', '200': '200', '400': '400', '600': '600', '800': '800', '1000': '1000', '1600': '1600', '3200': '3200', '5K': '5K', '2000SC': '2000 SC', '3000SC': '3000 SC', vc5k: 'XC 5K', 'vc2.5': 'VC 2.5 mi' };
+export const PR_METERS = { '100': 100, '200': 200, '400': 400, '600': 600, '800': 800, '1000': 1000, '1600': 1600, '3200': 3200, '5K': 5000, '2000 SC': 2000, '3000 SC': 3000, 'XC 5K': 5000, 'VC 2.5 mi': VC_MILE_2_5 };
 
 // ------------------------------------------------------------------ Daniels
 
@@ -203,6 +220,7 @@ const PR_FOR = { 1600: '1600', [MILE]: '1600', 3200: '3200', [2 * MILE]: '3200',
 export function computeFitness({ person, workouts, days, maxHr, meets = new Set(), events = [], efforts = [], wellness = [], paceModel = null }, today) {
   const sources = [];
   const prs = parsePrs(person?.prs);
+  const shortPrs = []; // PRs HawksPredict-Short can use: { ev, sec, age }
 
   // 1. Max efforts.
   for (const [event, v] of Object.entries(prs)) {
@@ -211,6 +229,9 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     if (!m || !sec) continue;
     const dated = /^\d{4}-\d{2}-\d{2}$/.test(v?.date || '');
     const age = dated ? ageDays(v.date, today) : 240;
+    const shortSrc = SHORT_ONLY_PR[event] ? { ev: SHORT_ONLY_PR[event], sec } : shortSource(m, sec);
+    if (shortSrc && !/XC|VC/.test(event)) shortPrs.push({ ...shortSrc, age });
+    if (SHORT_ONLY_PR[event]) continue;
     // XC courses run slower than the track. Hawks races are at Van Cortlandt
     // unless the PR says it was somewhere else.
     const onCourse = event === 'XC 5K' || event === 'VC 2.5 mi';
@@ -547,6 +568,33 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     est[e.key] = { ...e, sec: t, raw, lo: lite ? lite.by[e.key].lo * scale : null, hi: lite ? lite.by[e.key].hi * scale : null };
   }
 
+  // HawksPredict-Short: the events Lite was not trained on. Its sources are Lite's own estimates (a little
+  // less exact than a real result, so they carry extra uncertainty) and any PRs at the other short distances.
+  if (lite) {
+    const fromLite = [];
+    for (const k of ['400', '800', '1600', '3200', '5K']) {
+      const src = shortSource(est[k].m, est[k].sec);
+      if (src) fromLite.push({ ...src, extra: 0.025, name: est[k].label });
+    }
+    for (const e of EXTRA_EVENTS) {
+      const own = shortPrs.filter((p) => p.ev === e.short).sort((a, b) => a.age - b.age)[0];
+      // 400-to-5K PRs are already inside Lite's estimates, so only PRs at the events Short owns count as extra sources.
+      const prsUsed = shortPrs.filter((p) => p.ev !== e.short && SHORT_OWN.has(p.ev)).map((p) => ({ ev: p.ev, sec: p.sec, extra: p.age > 365 ? 0.02 : 0.008, name: `${PR_NAMES[p.ev] || p.ev} PR` }));
+      const r = predictShortAny([...fromLite, ...prsUsed], e.short);
+      if (!r) continue;
+      let mu = Math.log(r.sec);
+      let sd = r.sd;
+      if (own) {
+        // A PR at this exact distance anchors the estimate; the older it is, the less.
+        const w = own.age <= 365 ? 0.7 : 0.45;
+        mu = w * Math.log(own.sec) + (1 - w) * mu;
+        sd = Math.sqrt(((1 - w) * sd) ** 2 + (w * 0.03) ** 2);
+      }
+      const near = [...fromLite, ...prsUsed].filter((x) => x.ev !== e.short).sort((a, b) => Math.abs(Math.log(SHORT_M[a.ev] / e.m)) - Math.abs(Math.log(SHORT_M[b.ev] / e.m))).slice(0, 3).map((x) => x.name);
+      est[e.key] = { ...e, sec: Math.exp(mu), raw: Math.exp(mu), lo: Math.exp(mu - Z80 * sd), hi: Math.exp(mu + Z80 * sd), hw: Z80 * sd, from: own ? [`your ${e.label} PR`, ...near] : near, short: true };
+    }
+  }
+
   // The same fitness on the team's home course: what to expect at Van
   // Cortlandt (the 5K, and the 2.5-mile course by Riegel from the 5K).
   const vc5 = est['5K'].sec * VC_FACTOR;
@@ -598,13 +646,19 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     lite_inputs: lite ? liteIn.map((s) => ({ kind: s.kind, m: s.m, sec: Math.round(s.s * 10) / 10, date: s.date })) : [],
     confidence: overall,
     mpw, mpw_prev: mpwPrev, longest_28d: round1(cur.longest),
-    estimates: EVENTS.map((e) => {
+    model_short: lite ? `${SHORT_INFO.name} ${SHORT_INFO.version}` : null,
+    estimates: [...EVENTS, ...EXTRA_EVENTS.filter((e) => est[e.key])].map((e) => {
       const x = est[e.key];
+      // How sure the model is, as the half-width of its 80% range (+-3% of the time, say), turned into a word.
+      const hw = x.lo ? (x.hi - x.lo) / 2 / x.sec : null;
+      const wordFor = (h) => (h < 0.04 ? 'high' : h < 0.08 ? 'medium' : 'low');
       return {
         event: e.key, label: e.label, meters: e.m, sec: Math.round(x.sec * 10) / 10,
-        time: fmtTime(x.sec, { tenths: e.m <= 800 }), pace_mi: fmtPace((x.sec / e.m) * MILE), confidence: confFor(e.m),
+        time: fmtTime(x.sec, { tenths: e.m <= 800 }), pace_mi: fmtPace((x.sec / e.m) * MILE),
+        confidence: x.short ? wordFor(hw) : confFor(e.m),
         pr: prOf(e.key),
-        ...(x.lo ? { lo: Math.round(x.lo * 10) / 10, hi: Math.round(x.hi * 10) / 10, range: `${fmtTime(x.lo, { tenths: e.m <= 800 })}-${fmtTime(x.hi, { tenths: e.m <= 800 })}` } : {}),
+        ...(x.lo ? { lo: Math.round(x.lo * 10) / 10, hi: Math.round(x.hi * 10) / 10, range: `${fmtTime(x.lo, { tenths: e.m <= 800 })}-${fmtTime(x.hi, { tenths: e.m <= 800 })}`, plus_minus_pct: Math.round(hw * 1000) / 10 } : {}),
+        ...(x.short ? { optional: true, group: e.group, from: x.from } : {}),
       };
     }),
     course_estimates: courseEstimates.map((c) => ({ ...c, pr: prOf(c.key) })),

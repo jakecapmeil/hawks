@@ -11,7 +11,7 @@ const staleFitness = (db, personId) => db.prepare('UPDATE fitness_states SET com
 export class LogError extends Error {}
 
 export const DAY_TYPES = ['easy', 'recovery', 'long', 'tempo', 'threshold', 'intervals', 'track', 'fartlek', 'hills', 'strides', 'race', 'shakeout', 'crosstrain', 'strength', 'rest'];
-export const PR_EVENTS = ['400', '800', '1600', '3200', '5K', 'XC 5K', 'VC 2.5 mi'];
+export const PR_EVENTS = ['100', '200', '400', '600', '800', '1000', '1600', '3200', '5K', '2000 SC', '3000 SC', 'XC 5K', 'VC 2.5 mi'];
 export const DAY_STATUSES = ['as_planned', 'harder', 'easier', 'missed', 'adjusted', 'rest'];
 
 // Strava workout category -> day type.
