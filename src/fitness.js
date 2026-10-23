@@ -601,10 +601,11 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
   }
 
   // HawksPredict-Marathon: from the 16 weeks of running before today (needs 15 running days). Independent of the PR-based models.
-  const mar = predictMarathon(workouts, today);
+  let mar = null;
+  try { mar = predictMarathon(workouts, today); } catch (e) { /* never let the marathon row break the rest of Fitness States */ }
   if (mar) {
     est.marathon = { ...EXTRA_EVENTS.find((e) => e.key === 'marathon'), sec: mar.sec, raw: mar.sec, lo: mar.lo, hi: mar.hi, marathon: true,
-      from: [`${mar.run_days} running days in the last 16 weeks`, `${Math.round(mar.feats.wk_mean / (MILE / 1000))} mi a week on average`, `longest run ${Math.round(mar.feats.longest / (MILE / 1000))} mi`] };
+      from: [...(est.half ? [`your half marathon estimate scaled up would be ${fmtTime(est.half.sec * Math.pow(2, 1.06))}; the training below is what this row follows`] : []), `${mar.run_days} running days in the last 16 weeks`, `${Math.round(mar.feats.wk_mean / (MILE / 1000))} mi a week on average`, `longest run ${Math.round(mar.feats.longest / (MILE / 1000))} mi`] };
   }
 
   // The same fitness on the team's home course: what to expect at Van
