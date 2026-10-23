@@ -15,8 +15,8 @@ const ROWS = [
   { key: '3200', label: '3200m' },
   { key: '5K', label: '5K' },
 ];
-// The heart-rate layer is exploratory: half the fitness change, never more than 3%.
-const HR_SHRINK = 0.5;
+// The heart-rate layer is exploratory: a quarter of the fitness change, never more than 3%.
+const HR_SHRINK = 0.25;
 const HR_CAP = 0.03;
 const MODEL_TAG = 'HawksPredict-Lite v1 fitness-states';
 

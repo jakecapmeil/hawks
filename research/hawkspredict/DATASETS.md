@@ -47,3 +47,12 @@ Kaggle needs an API token (kaggle.json). Not installed, no token on this machine
 | 7 small Kaggle sets (high-school times, cardio-activities, Garmin half log, running-log-insight, two Strava sets, marathon-time-predictions) | Kaggle | high-school set CC0 and running-log-insight CC0 (earlier listing); the rest unverified (CLI metadata returned nothing) | per file in the scratchpad |
 
 Everything the experiments need after deletion is in `rows4.pkl`/`results4.pkl` (derived from NRCD) and the exported Lite model; re-download links above rebuild the rest.
+
+## Update 2026-10-22: second scour
+| Dataset | Status | Notes |
+|---|---|---|
+| BMClab long-distance running 2019-20 (Figshare 16620238) | USED (exp12) | CC BY 4.0, daily files 154 MB each; athletes list the majors they ran, so marathon days are found by rule. 2019 daily sha256 0445cd42281d7c8710552239e3f721dae48d8d77b99bc98fb7a8530a2bc8c740, 2020 daily e635707a3390886be03955803fefb9b3f28296706e69ab286f5c583d1eebe429. No heart rate. |
+| FitRec / Endomondo (UCSD McAuley lab) | NOT OBTAINED | Heart rate + speed + altitude + weather, 1,104 users / 253k workouts, academic use only, no redistribution. The Google Drive links returned 404 from the command line; needs a manual download. Would allow `hr_check.py` across ~1,000 runners instead of 4. |
+| GoldenCheetah OpenData (OSF 6hfpz, GitHub GoldenCheetah/OpenData) | NOT CHECKED | Per-second HR, cadence, power, distance, altitude, no GPS; mostly cyclists. Run share unknown. |
+| KIRun | NOT CHECKED | 48 outdoor runners with heart rate, no race results. |
+| Hawks app data (4 athletes with synced workouts, 840 runs, 1 race) | USED for constants only | Private (minors); never leaves the local machine; no race targets, so it cannot train or score a race model. |

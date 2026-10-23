@@ -8,7 +8,7 @@ individual runners. So a learned heart-rate model is not possible, and anything 
 HawksPredict-Lite predicts from PRs. On top, the card applies an experimental heart-rate fitness adjustment:
 - Heart-rate fitness = median VDOT-like value of steady runs (2.5+ mi, 20+ min, 65-93% of max HR, flat enough, heat and hills credited back),
   the same recipe Fitness States already uses (Swain %HRmax -> %VO2max).
-- Adjustment = half the change in that number between when the newest PR was set and now, capped at 3%.
+- Adjustment = a quarter of the change in that number (half until 2026-10-22; lowered after the power analysis below) between when the newest PR was set and now, capped at 3%.
 - The raw Lite time and the adjusted time are both stored in `prediction_log` for each meet, first prediction locked, so real Hunter results will
   show whether the adjustment helps. Until then it is labelled experimental and the raw model is the reference.
 
@@ -31,3 +31,8 @@ The right way to use weather on race day is as a post-model factor, as the site 
 
 ## What would settle it
 Prediction log with 30-50 Hunter races where raw and adjusted times are both stored; compare the two with a paired test. Until then keep raw as the headline.
+
+## Update 2026-10-22: simulator and power analysis
+The Hawks database holds 4 athletes with synced runs (840 runs, 838 with heart rate, 688 with temperature) and 1 race, so it cannot test the layer. It was used to set simulator constants
+(see RESULTS.md, last section). In that simulator the 8-week heart-rate trend is too noisy for the half-strength correction to help even when it tracks fitness perfectly. `HR_SHRINK` is now 0.25. Consider also keeping the adjusted time
+out of the card until the prediction log holds 50+ races. FitRec (real heart rate, 1,104 runners) is the way to get real evidence; it needs a manual download.

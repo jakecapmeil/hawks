@@ -311,3 +311,29 @@ rows with a Power of 10 prediction: 87%; Power of 10 prior alone, MAE 4.90% (Rie
 | split seed | current features | + Power of 10 prior | change | 95% CI of change |
 |---|---|---|---|---|
 | 2 | 3.644% | 3.634% | -0.010 | -0.018 to -0.002 |
+
+## exp12: BMClab training logs -> marathon day (2019) (added 2026-10-22)
+Real training logs paired with real marathon days. Source: Figshare 16620238 (CC BY 4.0), daily 2019 file (sha256 0445cd42…c740). Marathon day = the
+40-44.5 km activity on the race date of the athlete's listed 2019 major; target is the device time scaled to 42.195 km; features are the 16 weeks before.
+15,874 athletes list a 2019 major; 14,137 marathon days (13,620 athletes) have 15+ runs in the prior 16 weeks. Script: `scripts/exp12_bmclab_training.py`.
+| predictor | n | error (MAE %) | 95% CI |
+|---|---|---|---|
+| median time | 14,137 | 15.47 | 15.27 to 15.67 |
+| Riegel from best 8-25 km training run | 14,116 | 8.25 | 8.15 to 8.36 |
+| training volume and pace only (10 features) | 14,137 | 6.65 | 6.55 to 6.75 |
+| training + best-effort Riegel | 14,137 | 6.34 | 6.24 to 6.44 |
+Training features added to best-effort + sex + age: -1.01 points (95% CI -1.08 to -0.94). Caveats: marathon only (the Hawks race 800 m-5K), device times,
+"races" found by rule, amateurs; no personal bests in this set, so it does not say how much training adds on top of Lite.
+
+## Hawks runs -> simulator constants, and the heart-rate power analysis (2026-10-22)
+Pooled from 551 clean runs of the 4 athletes with synced training (no per-athlete values kept): log pace falls 0.084-0.095 per +0.10 of max HR; heat adds 0.020 per 10 F of
+(temperature + dew point - 120); climb adds 0.094 per 100 ft/mi; single-run SD of heart-rate fitness 12.6%; monthly median SD 6.7% (upper bound on noise).
+`scripts/synth_hr_power.py` simulates runs with those constants and a swept coupling c (share of a true fitness change that shows in the heart-rate trend; unknowable from our data).
+| coupling c | corr(HR trend, true change) | effect of the shipped correction (+ = worse) |
+|---|---|---|
+| 0.00 | 0.00 | +0.26 points |
+| 0.25 | +0.12 | +0.20 |
+| 0.50 | +0.27 | +0.12 |
+| 1.00 | +0.46 | -0.02 |
+Even with perfect coupling the 8-week heart-rate trend has noise comparable to the signal, so a half-strength correction does not help in this simulator; a quarter-strength one gains at most 0.1 point and costs 0.14 if there is no link.
+The best strength depends entirely on c, so fine-tuning on synthetic rows would only encode the assumption. This is a power analysis, not evidence.
