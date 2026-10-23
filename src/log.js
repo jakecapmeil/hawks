@@ -486,7 +486,7 @@ export async function getLibraryWorkout(db, personId, id) {
   const w = WORKOUTS.find((x) => x.id === id);
   if (!w) throw new LogError(`Unknown library workout "${id}"`);
   const fitness = personId ? await getFitness(db, personId, new Date().toISOString().slice(0, 10)) : null;
-  if (!fitness?.vdot) return { ...w, your_targets: 'No Fitness States yet: add PRs (set_prs) or sync the watch to get personal paces.' };
+  if (!fitness?.vo2r) return { ...w, your_targets: 'No Fitness States yet: add PRs (set_prs) or sync the watch to get personal paces.' };
   return {
     ...w,
     your_targets: workoutTargets(w, fitness),

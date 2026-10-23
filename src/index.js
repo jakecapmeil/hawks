@@ -315,7 +315,7 @@ async function getPlan(db, params) {
   let plan = (personId && PLAN_VARIANTS[personId]?.[rank]) || PLANS[rank];
   // The runner's own rep targets next to each menu workout, from Fitness States.
   const fitness = personId ? await getFitness(db, personId, todayInTz()) : null;
-  if (fitness?.vdot) {
+  if (fitness?.vo2r) {
     plan = JSON.parse(JSON.stringify(plan));
     for (const sec of plan.ref.sessions) sec.targets = sec.items.map((item) => workoutTargets({ main: item, paces: item, type: 'vo2' }, fitness));
   }
@@ -1719,7 +1719,7 @@ export default {
         return json({
           ...libraryMeta(),
           groups: WORKOUT_GROUPS,
-          workouts: WORKOUTS.map((w) => ({ ...w, group: workoutGroup(w), personal: personalWorkout(w, fitness?.vdot ? fitness : null, rank) })),
+          workouts: WORKOUTS.map((w) => ({ ...w, group: workoutGroup(w), personal: personalWorkout(w, fitness?.vo2r ? fitness : null, rank) })),
           fitness,
           five_k_time: person ? await fiveKFor(env.DB, personId) : '',
           prs: person ? await getPrs(env.DB, personId) : {},

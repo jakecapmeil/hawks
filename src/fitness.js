@@ -9,7 +9,7 @@
 //      small tree model trained on collegiate results) turns them into a time
 //      and an 80% range for every event from 400 m to the half marathon. It
 //      knows each runner's own speed/endurance shape from their results.
-//   2. Race fitness (VDOT) is read off that model's 1600, 3200 and 5K times;
+//   2. Race fitness (race VO2max) is read off that model's 1600, 3200 and 5K times;
 //      it sets the aerobic training zones. Race paces come straight from the
 //      model.
 //   3. Only when a runner has no race result at all does the old training-based
@@ -28,7 +28,7 @@ import { predictRaceAny, PACE_MODEL_INFO } from './pacemodel.js';
 
 const DAY = 86400000;
 const MILE = 1609.344;
-// Fitness States switched from the VDOT blend to HawksPredict-Lite on this date.
+// Fitness States switched from the race VO2max blend to HawksPredict-Lite on this date.
 const LITE_SINCE = '2026-10-22';
 
 export const EVENTS = [
@@ -55,25 +55,25 @@ export const vo2At = (v) => -4.6 + 0.182258 * v + 0.000104 * v * v;
 // Fraction of VO2max sustainable for t minutes.
 const pctAt = (t) => 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t);
 
-export function vdotOf(meters, sec) {
+export function vo2rOf(meters, sec) {
   if (!(meters > 0 && sec > 0)) return null;
   const t = sec / 60;
   return vo2At(meters / t) / pctAt(t);
 }
 
-// Race time (s) for a distance at a given VDOT. f(t) falls as t grows.
-export function timeFor(vdot, meters) {
+// Race time (s) for a distance at a given race VO2max. f(t) falls as t grows.
+export function timeFor(vo2r, meters) {
   let lo = meters / 1000, hi = meters / 40; // minutes
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
-    if (vo2At(meters / mid) / pctAt(mid) > vdot) lo = mid; else hi = mid;
+    if (vo2At(meters / mid) / pctAt(mid) > vo2r) lo = mid; else hi = mid;
   }
   return ((lo + hi) / 2) * 60;
 }
 
-// Seconds per mile when running at `pct` of VDOT.
-function paceAtPct(vdot, pct) {
-  const a = 0.000104, b = 0.182258, c = -(4.6 + pct * vdot);
+// Seconds per mile when running at `pct` of race VO2max.
+function paceAtPct(vo2r, pct) {
+  const a = 0.000104, b = 0.182258, c = -(4.6 + pct * vo2r);
   const v = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
   return (MILE / v) * 60;
 }
@@ -139,7 +139,7 @@ async function loadInputs(db, personId, today) {
       `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps, w.name, w.distance_mi, w.elev_gain_ft, w.surface, w.course, w.temp_f, w.dew_point_f FROM best_efforts b
        LEFT JOIN workouts w ON w.person_id = b.person_id AND w.strava_id = 'intervals:' || b.activity_id WHERE b.person_id = ?`
     ).bind(personId).all(),
-    db.prepare('SELECT date, vo2max, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
+    db.prepare('SELECT date, vo2max, resting_hr, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
     db.prepare('SELECT cs, d_prime, r2, updated_at FROM pace_models WHERE person_id = ?').bind(personId).first(),
   ]);
   return {
@@ -314,6 +314,11 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
 
   // Training: heart rate on steady runs. Needs a real observed max HR.
   const hrEst = [];
+  // Resting HR (median of the last 4 weeks of watch readings) lets the estimate use
+  // heart-rate reserve: %HRR matches %VO2 reserve closely (Swain 1997), so it is
+  // steadier than %HRmax, whose intercept varies a lot between runners.
+  const rhrs = wellness.filter((r) => r.resting_hr && ageDays(r.date, today) <= 28).map((r) => r.resting_hr).sort((a, b) => a - b);
+  const rhr = rhrs.length >= 5 ? rhrs[Math.floor(rhrs.length / 2)] : null;
   if (hrMax) {
     for (const w of workouts) {
       if (!w.avg_hr || !w.distance_mi || !w.moving_sec || w.distance_mi < 2.5 || w.moving_sec < 1200) continue;
@@ -324,12 +329,16 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       if (age > 56) continue;
       const pHr = w.avg_hr / hrMax;
       if (pHr < 0.65 || pHr > 0.93) continue;
-      const pVo2 = (pHr - 0.37) / 0.64;
+      const useHrr = rhr && rhr >= 35 && rhr < hrMax - 60;
+      const pHrr = useHrr ? (w.avg_hr - rhr) / (hrMax - rhr) : null;
+      // VO2 at the run's speed = rest (3.5) + %HRR x (VO2max - 3.5), solved for VO2max below.
+      const pVo2 = useHrr ? pHrr : (pHr - 0.37) / 0.64;
+      if (useHrr && pHrr < 0.4) continue;
       // Heat and hills push heart rate up at a given pace: read the run at
       // the pace it was worth on flat ground in cool weather.
       const worth = (1 + heatCost(w.temp_f, w.dew_point_f)) * (1 + (w.surface === 'track' ? 0 : hillCost(w.elev_gain_ft, w.distance_mi)));
       const v = ((w.distance_mi * MILE) / (w.moving_sec / 60)) * worth;
-      hrEst.push({ est: vo2At(v) / pVo2, age, date: w.date });
+      hrEst.push({ est: useHrr ? 3.5 + (vo2At(v) - 3.5) / pVo2 : vo2At(v) / pVo2, age, date: w.date });
     }
   }
   if (hrEst.length >= 4) {
@@ -338,7 +347,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const all = hrEst.map((x) => x.est).sort((a, b) => a - b);
     const med = all[Math.floor(all.length / 2)];
     const newest = hrEst.reduce((a, b) => (a.date > b.date ? a : b));
-    sources.push({ kind: 'hr', max: false, vdot: med, age: newest.age, date: newest.date, quality: 0.35, label: `Heart rate on ${hrEst.length} steady runs (last 8 weeks, adjusted for heat and hills)` });
+    sources.push({ kind: 'hr', max: false, vo2r: med, age: newest.age, date: newest.date, quality: 0.35, label: `Heart rate on ${hrEst.length} steady runs (last 8 weeks, adjusted for heat and hills)` });
   }
 
   // Garmin's VO2max (heart rate vs speed on steady runs, Firstbeat) tends to
@@ -352,24 +361,24 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     const gap = (a, b) => Math.abs(Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / DAY;
     const ratios = sources.filter((x) => x.date && x.m >= 1500 && (x.kind === 'race' || x.kind === 'pr')).map((x) => {
       const near = garmin.reduce((b, r) => (gap(r.date, x.date) < gap(b.date, x.date) ? r : b), garmin[0]);
-      return gap(near.date, x.date) <= 14 ? vdotOf(x.m, x.s) / near.vo2max : null;
+      return gap(near.date, x.date) <= 14 ? vo2rOf(x.m, x.s) / near.vo2max : null;
     }).filter(Boolean).sort((a, b) => a - b);
     garminRatio = ratios.length ? ratios[Math.floor(ratios.length / 2)] : null;
     const age = ageDays(latestG.date, today);
     if (age <= 45) {
       sources.push({
-        kind: 'garmin', max: false, vdot: latestG.vo2max * (garminRatio || 0.9), age, date: latestG.date, quality: garminRatio ? 0.6 : 0.25,
-        label: `Garmin VO2max ${round1(latestG.vo2max)}${garminRatio ? `, scaled to your races (x${garminRatio.toFixed(2)})` : ' (not yet matched to a race)'}`,
+        kind: 'watch', max: false, vo2r: latestG.vo2max * (garminRatio || 0.9), age, date: latestG.date, quality: garminRatio ? 0.6 : 0.25,
+        label: `Watch VO2max ${round1(latestG.vo2max)}${garminRatio ? `, scaled to your races (x${garminRatio.toFixed(2)})` : ' (not yet matched to a race)'}`,
       });
     }
   }
 
   for (const s of sources) {
-    if (s.vdot === undefined) s.vdot = s.m >= 1500 ? vdotOf(s.m, s.s) : null;
+    if (s.vo2r === undefined) s.vo2r = s.m >= 1500 ? vo2rOf(s.m, s.s) : null;
     s.weight = s.quality * recency(s.age, s.max ? 75 : 30);
     // Fitness fades a little each month after the effort, and old results
     // are less certain anyway.
-    if (s.vdot) s.eff = s.vdot * (1 - clamp((s.age - 28) * 0.0004, 0, 0.06));
+    if (s.vo2r) s.eff = s.vo2r * (1 - clamp((s.age - 28) * 0.0004, 0, 0.06));
   }
 
   // A recent race outranks older results and the self-entered 5K: older
@@ -386,7 +395,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     return w > 0 ? { v: list.reduce((a, s) => a + s.eff * s.weight, 0) / w, w, age: list.reduce((a, s) => a + s.age * s.weight, 0) / w } : null;
   };
   // Races show what you can do; a much slower "race" was a hilly course, a
-  // bad day or a tempo effort. Drop results more than 3 VDOT points under
+  // bad day or a tempo effort. Drop results more than 3 race VO2max points under
   // the best recent race (last 120 days).
   const recentBest = Math.max(...sources.filter((x) => x.max && x.eff && x.age <= 120 && x.quality >= 0.9).map((x) => x.eff), 0);
   for (const x of sources) if (x.max && x.eff && recentBest && x.eff < recentBest - 3) x.weight = 0;
@@ -414,9 +423,9 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       if (!by[e.key]) { by = null; break; }
     }
     if (by) {
-      // Race fitness (VDOT) for the aerobic zones: the model's own 1600, 3200 and 5K read.
-      const v = ['1600', '3200', '5K'].map((k) => vdotOf(EVENTS.find((e) => e.key === k).m, by[k].sec));
-      lite = { by, vdot: v.reduce((a, b) => a + b, 0) / v.length };
+      // Race fitness (race VO2max) for the aerobic zones: the model's own 1600, 3200 and 5K read.
+      const v = ['1600', '3200', '5K'].map((k) => vo2rOf(EVENTS.find((e) => e.key === k).m, by[k].sec));
+      lite = { by, vo2r: v.reduce((a, b) => a + b, 0) / v.length };
       // The results that set the estimate count fully; the rest are context.
       const at5k = (s) => s.s * Math.pow(5000 / s.m, 1.06);
       const best = Math.min(...liteIn.map(at5k));
@@ -431,35 +440,35 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
   const mpw = round1(cur.miles / 4);
   const mpwPrev = round1(prev.miles / 4);
 
-  let vdot = null;
+  let vo2r = null;
   let basis = 'none';
   if (lite) {
-    vdot = lite.vdot;
+    vo2r = lite.vo2r;
     basis = 'hawkspredict';
   } else if (M) {
-    vdot = M.v;
+    vo2r = M.v;
     basis = 'races';
     if (S) {
       // The older the races, the more training is allowed to move the number.
       const pull = clamp((M.age - 45) / 150, 0, 0.6);
-      vdot += (S.v - vdot) * (S.v > vdot ? pull : pull * 0.5);
+      vo2r += (S.v - vo2r) * (S.v > vo2r ? pull : pull * 0.5);
       if (pull > 0.05) basis = 'races+training';
     }
   } else if (S) {
     // Submax only: no race to anchor on, so it's an estimate of an estimate.
-    vdot = S.v;
+    vo2r = S.v;
     basis = 'training';
   }
 
-  if (!vdot) {
+  if (!vo2r) {
     return {
-      as_of: today, basis, vdot: null, vo2max: latestG ? round1(latestG.vo2max) : null, vo2max_source: latestG ? 'Garmin' : null,
+      as_of: today, basis, vo2r: null, vo2max: latestG ? round1(latestG.vo2max) : null, vo2max_source: latestG ? 'watch' : null,
       confidence: 'none', mpw, mpw_prev: mpwPrev, fitness_score: fitnessScore(workouts, wellness, today), pr_candidates: prCandidates,
       longest_28d: round1(cur.longest), estimates: [], zones: [], cs: null, speed_index: null,
       sources: [], note: 'Add a PR or connect your watch so Hawks can estimate your fitness.',
     };
   }
-  vdot = clamp(vdot, 20, 85);
+  vo2r = clamp(vo2r, 20, 85);
 
   // 3a. Speed/endurance index: the athlete's own exponent between two max
   // efforts a reasonable distance apart vs the exponent Daniels implies.
@@ -472,8 +481,8 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       if (Math.max(a.m, b.m) / Math.min(a.m, b.m) < 1.9 || Math.abs(a.age - b.age) > 200) continue;
       const [lo, hi] = a.m < b.m ? [a, b] : [b, a];
       const kAth = Math.log(hi.s / lo.s) / Math.log(hi.m / lo.m);
-      const loT = lo.m >= 1500 ? timeFor(vdot, lo.m) : shortFromMile(timeFor(vdot, 1600), lo.m);
-      const kDan = Math.log(timeFor(vdot, hi.m) / loT) / Math.log(hi.m / lo.m);
+      const loT = lo.m >= 1500 ? timeFor(vo2r, lo.m) : shortFromMile(timeFor(vo2r, 1600), lo.m);
+      const kDan = Math.log(timeFor(vo2r, hi.m) / loT) / Math.log(hi.m / lo.m);
       speedIndex = clamp(kAth - kDan, -0.06, 0.06);
       break;
     }
@@ -507,9 +516,9 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
   };
 
   const est = {};
-  const mileT = timeFor(vdot, 1600) * Math.pow(1600 / 5000, speedIndex);
+  const mileT = timeFor(vo2r, 1600) * Math.pow(1600 / 5000, speedIndex);
   for (const e of EVENTS) {
-    let t = lite ? lite.by[e.key].sec : e.m >= 1500 ? timeFor(vdot, e.m) * Math.pow(e.m / 5000, speedIndex) : shortFromMile(mileT, e.m);
+    let t = lite ? lite.by[e.key].sec : e.m >= 1500 ? timeFor(vo2r, e.m) * Math.pow(e.m / 5000, speedIndex) : shortFromMile(mileT, e.m);
     if (!lite && cs && e.m >= 1500 && e.m <= 5000) t = 0.7 * t + 0.3 * ((e.m - cs.dPrime) / cs.speed);
     // A recent race or PR at this exact distance is the best evidence there
     // is; the model is pulled toward it (strongly for 400/800, where the
@@ -534,16 +543,16 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     { key: 'vc2.5', label: '2.5 mi at Van Cortlandt', meters: 2.5 * MILE, sec: Math.round(vc5 * Math.pow((2.5 * MILE) / 5000, 1.06) * 10) / 10 },
   ].map((c) => ({ ...c, time: fmtTime(c.sec), pace_mi: fmtPace((c.sec / c.meters) * MILE) }));
 
-  // Zones: race paces from the estimates, aerobic zones from VDOT (Daniels'
+  // Zones: race paces from the estimates, aerobic zones from race VO2max (Daniels'
   // percentages: easy 62-70%, steady 81%, threshold 88%).
   // Training zones use fitness, not race-readiness: no mileage penalty.
   const perMile = (key) => (est[key].raw / est[key].m) * MILE;
   const zones = [
-    { key: 'recovery', label: 'Recovery', sec: [paceAtPct(vdot, 0.62) + 25, paceAtPct(vdot, 0.57) + 40] },
-    { key: 'easy', label: 'Easy', sec: [paceAtPct(vdot, 0.7), paceAtPct(vdot, 0.62)] },
-    { key: 'steady', label: 'Steady', sec: paceAtPct(vdot, 0.81) },
-    { key: 'tempo', label: 'Tempo (half pace)', sec: Math.min(perMile('half'), paceAtPct(vdot, 0.85)) },
-    { key: 'threshold', label: 'Threshold', sec: paceAtPct(vdot, 0.88) },
+    { key: 'recovery', label: 'Recovery', sec: [paceAtPct(vo2r, 0.62) + 25, paceAtPct(vo2r, 0.57) + 40] },
+    { key: 'easy', label: 'Easy', sec: [paceAtPct(vo2r, 0.7), paceAtPct(vo2r, 0.62)] },
+    { key: 'steady', label: 'Steady', sec: paceAtPct(vo2r, 0.81) },
+    { key: 'tempo', label: 'Tempo (half pace)', sec: Math.min(perMile('half'), paceAtPct(vo2r, 0.85)) },
+    { key: 'threshold', label: 'Threshold', sec: paceAtPct(vo2r, 0.88) },
     ...(cs ? [{ key: 'cv', label: 'Critical velocity', sec: MILE / cs.speed }] : []),
     { key: '10k', label: '10K pace', sec: perMile('10K') },
     { key: '5k', label: '5K pace', sec: perMile('5K') },
@@ -559,15 +568,15 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
 
   const real = maxSrc.filter((s) => s.kind !== 'manual');
   const overall = real.some((s) => s.age <= 90) ? 'high' : maxSrc.some((s) => s.age <= 365) ? 'medium' : 'low';
-  // VO2max: Garmin's own number when the watch sends it; else the same kind
+  // VO2max: the watch's own number (Garmin or COROS, via intervals.icu) when it sends it; else the same kind
   // of heart-rate estimate Garmin makes; else race fitness.
   const hrV = sources.find((x) => x.kind === 'hr');
-  const vo2 = latestG && ageDays(latestG.date, today) <= 45 ? { v: latestG.vo2max, src: 'Garmin' }
-    : hrV ? { v: hrV.vdot, src: 'heart rate on steady runs' } : { v: vdot, src: 'your races' };
+  const vo2 = latestG && ageDays(latestG.date, today) <= 45 ? { v: latestG.vo2max, src: 'watch' }
+    : hrV ? { v: hrV.vo2r, src: 'heart rate on steady runs' } : { v: vo2r, src: 'your races' };
   return {
     as_of: today,
     basis,
-    vdot: round1(vdot),
+    vo2r: round1(vo2r),
     vo2max: round1(vo2.v),
     vo2max_source: vo2.src,
     garmin_ratio: garminRatio ? Math.round(garminRatio * 100) / 100 : null,
@@ -595,7 +604,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       .filter((s) => s.used && s.weight > 0.02)
       .sort((a, b) => b.weight - a.weight)
       .slice(0, 6)
-      .map((s) => ({ kind: s.kind, label: s.label, date: s.date, vdot: s.vdot ? round1(s.vdot) : null, weight: Math.round(s.weight * 100) / 100 })),
+      .map((s) => ({ kind: s.kind, label: s.label, date: s.date, vo2r: s.vo2r ? round1(s.vo2r) : null, weight: Math.round(s.weight * 100) / 100 })),
   };
 }
 
@@ -672,21 +681,21 @@ export async function recomputeFitness(db, personId, today) {
   const fiveK = data.estimates.find((e) => e.event === '5K');
   // Trend: the 5K estimate four weeks ago, from history.
   const old = await db.prepare(
-    'SELECT date, five_k_sec, vdot FROM fitness_history WHERE person_id = ? AND date <= ? ORDER BY date DESC LIMIT 1'
+    'SELECT date, five_k_sec, vdot AS vo2r FROM fitness_history WHERE person_id = ? AND date <= ? ORDER BY date DESC LIMIT 1'
   ).bind(personId, addDays(today, -28)).first();
   // History before the switch to HawksPredict-Lite came from the old method: no trend across the cutover.
   if (old && fiveK && old.date >= LITE_SINCE) {
-    data.trend = { five_k_sec_change: Math.round(fiveK.sec - old.five_k_sec), vdot_change: round1(data.vdot - old.vdot), since: addDays(today, -28) };
+    data.trend = { five_k_sec_change: Math.round(fiveK.sec - old.five_k_sec), vo2r_change: round1(data.vo2r - old.vo2r), since: addDays(today, -28) };
   }
   await db.batch([
     db.prepare(
       `INSERT INTO fitness_states (person_id, computed_at, data) VALUES (?, ?, ?)
        ON CONFLICT(person_id) DO UPDATE SET computed_at = excluded.computed_at, data = excluded.data`
     ).bind(personId, Date.now(), JSON.stringify(data)),
-    ...(data.vdot ? [db.prepare(
+    ...(data.vo2r ? [db.prepare(
       `INSERT INTO fitness_history (person_id, date, vdot, five_k_sec, mpw) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(person_id, date) DO UPDATE SET vdot = excluded.vdot, five_k_sec = excluded.five_k_sec, mpw = excluded.mpw`
-    ).bind(personId, today, data.vdot, Math.round(fiveK.sec), data.mpw)] : []),
+    ).bind(personId, today, data.vo2r, Math.round(fiveK.sec), data.mpw)] : []),
   ]);
   return data;
 }
@@ -698,7 +707,7 @@ export async function getFitness(db, personId, today, { fresh = false } = {}) {
     if (row && Date.now() - row.computed_at < 6 * 3600 * 1000) {
       try {
         const data = JSON.parse(row.data);
-        if (data.as_of === today) return data;
+        if (data.as_of === today && 'vo2r' in data) return data;
       } catch { /* recompute */ }
     }
   }
@@ -707,7 +716,7 @@ export async function getFitness(db, personId, today, { fresh = false } = {}) {
 
 export async function fitnessHistory(db, personId, days = 180) {
   const rows = await db.prepare(
-    "SELECT date, vdot, five_k_sec, mpw FROM fitness_history WHERE person_id = ? AND date >= date('now', ?) ORDER BY date"
+    "SELECT date, vdot AS vo2r, five_k_sec, mpw FROM fitness_history WHERE person_id = ? AND date >= date('now', ?) ORDER BY date"
   ).bind(personId, `-${days} days`).all();
   return rows.results;
 }

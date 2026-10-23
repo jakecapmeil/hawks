@@ -48,7 +48,7 @@ CATEGORY — pick one per activity:
 - shakeout: short (2-3 mi) easy run the day before or the morning of a race
 - crosstrain: bike, swim, elliptical, walk, hike, lift — anything that isn't a run
 
-DIFFICULTY (effort, 1-10) is judged against the runner's own Fitness States paces (HawksPredict-Lite), then checked with heart rate. Pace is turned into a share of the runner's VDOT (Daniels): under 62% = 1-2, easy 62-70% = 3, 70-76% = 4, steady 76-82% = 5, marathon-to-tempo 82-86% = 6, threshold 86-90% = 7, 10K pace 90-94% = 8, 5K pace 94-99% = 9, faster = 10. Heart rate as a share of max HR (highest seen in their logged runs, 200 until known): under 65% = 2, 65-72% = 3, 72-78% = 4, 78-83% = 5, 83-87% = 6, 87-90% = 7, 90-93% = 8, 93-96% = 9, over 96% = 10. The two are averaged (for rep workouts pace counts 65%, since the heart rate lags short reps). Workouts are judged on their work reps only, not the warm-up or cool-down; reps of 500 m or less top out at 9. Hills, heat and Van Cortlandt are credited back to a flat course first, so a slow hilly tempo still grades as a tempo. With no pace fitness it falls back on heart rate alone (plus up to +3 for heat and hills), and with neither on the category. Plan matching uses the pace/HR effort without the weather credit, so an easy day run easy in the heat still counts as easy.
+DIFFICULTY (effort, 1-10) is judged against the runner's own Fitness States paces (HawksPredict-Lite), then checked with heart rate. Pace is turned into a share of the runner's race VO2max (Daniels): under 62% = 1-2, easy 62-70% = 3, 70-76% = 4, steady 76-82% = 5, marathon-to-tempo 82-86% = 6, threshold 86-90% = 7, 10K pace 90-94% = 8, 5K pace 94-99% = 9, faster = 10. Heart rate as a share of max HR (highest seen in their logged runs, 200 until known): under 65% = 2, 65-72% = 3, 72-78% = 4, 78-83% = 5, 83-87% = 6, 87-90% = 7, 90-93% = 8, 93-96% = 9, over 96% = 10. The two are averaged (for rep workouts pace counts 65%, since the heart rate lags short reps). Workouts are judged on their work reps only, not the warm-up or cool-down; reps of 500 m or less top out at 9. Hills, heat and Van Cortlandt are credited back to a flat course first, so a slow hilly tempo still grades as a tempo. With no pace fitness it falls back on heart rate alone (plus up to +3 for heat and hills), and with neither on the category. Plan matching uses the pace/HR effort without the weather credit, so an easy day run easy in the heat still counts as easy.
 
 LOAD = moving minutes x intensity (difficulty 1-3 = 1, 4-5 = 1.5, 6 = 2, 7 = 2.5, 8 = 3, 9-10 = 4). A 45-minute easy run is about 45-70; a hard workout is about 120-200.
 
@@ -125,9 +125,9 @@ export function plannedFor(plan, dateKey, meets) {
   return { type: cell.type, miles, detail: cell.miles, shoes: cell.shoes, notes: cell.notes, week: plan.weeks[week]?.name };
 }
 
-// Race fitness (VDOT) the paces come from; null before there is any.
-export async function vdotFor(db, personId) {
-  try { return (await getFitness(db, personId, todayInTz()))?.vdot || null; } catch { return null; }
+// Race fitness (race VO2max) the paces come from; null before there is any.
+export async function vo2rFor(db, personId) {
+  try { return (await getFitness(db, personId, todayInTz()))?.vo2r || null; } catch { return null; }
 }
 
 async function maxHrFor(db, personId) {
@@ -300,11 +300,11 @@ export async function personForToken(db, token) {
 
 // What Hawky needs from Fitness States, without the bookkeeping.
 export function compactFitness(f) {
-  if (!f || !f.vdot) return { note: f?.note || 'No fitness data yet', weekly_miles_last_4_weeks: f?.mpw ?? null };
+  if (!f || !f.vo2r) return { note: f?.note || 'No fitness data yet', weekly_miles_last_4_weeks: f?.mpw ?? null };
   return {
     vo2max: f.vo2max,
     vo2max_source: f.vo2max_source,
-    race_fitness_vdot: f.vdot,
+    race_vo2max: f.vo2r,
     fitness_score: f.fitness_score ? { fitness: f.fitness_score.fitness, fatigue: f.fitness_score.fatigue, form: f.fitness_score.form, change_4wk: f.fitness_score.change_4wk } : null,
     confidence: f.confidence,
     based_on: f.sources.map((s) => s.label),
@@ -399,7 +399,7 @@ export async function logWorkouts(db, person, list) {
   const knownMax = await maxHrFor(db, person.id);
   const maxHr = knownMax === DEFAULT_MAX_HR ? (batchMax >= 160 ? batchMax : DEFAULT_MAX_HR) : Math.max(knownMax, batchMax);
 
-  const gctx = { maxHr, vdot: await vdotFor(db, person.id) };
+  const gctx = { maxHr, vo2r: await vo2rFor(db, person.id) };
   const dates = clean.map((w) => w.date).sort();
   const meets = await meetDates(db, dates[0], addDays(dates[dates.length - 1], 6));
   const plan = planFor(person);
@@ -459,7 +459,7 @@ export async function backfillConditions(db, personId, limit = 150) {
   if (!rows.length) return 0;
   const wx = await weatherFor(rows, todayInTz());
   if (!wx.some(Boolean)) return 0;
-  const gctx = { maxHr: await maxHrFor(db, personId), vdot: await vdotFor(db, personId) };
+  const gctx = { maxHr: await maxHrFor(db, personId), vo2r: await vo2rFor(db, personId) };
   const stmts = rows.map((w, i) => {
     if (!wx[i]) return db.prepare('UPDATE workouts SET weather_checked = 2 WHERE person_id = ? AND strava_id = ?').bind(personId, w.strava_id);
     Object.assign(w, wx[i]);
