@@ -93,3 +93,15 @@ Searched: Kaggle (22 queries via the API), Hugging Face, Figshare, Dryad, OSF, p
 | Norwegian federation youth data (135k season bests, 31k athletes, 2011-2025; ScienceDirect S1440244026002835) | NOT AVAILABLE | Described in a paper; no public download found. Worth an email to the authors. |
 | Strava-linked marathon studies (Dublin/London/NYC, 1.86M activities, 31k runners) | NOT AVAILABLE | Authors cannot redistribute. |
 | parkrun | NOT AVAILABLE | Scrapers only; terms forbid bulk collection. |
+
+### Leads checked while looking for training-to-performance data (2026-10-23)
+| Dataset | Status | Notes |
+|---|---|---|
+| Italian season bests, male runners born 1988 (Stival et al., arXiv 2206.12716) | NOT AVAILABLE | 369 runners, 800/1500/5000 m season bests 2006-2019 from fidal.it rankings (2,411 of 15,498 cells observed): a true age-progression set across three events. The paper says "write to the authors"; no repository. Worth an email. |
+| Nature Communications 2020, Emig and Peltonen, "Human running performance from real-world big data" | NOT VERIFIED | Wearable-tracker data relating individual 5K-marathon bests to training; the page redirects to a login from the command line, so the data statement was not read. Open it in a browser and check the data availability. |
+| KU Leuven (Ruiz-Mayo et al. 2016): six weeks of workouts before Boston and London 2015 | NOT AVAILABLE | Multi-athlete training + marathon; no download found. |
+| runningwithrock Reddit race reports (peak weekly mileage, target and finish, PR flag) | NOT CHECKED | Marathon reports scraped from Reddit; self-reported. |
+| Dutch competitive-runner training logs (Kaggle shashwatwork / B2FIND "Injury prediction in competitive runners", 74 runners, 2012-2019) | NOT USED | Logs only, no race times. The only middle- and long-distance team log found; useful as the prior for a training-load generator. |
+| Mantzios et al. 5K/marathon temperature data (148 5K, 66 marathon results) | NOT CHECKED | Small. |
+| World Athletics race-analysis PDFs per heat (temperature, humidity, splits) | NOT USED | Could be parsed into a championship weather set; terms not checked. |
+| Strava running-races set (olegoaer) | USED (exp16) | 116 athletes' run histories: the training-to-effort and heart-rate checks above. CC BY-NC-SA 4.0, so derived numbers only. |

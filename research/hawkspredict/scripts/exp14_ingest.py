@@ -21,7 +21,7 @@ def robust_keep(df, by):
 
 # ---- Ontario high school ----
 d = pd.read_csv(f'{DS}/mendeley_youth/speed.csv', encoding='latin-1',
-                usecols=['Competition', 'Year', 'Day', 'Temp_Celsius', 'Gender', 'Event', 'Category', 'Time_Sec', 'RunnerID'])
+                usecols=['Competition', 'Year', 'Day', 'Temp_Celsius', 'Humidity', 'Wind', 'Gender', 'Event', 'Category', 'Time_Sec', 'RunnerID'])
 d = d.dropna(subset=['Time_Sec', 'RunnerID', 'Day'])
 n0 = len(d)
 bad = set(d.groupby('RunnerID').Gender.nunique().loc[lambda s: s > 1].index)          # RunnerID is keyed by name: two people share an ID
@@ -33,7 +33,7 @@ base = pd.to_datetime(d.Year.astype(int).astype(str) + '-05-10') + pd.to_timedel
 o = pd.DataFrame({'athlete_id': 10_000_000 + d.RunnerID.astype(int), 'male': d.male, 'date': base, 'surf': 'track', 'm': d.m, 'sec': d.sec,
                   'altitude': np.nan, 'temperature': d.Temp_Celsius * 9 / 5 + 32, 'elev_km': np.nan,
                   'meet_id': 10_000 + d.Year.astype(int) * 2 + (d.Competition == 'OFSAA').astype(int), 'series_id': np.nan,
-                  'event_name': d.Event.astype(str) + 'm', 'category': d.Category})
+                  'event_name': d.Event.astype(str) + 'm', 'category': d.Category, 'humidity': pd.to_numeric(d.Humidity, errors='coerce'), 'wind': pd.to_numeric(d.Wind, errors='coerce')})
 o = o.sort_values(['athlete_id', 'date', 'm']).drop_duplicates(['athlete_id', 'date', 'm']).reset_index(drop=True)
 ids = np.sort(o.athlete_id.unique()); rng = np.random.default_rng(SEED)
 hold = set(rng.choice(ids, len(ids) // 2, replace=False)); o['holdout'] = o.athlete_id.isin(hold)

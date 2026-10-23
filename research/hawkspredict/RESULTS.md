@@ -495,3 +495,35 @@ More synthetic data is steadily worse. A model trained on synthetic athletes alo
 
 ### Data-quality note
 In `results4.pkl` 7,173 of 27,343 NRCD athlete ids carry both M and F labels across their rows (about half the rows). Not investigated; they may be id collisions or races entered in the other sex's event. The models use the row's own label so nothing breaks, but athlete-level analyses should not assume one sex per id.
+
+## exp16-18: training vs PRs, event-to-event relationships, weather and age (2026-10-23)
+Scripts: `exp16_train_effort.py`, `fitrec_hr_check.py` (rerun on the Strava set), `exp17_event_mvn.py`, `exp17_equiv_tables.py`, `exp18_conditions_age.py`.
+
+### Training vs "what the PR says": 1,082 hard 5K/10K efforts from 148 runners
+Data: Strava running-races set (116 athletes, 42k runs) plus the FitRec runs table. A hard effort = a 5K or 10K run 8% or more faster than the runner's median of their previous 20 runs. Baseline = their best earlier effort (3-22 km, 14-180 days back) Riegel-scaled to the distance. r = ln(actual / baseline); median gap to the baseline 79 days. These are hard runs, not certified races, and the baseline can itself be a hard training run.
+- Taken at face value an earlier best overstates the runner by a median 5.5% (r median +0.055, sd 0.116). Predicting with it directly is wrong by 10.9% on average; a constant offset brings that to 9.0%.
+- Association of r (positive = slower than the earlier best implies) with the 8 weeks before: **efforts in the last 4 weeks vs the earlier best +0.34 (0.27 to 0.41)**; days since the earlier best +0.18 (0.13 to 0.24); volume change since the earlier best -0.13 (-0.19 to -0.06; more volume than at the time of the PR means faster than it implies); longest run +0.11; hard-run share +0.10; days since a hard run -0.08; weekly km +0.06 (CI includes 0); change in hard share -0.01.
+- Leave-runners-out error: all training features 7.62% (vs 9.04% constant offset; -1.42, CI -2.19 to -0.78); **without the last-4-weeks evidence only 8.77% (-0.27, CI -0.65 to +0.11)**. Volume, frequency, long-run and intensity features add almost nothing once recent running evidence is in. What carries information about current form is recent hard running, then how old the PR is. Consistent with the site's design (every run searched for races) and with using training volume mainly for long events: in the BMClab marathon data (exp12) volume and pace features add -1.0 point.
+- Heart-rate check repeated on the Strava runners (122 targets, 58 runners; maximum HR is not in that file, so it is 1.1 x the athlete's 99th percentile of run-average HR): the heart-rate trend correction makes things worse at every strength (+0.48 points at 0.25, CI +0.20 to +0.73), slope -0.20 (CI -0.49 to +0.09). With FitRec's 88 efforts this is two independent datasets without a benefit.
+
+### Event-to-event relationships
+A single multivariate normal over ln(time) at 13 events, fitted by EM on athletes with any subset of events (World Athletics + NRCD + Ontario train; two sexes mixed, sex inferred from the times), conditioned on whatever the athlete has, **lost to HawksPredict-Short's pair lines**: 3.04% vs 2.34% on held-out World Athletics / NRCD athletes, 3.48% vs 2.55% on Ontario holdout same-year (400 m 5.4% vs 2.7%: the 400 behaves differently for sprinters and distance runners, which one Gaussian cannot express). It was slightly better on 100 m for elite athletes (1.53% vs 1.81%) and equal for 800-3000 m on Ontario. Not adopted; a mixture of athlete types is the next thing to try.
+The pair lines (sex averaged, exact PRs, 80% range) give these equivalents:
+| 400 m | 600 m | | 800 m | mile | | 800 m | 1500 m |
+|---|---|---|---|---|---|---|---|
+| 52.0 | 1:27.4 (1:22.6-1:32.5) | | 1:52 | 4:12.8 (3:57.3-4:29.3) | | 1:52 | 3:51.5 (3:40.5-4:03.0) |
+| 56.0 | 1:33.9 (1:28.8-1:39.4) | | 2:02 | 4:33.0 (4:16.3-4:50.8) | | 2:02 | 4:11.7 (3:59.8-4:24.2) |
+| 1:00.0 | 1:40.5 (1:35.0-1:46.3) | | 2:12 | 4:53.0 (4:35.1-5:12.1) | | 2:12 | 4:31.9 (4:19.0-4:45.4) |
+| 1:04.0 | 1:47.0 (1:41.2-1:53.3) | | 2:22 | 5:12.9 (4:53.7-5:33.3) | | 2:22 | 4:52.0 (4:38.2-5:06.5) |
+| 1:08.0 | 1:53.6 (1:47.3-2:00.2) | | 2:36 | 5:40.5 (5:19.6-6:02.7) | | 2:36 | 5:20.2 (5:05.0-5:36.1) |
+| 1:14.0 | 2:03.4 (1:56.6-2:10.5) | | 2:52 | 6:11.7 (5:49.0-6:35.9) | | 2:52 | 5:52.3 (5:35.6-6:09.8) |
+| 1:20.0 | 2:13.1 (2:05.8-2:20.9) | | 3:10 | 6:46.5 (6:21.6-7:13.0) | | 3:10 | 6:28.4 (6:10.0-6:47.6) |
+(`exp17_equiv_tables.py` prints more pairs.) A second known event narrows the range a lot for the 600 (e.g. 400 62 s and 800 138 s give 100.1 s with the pair lines).
+
+### Weather, altitude, wind and age (residuals of models that never saw them)
+- **Heat, Ontario holdout (spring track, 2,757 races, temperature + dew point 84-143 F):** residual vs temperature + dew point shows no effect for 400-1500 m (slope per +10 F above 100: 400-800 m -0.03%, 1500 m +0.07%, CIs about +-0.4), and **+0.37% per 10 F for 3000 m (CI +0.07 to +0.81)**. The app's Hadley chart gives about 0.5% per 10 F near 115 F for continuous running and half that for reps up to a mile: consistent with the 3000 m and with the shorter events.
+- **Heat, NRCD (Lite out-of-fold residual by air temperature, no dew point):** cross country +0.6% (<40 F), -0.6% (40-50), +0.2% (50-60), +1.9% (60-70), +2.2% (70-80), +3.9% (80+). Roughly 0.2% per degree Fahrenheit above 60, in line with the app's chart (sum of temperature and dew point 140 is 3%) and with published estimates (0.3-0.4% per degree C outside 10-17.5 C). Track/road rows are too few and noisy to say anything.
+- **Altitude (NRCD):** no clean pattern (<500 ft +1.1%, 500-1000 +0.1%, 1000-2000 +1.0%, 2000-4000 +1.9%, 4000+ n=13); confounded with course and conference. Not usable as is.
+- **Wind on sprints (Ontario 100/200 m, Short v1.1 residual, tailwind positive):** 100 m -0.52% per +1 m/s (about 6 hundredths; n=371, wind -3.8 to +10.0 m/s), 200 m -0.31% per +1 m/s (about 8 hundredths; n=258). The wind reading is a single value per race, so this is a lower bound on the true effect.
+- **Age, Ontario (grade category and sex):** Lite v1.1 residuals are within +-1% in every cell (Junior boys -1.03%, Senior girls +0.27%, Novice about 0); errors 2.5-3.1% in all. **Age, World Athletics pair-line residuals by age at the mark:** flat within about 0.5 points for 100->200, 200->400, 800->1500, 800->mile; 1500->5000 drifts from -1.3% (19-22) to -0.3% (31+). In these data age adds no precision beyond what the times already say. Grade is a coarse age proxy and the lists are adults, so this does not exclude an age effect in 12-16 year olds, for whom no exact ages exist in any dataset found.
+- **Heart rate:** no benefit in two real datasets (above).
