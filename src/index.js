@@ -5,6 +5,7 @@ import { todayInTz, getCoachContext, compactFitness } from './coach.js';
 import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
 import { pushPlan, planWorkouts } from './planpush.js';
+import { heatCalc, taperCalc, CalcError } from './calculators.js';
 import { racePredictions } from './racepredict.js';
 import { BODY_PARTS } from './body.js';
 import { hawkyState, applyPlanChange, resetPlanDay, changeLevel, healthSummary, PlanError } from './hawky.js';
@@ -1668,6 +1669,12 @@ export default {
     try {
       if (pathname === '/api/state' && request.method === 'GET') {
         return json(await getState(env.DB));
+      }
+
+      if ((pathname === '/api/calc/heat' || pathname === '/api/calc/taper') && request.method === 'GET') {
+        const q = Object.fromEntries([...reqUrl.searchParams.entries()].map(([k, v]) => [k, str(v, 40)]));
+        try { return json(pathname === '/api/calc/heat' ? heatCalc(q) : taperCalc(q)); }
+        catch (err) { if (err instanceof CalcError) return json({ error: err.message }, 400); throw err; }
       }
 
       if (pathname === '/api/plan/export' && request.method === 'GET') {

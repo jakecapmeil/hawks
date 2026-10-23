@@ -2099,6 +2099,38 @@
           <div class="hint" id="predNote" style="margin-top:var(--sp-2);"></div>
         </section>
         <section class="card">
+          <div class="card-title">Race-day calculators</div>
+          <details>
+            <summary><b>Heat and hills</b>: what the weather costs your race</summary>
+            <div class="stack" style="margin-top:var(--sp-3);">
+              <div class="hint">Enter the time you would run on a cool, flat day and the conditions. Uses the temperature + dew point chart behind the rest of Hawks.</div>
+              <div class="cluster">
+                <label class="field"><span>Race</span><select id="calcHeatRace"><option value="1600">Mile / 1600</option><option value="3200">3200</option><option value="5K" selected>5K</option><option value="10K">10K</option><option value="half">Half marathon</option><option value="marathon">Marathon</option></select></label>
+                <label class="field"><span>Cool-day time</span><input type="text" id="calcHeatTime" placeholder="18:30" maxlength="8" inputmode="numeric"></label>
+              </div>
+              <div class="cluster">
+                <label class="field"><span>Temperature °F</span><input type="number" id="calcHeatTemp" value="75" min="-20" max="130"></label>
+                <label class="field"><span>Dew point °F</span><input type="number" id="calcHeatDew" value="60" min="-40" max="90"></label>
+                <label class="field"><span>Climb ft per mile</span><input type="number" id="calcHeatClimb" value="0" min="0" max="400"></label>
+              </div>
+              <div class="cluster"><button type="button" id="calcHeatBtn">Calculate</button></div>
+              <div id="calcHeatOut" class="hint"></div>
+            </div>
+          </details>
+          <details style="margin-top:var(--sp-3);">
+            <summary><b>Taper</b>: miles for the last weeks before a race</summary>
+            <div class="stack" style="margin-top:var(--sp-3);">
+              <div class="cluster">
+                <label class="field"><span>Race</span><select id="calcTaperRace"><option value="1600">Mile / 1600</option><option value="3200">3200</option><option value="5K" selected>5K</option><option value="10K">10K</option><option value="half">Half marathon</option><option value="marathon">Marathon</option></select></label>
+                <label class="field"><span>Peak week (miles)</span><input type="number" id="calcTaperMiles" value="40" min="5" max="150"></label>
+                <label class="field"><span>Longest run (miles, optional)</span><input type="number" id="calcTaperLong" min="3" max="40"></label>
+              </div>
+              <div class="cluster"><button type="button" id="calcTaperBtn">Build taper</button></div>
+              <div id="calcTaperOut" class="stack"></div>
+            </div>
+          </details>
+        </section>
+        <section class="card">
           <div class="card-title">Training paces</div>
           <div class="hint" style="margin:-6px 0 var(--sp-3);">Every workout in Hawks uses these.</div>
           <div class="lib-paces" id="fitZones"></div>
@@ -5156,6 +5188,21 @@ function wireUI(){
     runImport();
   });
   $('icuSyncBtn').addEventListener('click', ()=> runSync());
+  const calc = async (path, params)=>{ try{ const res = await fetch(path + '?' + new URLSearchParams(params), { cache:'no-store' }); return await res.json(); }catch(e){ return { error:'Couldn’t reach Hawks. Check your connection.' }; } };
+  $('calcHeatBtn').addEventListener('click', async ()=>{
+    const out = $('calcHeatOut'); out.textContent = '…';
+    const d = await calc('/api/calc/heat', { race: $('calcHeatRace').value, time: $('calcHeatTime').value, temp_f: $('calcHeatTemp').value, dew_f: $('calcHeatDew').value, climb_ft_per_mile: $('calcHeatClimb').value });
+    out.innerHTML = d.error ? escapeHtml(d.error) : `<b>${escapeHtml(d.expected_time)}</b> expected (${escapeHtml(d.pace_mi)}/mi), ${d.cost_sec >= 0 ? '+' : ''}${d.cost_sec} s vs ${escapeHtml(d.cool_day_time)}. Heat ${d.heat_pct}%${d.hill_pct ? `, hills ${d.hill_pct}%` : ''} (temperature + dew point ${d.temp_plus_dew}). ${escapeHtml(d.note || '')}`;
+  });
+  $('calcTaperBtn').addEventListener('click', async ()=>{
+    const out = $('calcTaperOut'); out.textContent = '…';
+    const d = await calc('/api/calc/taper', { race: $('calcTaperRace').value, weekly_miles: $('calcTaperMiles').value, longest_run: $('calcTaperLong').value });
+    if(d.error){ out.textContent = d.error; return; }
+    out.innerHTML = d.weeks.map(w=> `<div class="fit-row"><span class="ev">${escapeHtml(w.label)}</span><span class="tm">${w.miles} mi</span><span class="pc">${w.share_pct}% of peak</span><span></span></div>`).join('')
+      + (d.last_long_run_miles ? `<div class="hint">Last long run: about ${d.last_long_run_miles} mi.</div>` : '')
+      + '<ul style="margin:var(--sp-2) 0 0 var(--sp-4);">' + d.rules.map(r=> `<li class="hint">${escapeHtml(r)}</li>`).join('') + '</ul>'
+      + `<div class="hint">${escapeHtml(d.evidence)}</div>`;
+  });
   $('icuPlanPreviewBtn').addEventListener('click', async ()=>{
     const msg = $('icuPlanMsg'), box = $('icuPlanPreview'); msg.textContent = 'Building your workouts…'; box.innerHTML = '';
     let d = null;

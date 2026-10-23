@@ -11,7 +11,7 @@ from sklearn.model_selection import GroupKFold
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import boot_ci, mae
 
-S, OUT = sys.argv[1], sys.argv[2]; os.makedirs(OUT, exist_ok=True)
+S, OUT = (sys.argv[1:3] + ['', ''])[:2]          # importable by other scripts (exp21) for features()
 MARA = 42.195
 DATES = {'BOSTON': '2019-04-15', 'LONDON': '2019-04-28', 'BERLIN': '2019-09-29', 'CHICAGO': '2019-10-13', 'NEW YORK': '2019-11-03', 'TOKYO': '2019-03-03'}
 FEATS = ['wk_mean', 'wk_max', 'wk_last6', 'longest', 'long_n', 'long16_n', 'runs_wk', 'weeks_active', 'pace_med', 'pace_p10', 'pace_long', 'best_riegel', 'n_eff', 'best_recent', 'vol_trend']
@@ -35,6 +35,7 @@ def features(days, km, mn):
                 best_recent=float(np.log(riegel[recent].min() * 60)) if recent.any() else np.nan, vol_trend=float(wk[:6].sum() / 6 / max(wk[6:].sum() / 10, 1.0)))
 
 if __name__ == '__main__':
+    os.makedirs(OUT, exist_ok=True)
     d = pd.read_parquet(f'{S}/bmclab_raw/run_ww_2019_d.parquet'); d['datetime'] = pd.to_datetime(d.datetime)
     race_of = {}
     for a, m in d.drop_duplicates('athlete')[['athlete', 'major']].values:

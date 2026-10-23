@@ -560,3 +560,20 @@ Script: `exp20_marathon.py` (features and trees mirrored in `src/marathon.js`, p
 Train on five majors, test on the sixth: Berlin 6.34%, Boston 6.59%, Chicago 7.10%, London 5.65%, New York 6.71%, Tokyo 6.94% (exp12 features: 6.48 / 6.55 / 7.43 / 5.91 / 6.76 / 7.41).
 **Final, 15% of athletes held out and scored once: 6.30% [6.04, 6.54] on 2,127 races** (Riegel from the best 8-25 km day on the same rows 8.55%); 80% interval coverage 78.9%, half-width 9.8%. By weekly volume: under 40 km 6.97% (n=1063), 40-70 km 5.75% (757), 70+ km 5.29% (305). The interval is wide on purpose: single-run training logs cannot say much more than this about a marathon day.
 Limits: no personal bests or races in the training data, so it does not use a runner's PRs; no course, weather or taper; the training population (adult marathoners, 30-70 km a week) is far from a high-school team, so Hawks athletes below that range get the model's least reliable estimates. In the app it appears only in Edit mode, as a low-confidence row.
+
+## exp21: tapering in 13,139 real marathons (2026-10-23)
+Script: `exp21_taper.py`. A model that sees only the 13 weeks of training ending three weeks before the race (BMClab, as exp20; out-of-fold, MAE 6.47%) predicts each finish; the leftover (positive = slower than that model expects) is compared with how deep the last three weeks were (mean km of weeks 0-2 over mean km of weeks 3-8).
+| last 3 weeks vs build | races | median leftover | mean leftover (95% CI) |
+|---|---|---|---|
+| under 40% | 832 | +4.35% | +5.47% (+4.79 to +6.11) |
+| 40-55% | 1,243 | +2.91% | +3.48% (+2.95 to +4.03) |
+| 55-70% | 2,916 | +0.88% | +1.58% (+1.28 to +1.86) |
+| 70-85% | 3,463 | -0.23% | +0.58% (+0.31 to +0.83) |
+| 85-100% | 2,271 | -0.84% | -0.22% (-0.53 to +0.13) |
+| 100-115% | 1,085 | -2.14% | -1.26% (-1.77 to -0.81) |
+| 115%+ | 1,294 | -2.92% | -2.51% (-3.03 to -2.05) |
+By race-week volume alone: under 25% of build +2.43%, 25-40% +0.61%, 40-55% -0.40%, 55-70% -0.93%, 70-90% -1.69%, 90%+ -2.91%.
+**This cannot say that tapering helps or hurts.** The more a runner kept up in the last three weeks, the faster they ran relative to their build, which is what you would see if fitter, healthier runners keep training and those who are hurt or ill cut back (and runners still improving have rising volume). Observational training logs cannot separate that from a taper effect. The calculator therefore follows published controlled studies (two-week taper, 40-60% volume cut, intensity kept; a 2007 meta-analysis, cited from memory and not re-read here) and states this limit in the app. What the data does support: dropping below about 55% of the build for three weeks went with markedly slower marathons, so a taper deeper than the published range is not advisable on this evidence.
+
+### Heat and hills calculator (src/calculators.js)
+Uses the app's Hadley temperature + dew point chart, scaled to what exp18 found: no measurable effect up to 800 m and in the 400-1500 m Ontario races (so 800 m and under cost 0, a mile half), the full continuous-running cost from 3200 m up (Ontario 3000 m +0.37% per 10 F, NRCD cross country about 0.2% per degree F above 60). Example: 85 F and a 65 F dew point costs a 5K 4.5% (18:30 becomes 19:20).
