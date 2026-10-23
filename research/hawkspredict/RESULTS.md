@@ -441,7 +441,7 @@ Both models transfer from college club runners to high-school finalists. Lite be
 | + 66k elite dated marks (weight 1) | 4.217% (+0.040 to +0.054) | 3.620% (+0.197 to +0.301) | 3.690% (+0.040 to +0.056) | 3.894% (+0.287 to +0.422) |
 | + elite (weight 0.3) | 4.182% (+0.007 to +0.018) | 3.559% | 3.648% | 3.873% |
 | + Ontario + elite (0.3) | 4.183% | 3.010% | 3.648% | 2.876% |
-Teen finals help the teen test by 0.5-0.8 points and cost nothing on college runners. Elite top-list marks hurt both: a list of best marks is a truncated, best-effort sample. They are used for HawksPredict-Short only.
+Teen finals help the teen test by 0.5-0.8 points and cost nothing on college runners. Elite top-list marks hurt both: a list of best marks is a truncated, best-effort sample. They were not used anywhere (Short keeps the World Athletics lists it was already fitted on).
 
 ### Retrained models (same recipes as the shipped ones; Ontario train half added to the pool)
 | model | frozen NRCD test | Ontario holdout |
@@ -464,6 +464,17 @@ Leave-one-event-out within a runner-year, sources are the runner's other Ontario
 | 1500 m | 2026 | 2.67% | 81% |
 | 3000 m | 1374 | 3.67% | 68% |
 The 100 m and 200 m rows, which had no non-elite validation, are accurate to about 2% (same-weekend marks; expect more when the PR is months old) and their ranges are wider than they need to be, which is the safe direction. Refitting the pair lines with the Ontario train half added (v1.1; pair SDs floored at v1's, no pairs v1 lacked), scored on the holdout runners: all targets 2.86% -> 2.55%, 3000 m 3.53% -> 2.59%, 80% coverage 81% -> 86%. On 20% of the World Athletics / NRCD athletes held out of both fits the change is within +-0.03 points per event.
+
+### Do the gains survive months-old inputs? (exp14_crossyear.py, exp15_short_v2.py) 
+The Ontario finals are a weekend apart, but the site predicts from PRs that can be months old. Rebuilding the Ontario holdout so every input result is at least 150 days older than the target (1,788 races, 700 runners, median 2 inputs):
+| Lite | MAE | change vs v1 (95% CI) | 80% coverage / half-width |
+|---|---|---|---|
+| v1 (NRCD only, shipped) | 3.581% | | 73.4% / 5.2% |
+| v1.1-train-half (trained on same-weekend Ontario rows) | 3.201% | -0.448 to -0.323 | 78.0% / 5.1% |
+| refit here: NRCD only | 3.646% | +0.029 to +0.094 | |
+| refit here: + Ontario same-weekend rows | 3.228% | -0.434 to -0.288 | |
+| refit here: + Ontario rows built cross-year | 3.179% | -0.473 to -0.333 | |
+Lite's gain holds (about -0.4), and its 80% ranges get closer to 80% (73.4% -> 78.0% cross-year, 77.8% -> 83.1% same-weekend). HawksPredict-Short with sources from earlier years only (best mark per other event, no age allowance, which the site adds through its own source uncertainty): v1 lines 3.97% overall, v1.1 lines 3.86% (100 m 3.38% -> 3.18%, 200 m 3.59% -> 3.45%, 400 m 4.28% -> 3.92%, 800 m 4.77% -> 4.56%, 1500 m 3.71% -> 3.67%, 3000 m 3.75% -> 3.92%); the 80% ranges cover only 68-70% there because teenagers improve a lot between seasons and a year-old best is slow.
 
 ### Synthetic athletes: what happens as the amount grows?
 **Generator** (`exp14_synth.py`, fitted on training athletes only). Each synthetic athlete borrows the schedule (dates, events, surfaces, meets) of a real training athlete and gets `ln t = A + E[sex,event] + u[surface] + d*ln(dist/5000) + tau*years + c[meet] + e`: a level, a personal slope and trend, the real mean event curve, the real (shrunk) meet-day effects, and noise resampled from the real leftover residuals. Mode *own*: a real athlete's own level and slopes plus a random shift (a perturbed copy). Mode *pop*: level and slopes drawn from the fitted population (a person who exists nowhere in the data). The slope spreads are scaled to match the real residual spread (empirical-Bayes deflation alone gave about zero; the raw spread was too wide). Realism check on held-out real athletes: real rows are scored 5.64% by nearest-result Riegel and 3.70% by a real-trained Research model; own-mode rows 5.86% / 4.08%, pop-mode 6.41% / 4.77%, i.e. a little harder than reality.

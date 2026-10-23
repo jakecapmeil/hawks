@@ -105,6 +105,25 @@ for t in sorted(R1.target.unique()):
     a, b, c = R1[R1.target == t], R2[R2.target == t], R3[R3.target == t]
     print(f'| {t} m | {len(a)} | {a.err.mean():.2f}% | {b.err.mean():.2f}% | {100*c["cov"].mean():.0f}% | {100*a["cov"].mean():.0f}% | {c.half.mean():.1f}% |')
 print(f'| all | {len(R1)} | {R1.err.mean():.2f}% | {R2.err.mean():.2f}% | {100*R3["cov"].mean():.0f}% | {100*R1["cov"].mean():.0f}% | {R3.half.mean():.1f}% |')
+# ---- previous-season sources: a PR from an earlier year predicts a later year's mark in another event
+def score_prior(M):
+    rows = []
+    for aid, g in oh.groupby('athlete_id'):
+        for yr, gy in g.groupby('yr'):
+            prev = g[g.yr < yr]
+            if not len(prev): continue
+            best = prev.groupby('m').sec.min()
+            for _, t in gy.drop_duplicates('m').iterrows():
+                src = [(KEY(m), sec) for m, sec in best.items() if m != t.m]
+                p = short_any(M, src, KEY(t.m), INF, EXTRA)
+                if p: rows.append(dict(target=int(t.m), err=100 * abs(p[0] / t.sec - 1), cov=p[1] <= t.sec <= p[2]))
+    return pd.DataFrame(rows)
+Q1, Q2, Q3 = score_prior(M1), score_prior(M2), score_prior(M2f)
+print('\nOntario holdout, sources from EARLIER years only (best mark per other event; target in a later year):\n| target | n | v1 lines MAE | + Ontario lines MAE | v1 80% cov | + Ontario (SD floor) 80% cov |\n|---|---|---|---|---|---|')
+for t in sorted(Q1.target.unique()):
+    a, b, c = Q1[Q1.target == t], Q2[Q2.target == t], Q3[Q3.target == t]
+    print(f'| {t} m | {len(a)} | {a.err.mean():.2f}% | {b.err.mean():.2f}% | {100*a["cov"].mean():.0f}% | {100*c["cov"].mean():.0f}% |')
+print(f'| all | {len(Q1)} | {Q1.err.mean():.2f}% | {Q2.err.mean():.2f}% | {100*Q1["cov"].mean():.0f}% | {100*Q3["cov"].mean():.0f}% |')
 os.makedirs(OUT, exist_ok=True)
 art = dict(V1); art.update(version='v1.1', pairs=[dict(s=s, t=t, a=float(c[0]), b=float(c[1]), c=float(c[2]), sd=sd, n=n) for (s, t), (c, sd, n) in M2f.items()],
           trained_on=V1['trained_on'] + ' and the training half of the Ontario high-school championship finalists (Mendeley Data 7rxh2z7vrc, CC BY 4.0)')

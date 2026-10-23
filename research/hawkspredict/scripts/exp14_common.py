@@ -13,6 +13,7 @@ from lite import lite_feats, LITE_FEATS
 
 M.WINDOW = 730
 HIST = 730
+MIN_AGE = 1          # smallest age (days) of a result that may be used as input; raised to mimic months-old PRs
 
 def _full_chunk(df):
     rows = []
@@ -37,7 +38,7 @@ def _lite_chunk(df):
         if len(g) < 2: continue
         g = g.reset_index(drop=True); dts = g.date.values; ms = g.m.values; sc = g.sec.values; sf = g.surf.values; ml = g.male.values
         for i in range(1, len(g)):
-            age = (dts[i] - dts[:i]).astype('timedelta64[D]').astype(int); k = np.where((age >= 1) & (age <= HIST))[0]
+            age = (dts[i] - dts[:i]).astype('timedelta64[D]').astype(int); k = np.where((age >= MIN_AGE) & (age <= HIST))[0]
             if not len(k): continue
             r = lite_feats(ms[k], sc[k], sf[k], ms[i], sf[i], ml[i])
             if not np.isfinite(r['base']): continue

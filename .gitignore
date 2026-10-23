@@ -4,3 +4,6 @@ node_modules/
 
 # locked race forecasts name students: keep local
 research/hawkspredict/forecast_*
+
+# trained Research models (pickles; not for the repo)
+research/hawkspredict/models/
