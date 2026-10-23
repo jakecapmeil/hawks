@@ -24,6 +24,12 @@ const HEAT = [[100, 0], [110, 0.005], [120, 0.01], [130, 0.02], [140, 0.03], [15
 const HOME = { lat: 40.85, lon: -73.9 };
 const DAY = 86400000;
 
+// Van Cortlandt Park's footprint (Bronx), with a little margin. A run's GPS
+// start inside it is at the park; outside it never is, whatever the name says.
+export function inVanCortlandt(lat, lon) {
+  return lat >= 40.884 && lat <= 40.915 && lon >= -73.909 && lon <= -73.871;
+}
+
 export const VC_RE = /van\s*cort?land|\bvcp\b|vannie|tortoise\s*(&|and)\s*(the\s*)?hare/i;
 
 // Fraction slower than ideal weather.
@@ -56,13 +62,16 @@ export function courseOf(w, events = []) {
   if (w.surface === 'track') return '';
   // A run named after the park is there. Otherwise Hawky's read of it (from
   // the run and the day's calendar) decides, then the rules below.
-  if (VC_RE.test(w.name || '')) return 'vc';
-  if (w.course === 'vc' || w.course === 'xc') return w.course;
+  // GPS settles it when the watch recorded a position: at the park, or not.
+  if (w.gps_vc === 1) return 'vc';
+  const notVc = w.gps_vc === 0;
+  if (!notVc && VC_RE.test(w.name || '')) return 'vc';
+  if (w.course === 'xc' || (w.course === 'vc' && !notVc)) return w.course;
   if (w.course === 'flat') return '';
   const fpm = ftPerMile(w);
   if (fpm != null && fpm < 20) return '';
   const here = events.filter((e) => e.date === w.date);
-  if (here.some((e) => VC_RE.test(eventText(e)))) return 'vc';
+  if (!notVc && here.some((e) => VC_RE.test(eventText(e)))) return 'vc';
   if (/\bxc\b|cross.?country/i.test(w.name || '')) return 'xc';
   if (here.some((e) => e.type === 'meet') && fpm != null) return 'xc';
   return '';

@@ -14,6 +14,7 @@ import { saveDay, sessionsOf } from './log.js';
 import { reportSessions, AiError } from './gemini.js';
 import { recomputeFitness } from './fitness.js';
 import { gradeRun } from './grade.js';
+import { inVanCortlandt, VC_RE } from './conditions.js';
 import { vo2rFor } from './coach.js';
 import { looksLikeTrack, snap100, trackMilesFromMeters, TRACK_MILE_M } from './workouts.js';
 
@@ -193,6 +194,30 @@ function metricsOf(a) {
   return m;
 }
 
+// GPS start of an activity: the summary's position when intervals.icu sends one.
+function startOf(a) {
+  const ll = a.start_latlng || a.startLatlng;
+  const lat = Array.isArray(ll) ? ll[0] : a.start_lat ?? a.startLat;
+  const lon = Array.isArray(ll) ? ll[1] : a.start_lon ?? a.start_lng ?? a.startLon ?? a.startLng;
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) > 0.01 ? [lat, lon] : null;
+}
+
+// Without a position in the summary, read the first GPS point of the run's
+// stream (only for runs that say they were at Van Cortlandt).
+async function streamStart(key, id, env) {
+  try {
+    const s = await icu(key, `/activity/${encodeURIComponent(id)}/streams?types=latlng`, env);
+    const st = (Array.isArray(s) ? s : s?.streams || []).find((x) => x?.type === 'latlng');
+    const a = st?.data, b = st?.data2;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      const i = a.findIndex((v, k) => Number.isFinite(v) && Number.isFinite(b[k]) && Math.abs(v) > 0.01);
+      return i >= 0 ? [a[i], b[i]] : null;
+    }
+    const p = Array.isArray(a) ? a.find((x) => Array.isArray(x) && Number.isFinite(x[0]) && Math.abs(x[0]) > 0.01) : null;
+    return p ? [p[0], p[1]] : null;
+  } catch { return null; }
+}
+
 const timeOf = (a) => (String(a.start_date_local || '').match(/T(\d{2}:\d{2})/) || [])[1] || '';
 const dateOf = (a) => String(a.start_date_local || '').slice(0, 10);
 
@@ -225,6 +250,11 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
       "UPDATE workouts SET metrics = COALESCE(NULLIF(?, '{}'), metrics), start_local = COALESCE(NULLIF(start_local, ''), NULLIF(?, '')) WHERE person_id = ? AND strava_id = ?"
     ).bind(m, t, person.id, `intervals:${a.id}`)));
   }
+  const gpsRefresh = usable.filter((a) => logged.has(`intervals:${a.id}`) && startOf(a));
+  for (let i = 0; i < gpsRefresh.length; i += 50) {
+    await db.batch(gpsRefresh.slice(i, i + 50).map((a) => db.prepare('UPDATE workouts SET gps_vc = ? WHERE person_id = ? AND strava_id = ?')
+      .bind(inVanCortlandt(...startOf(a)) ? 1 : 0, person.id, `intervals:${a.id}`)));
+  }
   if (!fresh.length) return { imported: 0, checked: usable.length, total: all.length, skipped_strava: skippedStrava };
 
   const maxRow = await db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(person.id).first();
@@ -239,6 +269,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
 
   const vo2r = await vo2rFor(db, person.id);
   let lapFetches = 0;
+  let gpsFetches = 0;
   const runs = [];
   // Most likely workouts get their laps first.
   const order = [...fresh].sort((x, y) => Number(wantsLaps(y, maxHr)) - Number(wantsLaps(x, maxHr)) || String(y.start_date_local).localeCompare(String(x.start_date_local)));
@@ -253,11 +284,13 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
         ({ work, laps, trackM } = splitsFrom(iv?.icu_intervals));
       } catch { /* laps are a nice-to-have */ }
     }
+    let gpsStart = startOf(a);
+    if (!gpsStart && VC_RE.test(`${a.name || ''} ${a.description || ''}`) && gpsFetches < 8) { gpsFetches++; gpsStart = await streamStart(key, a.id, env); }
     const date = dateOf(a);
     const wk = date.slice(0, 8) + String(Math.floor(Number(date.slice(8)) / 7));
     const miles = a.distance / 1609.344;
     const track = RUN_TYPES.has(a.type) && looksLikeTrack({ name: a.name || '', type: a.type, elevFtPerMile: ((a.total_elevation_gain || 0) * 3.281) / Math.max(miles, 0.1), laps });
-    runs.push({ a, work, laps, track, trackM, splits: laps.length ? splitsText(laps, track) : '', date, start: timeOf(a), category: ruleCategory(a, work, maxHr, weekLongest.get(wk) || 0, vo2r, laps) });
+    runs.push({ a, gps: gpsStart ? (inVanCortlandt(...gpsStart) ? 1 : 0) : null, work, laps, track, trackM, splits: laps.length ? splitsText(laps, track) : '', date, start: timeOf(a), category: ruleCategory(a, work, maxHr, weekLongest.get(wk) || 0, vo2r, laps) });
   }
   runs.sort((x, y) => (x.date + x.start).localeCompare(y.date + y.start));
 
@@ -293,7 +326,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
               elev_ft: r.a.total_elevation_gain != null ? Math.round(r.a.total_elevation_gain * 3.281) : null,
               miles: Math.round(r.a.distance / 16.09344) / 100, minutes: Math.round(r.a.moving_time / 60),
               pace: fmtPace(r.a.moving_time / (r.a.distance / 1609.344)), avg_hr: r.a.average_heartrate || null, max_hr: r.a.max_heartrate || null,
-              laps: r.splits || null, on_track: r.track || undefined, athlete_note: (r.a.description || '').slice(0, 300) || null,
+              laps: r.splits || null, on_track: r.track || undefined, gps_at_van_cortlandt: r.gps == null ? undefined : !!r.gps, athlete_note: (r.a.description || '').slice(0, 300) || null,
             };
           }),
         });
@@ -332,6 +365,13 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
   let imported = 0;
   for (let i = 0; i < rows.length; i += 60) {
     imported += (await logWorkouts(db, person, rows.slice(i, i + 60))).logged.length;
+  }
+
+  // The GPS verdict on each run's course (the course column holds Hawky's guess).
+  const gpsRuns = runs.filter((r) => r.gps != null);
+  for (let i = 0; i < gpsRuns.length; i += 50) {
+    await db.batch(gpsRuns.slice(i, i + 50).map((r) => db.prepare('UPDATE workouts SET gps_vc = ? WHERE person_id = ? AND strava_id = ?')
+      .bind(r.gps, person.id, `intervals:${r.a.id}`)));
   }
 
   // Workouts also go on the day log with their rep splits; Hawky's day lines too.
@@ -412,13 +452,17 @@ async function syncWellness(env, person, key, today) {
 // request per sync; anything unexpected in the response is skipped.
 const EFFORT_METERS = [400, 800, 1000, 1600, 1609, 3200, 5000, 8000, 10000];
 async function syncBestEfforts(env, person, key) {
+  // All-time curve first (PRs are "ever"); the one-year curve if that isn't accepted.
   let res;
-  try {
-    res = await icu(key, `${athletePath(person.icu_athlete)}/pace-curves?type=Run&curves=1y`, env);
-  } catch (err) {
-    console.log('pace-curves failed', err.message);
-    return 0;
+  for (const span of ['all', '1y']) {
+    try {
+      res = await icu(key, `${athletePath(person.icu_athlete)}/pace-curves?type=Run&curves=${span}`, env);
+      if ((Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : [])[0]) break;
+    } catch (err) {
+      console.log('pace-curves failed', span, err.message);
+    }
   }
+  if (!res) return 0;
   const curve = (Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : [])[0];
   if (!curve) { console.log('pace-curves: no list', Object.keys(res || {}).join(',')); return 0; }
   const dist = curve.distance || [];

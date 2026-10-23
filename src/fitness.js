@@ -123,7 +123,7 @@ async function loadInputs(db, personId, today) {
   const [person, workouts, days, maxRow, events, efforts, well, model] = await Promise.all([
     db.prepare('SELECT id, prs, five_k_time, five_k_set_at FROM people WHERE id = ?').bind(personId).first(),
     db.prepare(
-      `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, course, load, temp_f, dew_point_f
+      `SELECT strava_id, date, name, category, distance_mi, raw_distance_mi, moving_sec, elapsed_sec, avg_hr, max_hr, elev_gain_ft, laps, surface, course, gps_vc, load, temp_f, dew_point_f
        FROM workouts WHERE person_id = ? AND date >= ? ORDER BY date`
     ).bind(personId, since).all(),
     db.prepare(
@@ -136,7 +136,7 @@ async function loadInputs(db, personId, today) {
        LEFT JOIN locations l ON l.id = e.location_id WHERE e.date >= ?`
     ).bind(since).all(),
     db.prepare(
-      `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps, w.name, w.distance_mi, w.elev_gain_ft, w.surface, w.course, w.temp_f, w.dew_point_f FROM best_efforts b
+      `SELECT b.meters, b.sec, b.date, b.activity_id, w.category, w.laps, w.name, w.distance_mi, w.elev_gain_ft, w.surface, w.course, w.gps_vc, w.temp_f, w.dew_point_f FROM best_efforts b
        LEFT JOIN workouts w ON w.person_id = b.person_id AND w.strava_id = 'intervals:' || b.activity_id WHERE b.person_id = ?`
     ).bind(personId).all(),
     db.prepare('SELECT date, vo2max, resting_hr, ctl, atl FROM wellness WHERE person_id = ? AND date >= ? ORDER BY date').bind(personId, since).all(),
@@ -270,6 +270,18 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
   // efforts, but often a split from a longer run, so a little less weight.
   for (const e of efforts) {
     if (!e.sec || !e.meters) continue;
+    // Auto-PR: the fastest nonstop time ever recorded at a PR distance (the
+    // pace curve is the best unbroken stretch). Raw time, filled only where
+    // nobody has typed a PR of their own (see prsToUpdate). A 1600 and above
+    // from an interval session is stitched from reps, so it doesn't count.
+    const stitched = e.meters >= 1500 && (!e.category || e.category === 'workout' || e.laps); // unknown run: can't rule out reps
+    const prEvent = { 400: '400', 800: '800', 1600: '1600', 1609: '1600', 3200: '3200', 5000: '5K' }[e.meters];
+    if (prEvent && !stitched) {
+      const pc = conditionsOf(e, events);
+      const ev = prEvent === '5K' && pc.course ? 'XC 5K' : prEvent;
+      const sec = e.meters === 1609 ? (e.sec * 1600) / 1609.344 : e.sec;
+      prCandidates.push({ event: ev, sec, date: e.date || '', name: ev === 'XC 5K' ? (pc.course === 'vc' ? 'Van Cortlandt' : e.name || '') : `best nonstop ${prEvent === '5K' ? '5K' : prEvent + ' m'}`, fill: true });
+    }
     // In an interval session the watch's moving time skips the rests, so a
     // "5K" stitched from reps isn't a 5K. Long best efforts count only from
     // continuous runs.
@@ -661,6 +673,8 @@ function prsToUpdate(currentRaw, candidates) {
   for (const c of candidates) {
     const have = parseTime((out[c.event] || cur[c.event])?.time);
     if (have && have <= c.sec + 0.5) continue;
+    // A PR someone typed in stays; the nonstop-best search only fills blanks and Hawks' own finds.
+    if (c.fill && cur[c.event] && !cur[c.event].auto && !out[c.event]) continue;
     out[c.event] = { time: fmtTime(c.sec, { tenths: c.sec < 180 }), date: c.date, meet: `Found by Hawks${c.name && !/running$|^run$/i.test(c.name) ? `: ${c.name}` : ''}`, auto: true };
   }
   return out;
