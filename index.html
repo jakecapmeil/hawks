@@ -5811,7 +5811,8 @@ const FIT_DEFAULT = ['400','800','1600','3200','5K','10K','half'];
 let fitShown = FIT_DEFAULT.slice(), fitEditing = false, fitLast = null;
 try{ const v = JSON.parse(localStorage.getItem('hawksFitEvents') || 'null'); if(Array.isArray(v) && v.length) fitShown = v; }catch(e){}
 function saveFitShown(){ try{ localStorage.setItem('hawksFitEvents', JSON.stringify(fitShown)); }catch(e){} }
-const FIT_GROUPS = { sprint:'Sprints', middle:'Middle distance', steeple:'Steeplechase' };
+// Shortest to longest; a steeplechase or a course row follows the flat race of the same length.
+function byDistance(list){ const tie = e=> e.course ? 2 : e.group === 'steeple' ? 1 : 0; return [...list].sort((a,b)=> a.meters - b.meters || tie(a) - tie(b)); }
 function drawFitTable(){
   const f = fitLast; if(!f) return;
   const rowHtml = (e, pick)=>{
@@ -5826,16 +5827,17 @@ function drawFitTable(){
   };
   let html;
   if(fitEditing){
-    const groups = [['', f.estimates.filter(e=>!e.optional)], ...Object.keys(FIT_GROUPS).map(g=>[FIT_GROUPS[g], f.estimates.filter(e=>e.group === g)])].filter(([,l])=>l.length);
+    // One list, shortest to longest (a steeplechase sits after the flat race of the same length).
     html = `<div class="hint" style="margin-bottom:var(--sp-2);">Tap the events you want to see. Every estimate shows how sure it is: the dot and the ± are the width of its 80% range.</div>` +
-      groups.map(([name, list])=> (name ? `<div class="hint" style="margin:var(--sp-3) 0 2px;font-weight:700;">${name}</div>` : '') + list.map(e=>rowHtml(e, true)).join('')).join('');
+      byDistance(f.estimates).map(e=>rowHtml(e, true)).join('');
   }else{
-    const rows = f.estimates.filter(e=>fitShown.includes(e.event));
-    html = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + (rows.length ? rows.map(e=>rowHtml(e, false)).join('') : '<div class="hint" style="padding:var(--sp-3) 0;">No events selected. Tap Edit to choose some.</div>')
-      + (f.course_estimates || []).map(c=>{
-        const pr = c.pr?.time;
-        return `<div class="fit-row"><span class="ev">${escapeHtml(c.label)}</span><span class="tm">${escapeHtml(c.time)}</span><span class="pc">${escapeHtml(c.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
-      }).join('')
+    // The Van Cortlandt course rows sit in the list by distance too.
+    const rows = byDistance([...f.estimates.filter(e=>fitShown.includes(e.event)), ...(f.course_estimates || []).map(c=>({ ...c, course:true }))]);
+    html = `<div class="fit-row head"><span>Event</span><span>Estimate</span><span>Pace · PR</span><span></span></div>` + (rows.length ? rows.map(e=>{
+        if(!e.course) return rowHtml(e, false);
+        const pr = e.pr?.time;
+        return `<div class="fit-row"><span class="ev">${escapeHtml(e.label)}</span><span class="tm">${escapeHtml(e.time)}</span><span class="pc">${escapeHtml(e.pace_mi)}/mi${pr ? ' · PR ' + escapeHtml(pr) : ''}</span><span></span></div>`;
+      }).join('') : '<div class="hint" style="padding:var(--sp-3) 0;">No events selected. Tap Edit to choose some.</div>')
       + `<div class="fit-legend"><span><i class="conf high"></i>high</span><span><i class="conf medium"></i>medium</span><span><i class="conf low"></i>low confidence: how tight the 80% range is. Hover or tap a row for what it is based on.</span></div>`;
   }
   $('fitTable').innerHTML = html;
