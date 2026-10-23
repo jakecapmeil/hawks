@@ -28,7 +28,7 @@ export function modelChain(env) {
 const AI_DAILY_CAP = 25;
 
 export function aiEnabled(env) {
-  return !!env.GEMINI_API_KEY;
+  return !!(env.GEMINI_API_KEY || env.AI);
 }
 
 async function spend(db, personId, today) {
@@ -47,7 +47,8 @@ async function generate(env, { system, prompt, schema, maxTokens = 1024 }) {
   const ready = chain.filter((m) => (cooling.get(m) || 0) <= now);
   const order = [...ready, ...chain.filter((m) => !ready.includes(m))];
   let busy = false;
-  for (const model of order) {
+  // Without a Gemini key the Gemini models are skipped; Workers AI still answers.
+  for (const model of env.GEMINI_API_KEY ? order : []) {
     const res = await callModel(env, model, { system, prompt, schema, maxTokens });
     if (res.retry) {
       busy = busy || res.busy;
@@ -56,7 +57,49 @@ async function generate(env, { system, prompt, schema, maxTokens = 1024 }) {
     }
     return res.value;
   }
+  // Last resort: an open-weight model on Cloudflare Workers AI (the AI binding).
+  if (env.AI) {
+    const out = await callWorkersAi(env, { system, prompt, schema, maxTokens });
+    if (out !== undefined) return out;
+  }
   throw new AiError(busy ? 'The AI is busy (free-tier rate limit). Try again in a minute.' : 'The AI request failed.');
+}
+
+// Workers AI's free quota is small and its JSON mode isn't guaranteed to follow
+// the schema, so the schema is also spelled out in the prompt and the answer is
+// checked for the required keys. undefined means "didn't work".
+const WORKERS_AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+function parseLoose(text) {
+  const t = String(text || '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+  try { return JSON.parse(t); } catch { /* try the outermost braces */ }
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch { /* give up */ } }
+  return undefined;
+}
+
+async function callWorkersAi(env, { system, prompt, schema, maxTokens }) {
+  const model = env.WORKERS_AI_MODEL || WORKERS_AI_MODEL;
+  try {
+    const out = await env.AI.run(model, {
+      messages: [
+        { role: 'system', content: schema ? `${system}\n\nReply with ONLY a JSON object matching this JSON Schema:\n${JSON.stringify(schema)}` : system },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: maxTokens + 512,
+      temperature: 0.4,
+      ...(schema ? { response_format: { type: 'json_schema', json_schema: schema } } : {}),
+    });
+    const r = out?.response;
+    if (!schema) return typeof r === 'string' && r.trim() ? r.trim() : undefined;
+    const obj = r && typeof r === 'object' ? r : parseLoose(r);
+    if (!obj || typeof obj !== 'object') return undefined;
+    if ((schema.required || []).some((k) => obj[k] === undefined)) return undefined;
+    return obj;
+  } catch (err) {
+    console.error('workers-ai error', model, String(err).slice(0, 300));
+    return undefined;
+  }
 }
 
 // One model. { retry: true } means try the next one in the chain.
