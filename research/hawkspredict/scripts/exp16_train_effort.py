@@ -38,7 +38,8 @@ def build(R):
             last_hard = (T - t[hard].max()) / DAY if len(hard) else k
             e4 = w[(t[w] >= T - 28 * DAY) & (d[w] >= 3) & (d[w] <= 22) & (gr[w] < 20)]
             return dict(km_wk=d[w].sum() / (k / 7), runs_wk=len(w) / (k / 7), longest=d[w].max(), hard_share=len(hard) / len(w), n_hard=len(hard), last_hard=last_hard,
-                        e4=np.log(dur[e4] * (5.0 / d[e4]) ** 1.06).min() if len(e4) else np.nan)
+                        e4=np.log(dur[e4] * (5.0 / d[e4]) ** 1.06).min() if len(e4) else np.nan,
+                        e4h=np.log(dur[e4[rel[e4] <= 0.95]] * (5.0 / d[e4[rel[e4] <= 0.95]]) ** 1.06).min() if (len(e4) and (rel[e4] <= 0.95).any()) else np.nan)
         for j in range(20, len(g)):
             if not ((4.85 <= d[j] <= 5.15) or (9.7 <= d[j] <= 10.3)) or gr[j] >= 20 or not (rel[j] <= 0.92): continue
             e = np.where((t < t[j] - 14 * DAY) & (t >= t[j] - 180 * DAY) & (d >= 3) & (d <= 22) & (gr < 20))[0]
@@ -50,7 +51,8 @@ def build(R):
             rows.append(dict(user=u, r=np.log(dur[j] / eq.min()), dist=10 if d[j] > 7 else 5, days_gap=(t[j] - t[b]) / DAY, n_cand=len(e),
                              km_wk=now['km_wk'], runs_wk=now['runs_wk'], longest=now['longest'], hard_share=now['hard_share'], n_hard=now['n_hard'], last_hard=now['last_hard'],
                              d_vol=np.log((now['km_wk'] + 1) / (then['km_wk'] + 1)), d_hard=now['hard_share'] - then['hard_share'], d_long=np.log(now['longest'] / then['longest']),
-                             recent_vs_best=now['e4'] - eq5 if now['e4'] == now['e4'] else np.nan))
+                             recent_vs_best=now['e4'] - eq5 if now['e4'] == now['e4'] else np.nan,
+                             recent_hard=now['e4h'] - eq5 if now['e4h'] == now['e4h'] else np.nan, rel_t=rel[j]))
     return pd.DataFrame(rows)
 
 if __name__ == '__main__':

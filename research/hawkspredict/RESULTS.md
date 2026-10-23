@@ -527,3 +527,23 @@ The pair lines (sex averaged, exact PRs, 80% range) give these equivalents:
 - **Wind on sprints (Ontario 100/200 m, Short v1.1 residual, tailwind positive):** 100 m -0.52% per +1 m/s (about 6 hundredths; n=371, wind -3.8 to +10.0 m/s), 200 m -0.31% per +1 m/s (about 8 hundredths; n=258). The wind reading is a single value per race, so this is a lower bound on the true effect.
 - **Age, Ontario (grade category and sex):** Lite v1.1 residuals are within +-1% in every cell (Junior boys -1.03%, Senior girls +0.27%, Novice about 0); errors 2.5-3.1% in all. **Age, World Athletics pair-line residuals by age at the mark:** flat within about 0.5 points for 100->200, 200->400, 800->1500, 800->mile; 1500->5000 drifts from -1.3% (19-22) to -0.3% (31+). In these data age adds no precision beyond what the times already say. Grade is a coarse age proxy and the lists are adults, so this does not exclude an age effect in 12-16 year olds, for whom no exact ages exist in any dataset found.
 - **Heart rate:** no benefit in two real datasets (above).
+
+## exp19: a recent-form adjustment to PR-based estimates (2026-10-23)
+Script: `exp19_recent_form.py` (on the exp16 table; the race-like split is in the text below). Question: should an old best effort be moved by its age, by what the last four weeks of running show (`rec` = ln of the best 5K-equivalent among 3-22 km runs in the last 28 days over the earlier best's 5K-equivalent; positive = recent running slower), or by the change in weekly volume since it was set? Linear least-absolute-deviation fits, leave-runners-out (5 folds x 5 repeats), 1,071 hard 5K/10K efforts, 147 runners (Strava 869 efforts, FitRec 202).
+| adjustment | MAE | change vs constant offset (95% CI) |
+|---|---|---|
+| constant offset | 9.05% | |
+| PR age only | 8.94% | -0.11 (-0.23 to +0.00) |
+| last 4 weeks only | 8.05% | **-1.00 (-1.49 to -0.59)** |
+| age + last 4 weeks | 8.06% | -0.99 (-1.44 to -0.53) |
+| age + last 4 weeks + volume change | 8.06% | -0.99 (-1.40 to -0.53) |
+The gain comes entirely from the last-4-weeks term (Strava -1.14, FitRec -0.38, 5K -0.41, 10K -1.16); age and volume change add nothing once it is in. Fit: r = 0.008 + 0.57 x rec (symmetric: 0.565 above, 0.581 below zero). Calibrated out of fold: predicted r quintiles +0.010 / +0.032 / +0.059 / +0.090 / +0.149 against realised medians +0.023 / +0.036 / +0.048 / +0.070 / +0.161.
+**But the gain is about effort, not fitness.** Splitting the targets by how hard the run was relative to the runner's usual pace:
+| target | n efforts / runners | constant offset | + last 4 weeks | change (95% CI) | slope on rec | r at rec = 0 |
+|---|---|---|---|---|---|---|
+| 8-14% faster than usual | 472 / 125 | 8.57% | 6.67% | -1.90 (-2.61 to -1.28) | +0.70 | +0.054 |
+| 14-20% faster | 261 / 100 | 8.45% | 7.11% | -1.34 (-2.17 to -0.70) | +0.58 | +0.009 |
+| **20%+ faster (race-like)** | **338 / 85** | **6.40%** | **6.17%** | **-0.23 (-0.56 to +0.06)** | **+0.22 (0.12 to 0.37)** | **-0.020** |
+For race-like efforts the earlier best was already about right (median r 0.000, IQR -0.041 to +0.046) and the recent-form term does not significantly help. Runners who have been running hard lately also choose to run hard when they run a "hard effort" at all; that is most of the apparent signal. Using only recent hard runs (pace 5%+ faster than usual) as the evidence gives the same picture (slope +0.63 over all hard efforts).
+**Decision: do not ship a visible adjustment.** For race predictions the expected effect is small (slope about 0.2 x a typical gap of 7% = about 1.5%, not significantly better than none) and the intercept is not identified from non-certified efforts. The prediction log scores the shipped model against real race results (the first batch is the Oct 24 Borough Championships); the form term should be tested there as a logged-only variant before it affects any number a runner sees.
+**Hawks data: not run.** The read of the production workouts table was blocked by the session's permission check, so the sanity check on the four athletes with synced runs (about 7 race-like efforts, far too few to decide anything) is still to do.
