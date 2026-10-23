@@ -26,6 +26,7 @@ import { parseReps, snap100 } from './workouts.js';
 import { conditionsOf, heatCost, hillCost, VC_FACTOR, XC_FACTOR, VC_RE } from './conditions.js';
 import { predictRaceAny, PACE_MODEL_INFO } from './pacemodel.js';
 import { predictShortAny, shortSource, SHORT_INFO, SHORT_METERS, Z80 } from './shortmodel.js';
+import { predictMarathon, MARATHON_INFO } from './marathon.js';
 
 const DAY = 86400000;
 const MILE = 1609.344;
@@ -51,6 +52,8 @@ export const EXTRA_EVENTS = [
   { key: '1000', label: '1000m', m: 1000, group: 'middle', short: '1000' },
   { key: '2000SC', label: '2000m steeple', m: 2000, group: 'steeple', short: 'S2000' },
   { key: '3000SC', label: '3000m steeple', m: 3000, group: 'steeple', short: 'S3000' },
+  // The marathon is HawksPredict-Marathon's: from the last 16 weeks of training, not from PRs.
+  { key: 'marathon', label: 'Marathon', m: 42195, group: 'long' },
 ];
 // PR events that only HawksPredict-Short reads (a 100 or a steeple time says nothing about the 1600-to-5K model).
 const SHORT_M = SHORT_METERS;
@@ -578,6 +581,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       if (src) fromLite.push({ ...src, extra: Math.log(est[k].hi / est[k].lo) / (2 * Z80), name: est[k].label });
     }
     for (const e of EXTRA_EVENTS) {
+      if (!e.short) continue;
       const own = shortPrs.filter((p) => p.ev === e.short).sort((a, b) => a.age - b.age)[0];
       // 400-to-5K PRs are already inside Lite's estimates, so only PRs at the events Short owns count as extra sources.
       const prsUsed = shortPrs.filter((p) => p.ev !== e.short && SHORT_OWN.has(p.ev)).map((p) => ({ ev: p.ev, sec: p.sec, extra: p.age > 365 ? 0.02 : 0.008, name: `${PR_NAMES[p.ev] || p.ev} PR` }));
@@ -594,6 +598,13 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       const near = [...fromLite, ...prsUsed].filter((x) => x.ev !== e.short).sort((a, b) => Math.abs(Math.log(SHORT_M[a.ev] / e.m)) - Math.abs(Math.log(SHORT_M[b.ev] / e.m))).slice(0, 3).map((x) => x.name);
       est[e.key] = { ...e, sec: Math.exp(mu), raw: Math.exp(mu), lo: Math.exp(mu - Z80 * sd), hi: Math.exp(mu + Z80 * sd), hw: Z80 * sd, from: own ? [`your ${e.label} PR`, ...near] : near, short: true };
     }
+  }
+
+  // HawksPredict-Marathon: from the 16 weeks of running before today (needs 15 running days). Independent of the PR-based models.
+  const mar = predictMarathon(workouts, today);
+  if (mar) {
+    est.marathon = { ...EXTRA_EVENTS.find((e) => e.key === 'marathon'), sec: mar.sec, raw: mar.sec, lo: mar.lo, hi: mar.hi, marathon: true,
+      from: [`${mar.run_days} running days in the last 16 weeks`, `${Math.round(mar.feats.wk_mean / (MILE / 1000))} mi a week on average`, `longest run ${Math.round(mar.feats.longest / (MILE / 1000))} mi`] };
   }
 
   // The same fitness on the team's home course: what to expect at Van
@@ -648,6 +659,7 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
     confidence: overall,
     mpw, mpw_prev: mpwPrev, longest_28d: round1(cur.longest),
     model_short: lite ? `${SHORT_INFO.name} ${SHORT_INFO.version}` : null,
+    model_marathon: est.marathon ? `${MARATHON_INFO.name} ${MARATHON_INFO.version}` : null,
     estimates: [...EVENTS, ...EXTRA_EVENTS.filter((e) => est[e.key])].map((e) => {
       const x = est[e.key];
       // How sure the model is, as the half-width of its 80% range (+-3% of the time, say), turned into a word.
@@ -661,10 +673,10 @@ export function computeFitness({ person, workouts, days, maxHr, meets = new Set(
       return {
         event: e.key, label: e.label, meters: e.m, sec: Math.round(x.sec * 10) / 10,
         time: fmtTime(x.sec, { tenths: e.m <= 800 }), pace_mi: fmtPace((x.sec / e.m) * MILE),
-        confidence: x.short ? shortWord(wordFor(hw)) : confFor(e.m),
+        confidence: x.marathon ? wordFor(hw) : x.short ? shortWord(wordFor(hw)) : confFor(e.m),
         pr: prOf(e.key),
         ...(x.lo ? { lo: Math.round(x.lo * 10) / 10, hi: Math.round(x.hi * 10) / 10, range: `${fmtTime(x.lo, { tenths: e.m <= 800 })}-${fmtTime(x.hi, { tenths: e.m <= 800 })}`, plus_minus_pct: Math.round(hw * 1000) / 10 } : {}),
-        ...(x.short ? { optional: true, group: e.group, from: x.from } : {}),
+        ...(x.short || x.marathon ? { optional: true, group: e.group, from: x.from } : {}),
       };
     }),
     course_estimates: courseEstimates.map((c) => ({ ...c, pr: prOf(c.key) })),

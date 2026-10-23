@@ -51,7 +51,7 @@ Everything the experiments need after deletion is in `rows4.pkl`/`results4.pkl` 
 ## Update 2026-10-22: second scour
 | Dataset | Status | Notes |
 |---|---|---|
-| BMClab long-distance running 2019-20 (Figshare 16620238) | USED (exp12) | CC BY 4.0, daily files 154 MB each; athletes list the majors they ran, so marathon days are found by rule. 2019 daily sha256 0445cd42281d7c8710552239e3f721dae48d8d77b99bc98fb7a8530a2bc8c740, 2020 daily e635707a3390886be03955803fefb9b3f28296706e69ab286f5c583d1eebe429. No heart rate. |
+| BMClab long-distance running 2019-20 (Figshare 16620238) | USED (exp12, exp20: HawksPredict-Marathon) | CC BY 4.0, daily files 154 MB each; athletes list the majors they ran, so marathon days are found by rule. 2019 daily sha256 0445cd42281d7c8710552239e3f721dae48d8d77b99bc98fb7a8530a2bc8c740, 2020 daily e635707a3390886be03955803fefb9b3f28296706e69ab286f5c583d1eebe429. No heart rate. |
 | FitRec / Endomondo (UCSD McAuley lab) | USED via Kaggle mirror tientd95/fitrec-dataset (exp: fitrec_hr_check) | Heart rate + speed + altitude + weather, 1,104 users / 253k workouts, academic use only, no redistribution. The Google Drive links returned 404 from the command line; needs a manual download. Would allow `hr_check.py` across ~1,000 runners instead of 4. |
 | GoldenCheetah OpenData (OSF 6hfpz, GitHub GoldenCheetah/OpenData) | NOT CHECKED | Per-second HR, cadence, power, distance, altitude, no GPS; mostly cyclists. Run share unknown. |
 | KIRun | NOT CHECKED | 48 outdoor runners with heart rate, no race results. |
