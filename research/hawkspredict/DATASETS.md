@@ -75,3 +75,21 @@ Also seen and not used: London Marathon 2018-23 (Zenodo 10960982) and Marathon D
 |---|---|---|
 | World Athletics all-time top lists (Kaggle mexwell/world-athletics-database, data.csv) | USED (exp13) | 461k marks, 34k athletes, 100 m to steeplechase, best mark per athlete and event used (elite only); licence not stated on Kaggle, derived coefficients only are committed. zip sha256 ec00e2a5a31c59d4ed3e99d29966afaa1af70020a505a4c259c1b40acf9dc6d3 |
 Athlete names in that file were used only to link one athlete's marks across events and are not kept anywhere.
+
+## Update 2026-10-22 (night): third scour
+Searched: Kaggle (22 queries via the API), Hugging Face, Figshare, Dryad, OSF, plus web searches for youth/junior, parkrun, federation scrapes, Strava/Garmin paired sets. Zenodo's anonymous search API answers 403, so Zenodo was reached only through web-search hits.
+| Dataset | Status | Notes |
+|---|---|---|
+| Ontario / Windsor-Essex high-school championship finalists 2013-2026 (Mendeley Data 7rxh2z7vrc, doi 10.17632/7rxh2z7vrc.1) | USED (exp14) | CC BY 4.0. 12,840 finals, 100/200/400/800/1500/3000 m, RunnerID (5,132 runners; 27 colliding IDs dropped), ~2,400 runners with 2+ events. The only real teenage data found. Names and schools are dropped at ingest; only derived tables stay local. Dates are approximated from Year, Day and competition (WECSSAA before OFSAA), so only the order matters. csv sha256 d97c8646f23f34c9…. Half the runners are a fixed holdout (seed 20261022). |
+| runners-dataset (Kaggle beridzeg45/runners-dataset) | TRIED, rejected for Lite/Research | 68k dated marks, 8,381 elite athletes, 100-10000 m, scraped from alltime-athletics.com; licence 'other'. Adding it makes both models worse on NRCD dev and on Ontario (a top-list is a truncated, best-effort sample). sha256 8cffc7368e80cfd4…. |
+| World Athletics all-time lists with u20 split (Kaggle jeannicolasduval/world-athletics-all-time-rankings) | NOT YET USED | CC0, 488k marks, senior and u20, outdoor and indoor, includes 600 m, 1000 m, 2000 m steeple. Better licence than the copy Short was fitted on. sha256 eac49d0c82d98d0f…. |
+| Running races from Strava (Kaggle olegoaer/running-races-strava) | HR CHECK (see RESULTS) | CC BY-NC-SA 4.0. 42k runs, 116 athletes, distance, time, elevation, heart rate on 56%; not races, just runs. sha256 1c24d2252a14c719…. |
+| Injury prediction for competitive runners (Kaggle shashwatwork, Dutch runners, 2012-2019) | NOT USED | CC0. Daily and weekly training logs (km by zone, RPE, injury); no race times. Possible calibration for a training-load generator. |
+| Developing Youth Track and Field Athletes - Diversification Dataset (Zenodo 3237106) | NOT USED | CC BY 4.0. Competition histories of the top 100 ranked athletes in 100 m, 800 m, long jump, shot put, U13 to U20. Excel turned some times into dates. Too small and ranked-only. |
+| Pace Notes marathon results corpus with 5 km splits (Figshare 33965155) | NOT USED | Marathon-only. |
+| Paris 2024 and historic Olympic track results (Kaggle) | NOT USED | Elite finalists, small. |
+| Athlete Sports Performance (Kaggle datresearch) | REJECTED | Synthetic reinforcement-learning data. |
+| 2023 NCAA top-500 lists (Kaggle ilikehurdles) | REJECTED | One season, no athlete IDs. |
+| Norwegian federation youth data (135k season bests, 31k athletes, 2011-2025; ScienceDirect S1440244026002835) | NOT AVAILABLE | Described in a paper; no public download found. Worth an email to the authors. |
+| Strava-linked marathon studies (Dublin/London/NYC, 1.86M activities, 31k runners) | NOT AVAILABLE | Authors cannot redistribute. |
+| parkrun | NOT AVAILABLE | Scrapers only; terms forbid bulk collection. |
