@@ -13,6 +13,8 @@ import { logWorkouts, todayInTz, COACH_RUBRIC, bodyStatus, backfillConditions } 
 import { saveDay, sessionsOf } from './log.js';
 import { reportSessions, AiError } from './gemini.js';
 import { recomputeFitness } from './fitness.js';
+import { gradeRun } from './grade.js';
+import { vdotFor } from './coach.js';
 import { looksLikeTrack, snap100, trackMilesFromMeters, TRACK_MILE_M } from './workouts.js';
 
 export class IntervalsError extends Error {}
@@ -129,15 +131,20 @@ function splitsFrom(intervals) {
 }
 
 // The pre-built, no-AI classifier: HR share of max, structure and distance.
-function ruleCategory(a, work, maxHr, longest) {
+function ruleCategory(a, work, maxHr, longest, vdot, laps = []) {
   if (!RUN_TYPES.has(a.type)) return 'crosstrain';
   const miles = (a.distance || 0) / 1609.344;
   const hrPct = a.average_heartrate ? a.average_heartrate / maxHr : null;
   if (/race|meet|xc|5k|champ|invitational/i.test(a.name || '') && (hrPct ?? 0) > 0.86) return 'race';
   if (work.length >= 3) return 'workout';
-  if (hrPct !== null && hrPct >= 0.86 && miles >= 2) return 'workout';
+  // Pace against the runner's own training paces, checked by heart rate (grade.js).
+  const g = gradeRun({
+    distance_mi: miles, moving_sec: a.moving_time, avg_hr: a.average_heartrate, laps,
+    elev_gain_ft: a.total_elevation_gain != null ? a.total_elevation_gain * 3.281 : null, name: a.name || '', category: 'easy',
+  }, { vdot, maxHr });
+  if (g.hr_effort >= 6 && miles >= 2 && (g.pace_effort == null || g.pace_effort >= 6)) return 'workout';
   if (miles >= 7 && miles >= longest * 0.9) return 'long';
-  if (miles <= 3.2 && hrPct !== null && hrPct < 0.72) return 'recovery';
+  if (miles <= 3.2 && g.hr_effort <= 3) return 'recovery';
   return 'easy';
 }
 
@@ -230,6 +237,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
     weekLongest.set(wk, Math.max(weekLongest.get(wk) || 0, a.distance / 1609.344));
   }
 
+  const vdot = await vdotFor(db, person.id);
   let lapFetches = 0;
   const runs = [];
   // Most likely workouts get their laps first.
@@ -249,7 +257,7 @@ async function importRange(env, person, key, { oldest, newest, ai: useAi, lapBud
     const wk = date.slice(0, 8) + String(Math.floor(Number(date.slice(8)) / 7));
     const miles = a.distance / 1609.344;
     const track = RUN_TYPES.has(a.type) && looksLikeTrack({ name: a.name || '', type: a.type, elevFtPerMile: ((a.total_elevation_gain || 0) * 3.281) / Math.max(miles, 0.1), laps });
-    runs.push({ a, work, laps, track, trackM, splits: laps.length ? splitsText(laps, track) : '', date, start: timeOf(a), category: ruleCategory(a, work, maxHr, weekLongest.get(wk) || 0) });
+    runs.push({ a, work, laps, track, trackM, splits: laps.length ? splitsText(laps, track) : '', date, start: timeOf(a), category: ruleCategory(a, work, maxHr, weekLongest.get(wk) || 0, vdot, laps) });
   }
   runs.sort((x, y) => (x.date + x.start).localeCompare(y.date + y.start));
 

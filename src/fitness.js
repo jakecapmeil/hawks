@@ -51,7 +51,7 @@ export const PR_METERS = { '400': 400, '800': 800, '1600': 1600, '3200': 3200, '
 // ------------------------------------------------------------------ Daniels
 
 // Oxygen cost (ml/kg/min) of running at v metres/minute.
-const vo2At = (v) => -4.6 + 0.182258 * v + 0.000104 * v * v;
+export const vo2At = (v) => -4.6 + 0.182258 * v + 0.000104 * v * v;
 // Fraction of VO2max sustainable for t minutes.
 const pctAt = (t) => 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t);
 

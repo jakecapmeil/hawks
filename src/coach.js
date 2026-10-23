@@ -10,7 +10,8 @@ import { logTools, callLogTool, LogError, getDays, compactDays, fiveKFor, getPrs
 import { getFitness } from './fitness.js';
 import { trackMiles } from './workouts.js';
 import { BODY_PARTS } from './body.js';
-import { conditionsBump, weatherFor } from './conditions.js';
+import { weatherFor } from './conditions.js';
+import { gradeRun } from './grade.js';
 
 // Health, training status and the body map, as Hawky reads them.
 export async function bodyStatus(db, personId) {
@@ -47,7 +48,7 @@ CATEGORY — pick one per activity:
 - shakeout: short (2-3 mi) easy run the day before or the morning of a race
 - crosstrain: bike, swim, elliptical, walk, hike, lift — anything that isn't a run
 
-DIFFICULTY (effort, 1-10) starts from avg HR as a share of the runner's max HR (the highest max HR seen in their logged runs, 200 until known): under 65% = 2, 65-72% = 3, 72-78% = 4, 78-83% = 5, 83-87% = 6, 87-90% = 7, 90-93% = 8, 93-96% = 9, over 96% = 10. With no HR it falls back on the category. Heat and hills always add to it (up to +3): about +1 for each 3% the weather costs (temperature + dew point, Hadley's chart: 120 = 1%, 140 = 3%, 160 = 6%) and +1 for each 60 ft of climbing per mile. Hawks looks up the temperature and dew point for every run itself. Plan matching uses the heart-rate effort alone, so an easy day run easy in the heat still counts as easy.
+DIFFICULTY (effort, 1-10) is judged against the runner's own Fitness States paces (HawksPredict-Lite), then checked with heart rate. Pace is turned into a share of the runner's VDOT (Daniels): under 62% = 1-2, easy 62-70% = 3, 70-76% = 4, steady 76-82% = 5, marathon-to-tempo 82-86% = 6, threshold 86-90% = 7, 10K pace 90-94% = 8, 5K pace 94-99% = 9, faster = 10. Heart rate as a share of max HR (highest seen in their logged runs, 200 until known): under 65% = 2, 65-72% = 3, 72-78% = 4, 78-83% = 5, 83-87% = 6, 87-90% = 7, 90-93% = 8, 93-96% = 9, over 96% = 10. The two are averaged (for rep workouts pace counts 65%, since the heart rate lags short reps). Workouts are judged on their work reps only, not the warm-up or cool-down; reps of 500 m or less top out at 9. Hills, heat and Van Cortlandt are credited back to a flat course first, so a slow hilly tempo still grades as a tempo. With no pace fitness it falls back on heart rate alone (plus up to +3 for heat and hills), and with neither on the category. Plan matching uses the pace/HR effort without the weather credit, so an easy day run easy in the heat still counts as easy.
 
 LOAD = moving minutes x intensity (difficulty 1-3 = 1, 4-5 = 1.5, 6 = 2, 7 = 2.5, 8 = 3, 9-10 = 4). A 45-minute easy run is about 45-70; a hard workout is about 120-200.
 
@@ -124,25 +125,21 @@ export function plannedFor(plan, dateKey, meets) {
   return { type: cell.type, miles, detail: cell.miles, shoes: cell.shoes, notes: cell.notes, week: plan.weeks[week]?.name };
 }
 
+// Race fitness (VDOT) the paces come from; null before there is any.
+export async function vdotFor(db, personId) {
+  try { return (await getFitness(db, personId, todayInTz()))?.vdot || null; } catch { return null; }
+}
+
 async function maxHrFor(db, personId) {
   const row = await db.prepare('SELECT MAX(max_hr) AS m FROM workouts WHERE person_id = ?').bind(personId).first();
   return row?.m && row.m >= 160 ? row.m : DEFAULT_MAX_HR;
 }
 
-const EFFORT_STEPS = [[0.65, 2], [0.72, 3], [0.78, 4], [0.83, 5], [0.87, 6], [0.90, 7], [0.93, 8], [0.96, 9]];
-const CATEGORY_EFFORT = { recovery: 2, easy: 4, shakeout: 3, long: 5, crosstrain: 4, workout: 7, race: 9 };
-
-// Heart-rate effort: how hard the heart worked. Plan matching uses this.
-function hrEffortOf(w, maxHr) {
-  if (!w.avg_hr) return CATEGORY_EFFORT[w.category] ?? 4;
-  const pct = w.avg_hr / maxHr;
-  for (const [cut, e] of EFFORT_STEPS) if (pct < cut) return e;
-  return 10;
-}
-
-// Difficulty: heart rate, plus what heat and hills took out of the runner.
-function effortOf(w, maxHr) {
-  return Math.min(10, hrEffortOf(w, maxHr) + (w.category === 'crosstrain' ? 0 : conditionsBump(w)));
+// Difficulty from pace against the runner's Fitness States paces, checked by
+// heart rate (grade.js). `effort` includes heat/hill credit; `hr_effort`
+// (plan matching) doesn't.
+function gradeOfRun(w, ctx) {
+  return gradeRun(w, ctx);
 }
 
 function loadOf(w, effort) {
@@ -402,6 +399,7 @@ export async function logWorkouts(db, person, list) {
   const knownMax = await maxHrFor(db, person.id);
   const maxHr = knownMax === DEFAULT_MAX_HR ? (batchMax >= 160 ? batchMax : DEFAULT_MAX_HR) : Math.max(knownMax, batchMax);
 
+  const gctx = { maxHr, vdot: await vdotFor(db, person.id) };
   const dates = clean.map((w) => w.date).sort();
   const meets = await meetDates(db, dates[0], addDays(dates[dates.length - 1], 6));
   const plan = planFor(person);
@@ -409,8 +407,9 @@ export async function logWorkouts(db, person, list) {
   const results = [];
   const stmts = clean.map((w) => {
     const planned = plannedFor(plan, w.date, meets);
-    const effort = effortOf(w, maxHr);
-    const hr_effort = hrEffortOf(w, maxHr);
+    const g = gradeOfRun(w, gctx);
+    const effort = g.effort;
+    const hr_effort = g.hr_effort;
     const load = loadOf(w, effort);
     const plan_score = planScoreOf(w, hr_effort, planned);
     const rating = gradeOf(plan_score);
@@ -454,19 +453,19 @@ export async function logWorkouts(db, person, list) {
 // aren't asked for again.
 export async function backfillConditions(db, personId, limit = 150) {
   const rows = (await db.prepare(
-    `SELECT strava_id, date, start_local, moving_sec, elapsed_sec, category, avg_hr, distance_mi, elev_gain_ft, surface FROM workouts
+    `SELECT strava_id, date, name, start_local, moving_sec, elapsed_sec, category, avg_hr, distance_mi, raw_distance_mi, elev_gain_ft, surface, course, laps FROM workouts
      WHERE person_id = ? AND COALESCE(weather_checked, 0) = 0 AND category != 'crosstrain' AND date <= ? ORDER BY date DESC LIMIT ?`
   ).bind(personId, todayInTz(), limit).all()).results;
   if (!rows.length) return 0;
   const wx = await weatherFor(rows, todayInTz());
   if (!wx.some(Boolean)) return 0;
-  const maxHr = await maxHrFor(db, personId);
+  const gctx = { maxHr: await maxHrFor(db, personId), vdot: await vdotFor(db, personId) };
   const stmts = rows.map((w, i) => {
     if (!wx[i]) return db.prepare('UPDATE workouts SET weather_checked = 2 WHERE person_id = ? AND strava_id = ?').bind(personId, w.strava_id);
     Object.assign(w, wx[i]);
-    const effort = effortOf(w, maxHr);
+    const g = gradeOfRun(w, gctx);
     return db.prepare('UPDATE workouts SET temp_f = ?, dew_point_f = ?, weather_checked = 1, effort = ?, hr_effort = ?, load = ? WHERE person_id = ? AND strava_id = ?')
-      .bind(w.temp_f, w.dew_point_f, effort, hrEffortOf(w, maxHr), loadOf(w, effort), personId, w.strava_id);
+      .bind(w.temp_f, w.dew_point_f, g.effort, g.hr_effort, loadOf(w, g.effort), personId, w.strava_id);
   });
   for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
   return wx.filter(Boolean).length;
