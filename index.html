@@ -2374,6 +2374,13 @@
                   <button class="ghost" id="icuDisconnectBtn" type="button">Disconnect</button>
                 </div>
                 <div class="hint" id="icuSyncMsg"></div>
+                <div class="stack" style="margin-top:var(--sp-3);">
+                  <b>Send your plan to your watch</b>
+                  <div class="hint">Sends the next 14 days of your plan to intervals.icu as workouts with your own paces. Garmin and COROS pick them up from there once "upload planned workouts" is on in intervals.icu (Settings, Connections). Sending again updates the same workouts.</div>
+                  <div class="cluster"><button class="ghost" id="icuPlanPreviewBtn" type="button">Preview</button><button id="icuPlanPushBtn" type="button">Send to my watch</button></div>
+                  <div class="hint" id="icuPlanMsg"></div>
+                  <div id="icuPlanPreview" class="stack"></div>
+                </div>
               </div>
             </div>
           </li>
@@ -5149,6 +5156,24 @@ function wireUI(){
     runImport();
   });
   $('icuSyncBtn').addEventListener('click', ()=> runSync());
+  $('icuPlanPreviewBtn').addEventListener('click', async ()=>{
+    const msg = $('icuPlanMsg'), box = $('icuPlanPreview'); msg.textContent = 'Building your workouts…'; box.innerHTML = '';
+    let d = null;
+    try{ const res = await fetch('/api/plan/export?days=14&personId=' + encodeURIComponent(activePersonId), { cache:'no-store' }); d = await res.json(); }catch(e){}
+    if(!d || d.error){ msg.textContent = d?.error || 'Couldn’t reach Hawks. Check your connection.'; return; }
+    msg.textContent = d.workouts.length ? `${d.workouts.length} workouts for the next 14 days. Nothing has been sent.` : 'Nothing to send: no running days in the next 14 days.';
+    box.innerHTML = d.workouts.map(w=> `<details><summary>${escapeHtml(w.start_date_local.slice(5, 10))} · ${escapeHtml(w.name)} · ${Math.round(w.moving_time / 60)} min</summary><pre style="white-space:pre-wrap;font-size:var(--fs-sm,13px);margin:var(--sp-2) 0;">${escapeHtml(w.description)}</pre></details>`).join('');
+  });
+  $('icuPlanPushBtn').addEventListener('click', async ()=>{
+    if(!confirm('Send the next 14 days of your plan to intervals.icu? It adds or updates workouts on your calendar named "Hawks:" and removes ones the plan no longer has.')) return;
+    const msg = $('icuPlanMsg'); $('icuPlanPushBtn').disabled = true; msg.textContent = 'Sending…';
+    const res = await apiPost('/api/intervals/push-plan', { personId: activePersonId, days: 14 });
+    $('icuPlanPushBtn').disabled = false;
+    if(!res || res.error){ msg.textContent = res?.error || 'Couldn’t reach Hawks. Check your connection.'; return; }
+    const wt = res.watch_upload || {};
+    const off = (wt.garmin === false && wt.coros === false) ? ' Garmin and COROS upload both look switched off in intervals.icu.' : '';
+    msg.textContent = `Sent ${res.sent} workouts (${res.created} new, ${res.updated} updated, ${res.deleted} removed). ${res.note}${off}` + (res.steps_not_read?.length ? ` Not read as steps: ${res.steps_not_read.join(', ')}.` : '') + (res.push_errors?.length ? ` Watch sync reported: ${res.push_errors.join('; ')}.` : '');
+  });
   $('icuImportBtn').addEventListener('click', ()=> runImport());
   $('icuDisconnectBtn').addEventListener('click', async ()=>{
     if(!confirm('Disconnect intervals.icu? Runs already imported stay in your log.')) return;

@@ -83,6 +83,12 @@ export async function connect(env, personId, athleteId, apiKey) {
   return { connected: true, athlete: id, name: me?.name || '' };
 }
 
+// The decrypted key for calls Hawks makes on the runner's behalf (writing planned workouts); never sent to a browser.
+export async function credentials(env, personId) {
+  const person = await loadPerson(env, personId);
+  return { athlete: person.icu_athlete, key: await decrypt(env, person.icu_key_enc), base: env?.ICU_API_BASE || API };
+}
+
 export async function disconnect(env, personId) {
   await env.DB.prepare("UPDATE people SET icu_athlete = '', icu_key_enc = '', icu_synced_at = NULL, icu_status = '', icu_import_cursor = '', icu_import_done = 0 WHERE id = ?").bind(personId).run();
   return { connected: false };

@@ -4,6 +4,7 @@ import { WORKOUTS, WORKOUT_GROUPS, workoutGroup, workoutTargets, personalWorkout
 import { todayInTz, getCoachContext, compactFitness } from './coach.js';
 import { connect as icuConnect, disconnect as icuDisconnect, status as icuStatus, syncPerson, importHistory, syncDue, IntervalsError, SYNC_CRON } from './intervals.js';
 import { getFitness, recomputeFitness, fitnessHistory } from './fitness.js';
+import { pushPlan, planWorkouts } from './planpush.js';
 import { racePredictions } from './racepredict.js';
 import { BODY_PARTS } from './body.js';
 import { hawkyState, applyPlanChange, resetPlanDay, changeLevel, healthSummary, PlanError } from './hawky.js';
@@ -1669,6 +1670,18 @@ export default {
         return json(await getState(env.DB));
       }
 
+      if (pathname === '/api/plan/export' && request.method === 'GET') {
+        // Dry run: the next days of the plan as the intervals.icu workouts that would be sent. Nothing leaves Hawks.
+        const personId = str(reqUrl.searchParams.get('personId'), 100);
+        const person = await env.DB.prepare('SELECT id, name, first_name, class_year, plan_rank FROM people WHERE id = ?').bind(personId).first();
+        if (!person) return json({ error: 'Unknown person' }, 404);
+        const today = todayInTz();
+        const fitness = await getFitness(env.DB, personId, today);
+        if (!fitness?.zones?.length) return json({ error: 'Add a race or PR first so Hawks can set your paces.' }, 400);
+        const days = Math.min(Math.max(Number(reqUrl.searchParams.get('days')) || 14, 1), 28);
+        return json({ workouts: await planWorkouts(env.DB, person, fitness, today, days) });
+      }
+
       if (pathname === '/api/plan' && request.method === 'GET') {
         return await getPlan(env.DB, reqUrl.searchParams);
       }
@@ -1833,6 +1846,7 @@ export default {
           try {
             if (pathname === '/api/intervals/connect') return json(await icuConnect(env, personId, body.athleteId, body.apiKey));
             if (pathname === '/api/intervals/disconnect') return json(await icuDisconnect(env, personId));
+            if (pathname === '/api/intervals/push-plan') return json(await pushPlan(env, personId, { days: body.days }));
             if (pathname === '/api/intervals/sync') return json(await syncPerson(env, personId, { days: body.days === 60 ? 60 : undefined, backfill: true }));
             if (pathname === '/api/intervals/import') return json(await importHistory(env, personId));
             if (pathname === '/api/coach/ask') {
