@@ -337,3 +337,26 @@ Pooled from 551 clean runs of the 4 athletes with synced training (no per-athlet
 | 1.00 | +0.46 | -0.02 |
 Even with perfect coupling the 8-week heart-rate trend has noise comparable to the signal, so a half-strength correction does not help in this simulator; a quarter-strength one gains at most 0.1 point and costs 0.14 if there is no link.
 The best strength depends entirely on c, so fine-tuning on synthetic rows would only encode the assumption. This is a power analysis, not evidence.
+
+### exp12 follow-up: train on five majors, test on the sixth (2026-10-22)
+| held-out | n | best-effort + sex/age | + training | change (95% CI) |
+|---|---|---|---|---|
+| Berlin | 4,060 | 7.36 | 6.41 | -0.95 (-1.08 to -0.82) |
+| Boston | 4,104 | 7.38 | 6.65 | -0.73 (-0.86 to -0.59) |
+| Chicago | 792 | 8.65 | 7.39 | -1.26 (-1.67 to -0.93) |
+| London | 2,151 | 6.80 | 5.90 | -0.90 (-1.06 to -0.75) |
+| New York | 2,378 | 7.87 | 6.76 | -1.11 (-1.30 to -0.94) |
+| Tokyo | 652 | 8.21 | 7.11 | -1.10 (-1.43 to -0.80) |
+The training-log gain holds on every race the model never saw (0.7 to 1.3 points), so it is not an artefact of one course or one day's weather.
+
+## FitRec: does the heart-rate trend predict a later hard effort? (2026-10-22)
+Source: Kaggle `tientd95/fitrec-dataset` (mirror of UCSD FitRec / Endomondo; academic use only, licence listed unknown; `endomondoHR.json.zip` sha256 0e4b4aca…cdd3). 253,020 workouts -> 20,581 usable runs from 607 users
+(10,527 with heart-rate fitness). `scripts/fitrec_summarize.py`, `scripts/fitrec_hr_check.py`. Targets: hard 5K/10K runs (pace 10%+ faster than recent median, 85%+ of max HR) with an earlier best-effort baseline and
+heart-rate fitness measured in both 8-week windows: 88 targets from 30 runners (before: 43 from 4). Offset learned on one half of the runners, scored on the other.
+| shrink | MAE offset only | MAE with HR trend | change | 95% CI |
+|---|---|---|---|---|
+| 0.25 | 5.55% | 5.76% | +0.21 | -0.12 to +0.57 |
+| 0.50 | 5.55% | 6.12% | +0.57 | -0.05 to +1.26 |
+| 1.00 | 5.55% | 7.33% | +1.78 | +0.53 to +2.99 |
+Slope of log(actual/baseline) on the heart-rate fitness change: -0.21 (95% CI -0.49 to +0.08), correlation -0.16. The sign is right (fitter by heart rate -> later effort faster) but the link is weak, so any correction
+makes errors larger. This matches the simulation (quarter strength is the break-even edge). The heart-rate layer is not supported; keep raw HawksPredict-Lite as the headline.

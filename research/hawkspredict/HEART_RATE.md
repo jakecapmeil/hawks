@@ -36,3 +36,7 @@ Prediction log with 30-50 Hunter races where raw and adjusted times are both sto
 The Hawks database holds 4 athletes with synced runs (840 runs, 838 with heart rate, 688 with temperature) and 1 race, so it cannot test the layer. It was used to set simulator constants
 (see RESULTS.md, last section). In that simulator the 8-week heart-rate trend is too noisy for the half-strength correction to help even when it tracks fitness perfectly. `HR_SHRINK` is now 0.25. Consider also keeping the adjusted time
 out of the card until the prediction log holds 50+ races. FitRec (real heart rate, 1,104 runners) is the way to get real evidence; it needs a manual download.
+
+## Update 2026-10-22: real evidence from FitRec
+88 hard efforts from 30 runners (FitRec/Endomondo): the heart-rate trend has the right sign (slope -0.21, 95% CI -0.49 to +0.08) but a correction of any strength tested (0.25, 0.5, 1.0) made errors larger (+0.21, +0.57, +1.78 points).
+Conclusion: do not use the heart-rate adjustment as the headline; the card's adjusted time stays a labelled experiment and the prediction log will keep scoring it. Details in RESULTS.md.

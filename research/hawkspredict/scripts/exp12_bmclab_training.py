@@ -66,3 +66,14 @@ for name, fs in [('training volume and pace only', FE_TRAIN), ('training + best-
 a = np.mean([cv(FE_TRAIN + ['best_riegel'], s) for s in (1, 2, 3)], 0)
 b = np.mean([cv(['male', 'age', 'best_riegel'], s) for s in (1, 2, 3)], 0)
 ci = boot_ci(y, a, b, X.athlete.values); log(f'\ntraining features added to best-effort + sex/age: {mae(y, a) - mae(y, b):+.2f} points (95% CI {ci[0]:+.2f} to {ci[1]:+.2f})')
+
+# Held-out race: train on the other majors, test on this one (does it carry to a race it has never seen?)
+log('\nLeave-one-major-out (train on the other majors, test on the held-out one):\n| held-out | n | best-effort + sex/age | + training | change |\n|---|---|---|---|---|')
+def fit_pred(tr, te, feats):
+    return HGB(loss='absolute_error', max_iter=200, learning_rate=0.06, max_leaf_nodes=8, min_samples_leaf=40, l2_regularization=1.0, random_state=0).fit(X.loc[tr, feats], X.y[tr]).predict(X.loc[te, feats])
+for city in sorted(X.race.unique()):
+    te = (X.race == city).values; tr = ~te
+    if te.sum() < 200: continue
+    pa = fit_pred(tr, te, FE_TRAIN + ['best_riegel']); pb = fit_pred(tr, te, ['male', 'age', 'best_riegel'])
+    ci = boot_ci(X.y.values[te], pa, pb, X.athlete.values[te])
+    log(f'| {city} | {te.sum()} | {mae(X.y.values[te], pb):.2f} | {mae(X.y.values[te], pa):.2f} | {mae(X.y.values[te], pa) - mae(X.y.values[te], pb):+.2f} ({ci[0]:+.2f} to {ci[1]:+.2f}) |')
